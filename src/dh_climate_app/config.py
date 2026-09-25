@@ -288,9 +288,6 @@ def parse_options(raw: Any) -> AppConfig:
                 ),
             )
         )
-    if not sources:
-        raise ConfigError("outdoor.sources must contain at least one source")
-
     outdoor = OutdoorConfig(heat_default, cool_default, tuple(sources))
 
     rooms: list[RoomConfig] = []
