@@ -116,6 +116,24 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaises(ConfigError):
             parse_options(raw)
 
+    def test_slow_requires_explicit_target(self) -> None:
+        raw = options()
+        raw["rooms"][0].pop("slow_target")
+        with self.assertRaises(ConfigError):
+            parse_options(raw)
+
+    def test_active_humidity_requires_explicit_target(self) -> None:
+        raw = options()
+        raw["rooms"][0].pop("humidity_target")
+        with self.assertRaises(ConfigError):
+            parse_options(raw)
+
+    def test_room_targets_follow_facade_range(self) -> None:
+        raw = options()
+        raw["rooms"][0]["heat_day"] = 40
+        with self.assertRaises(ConfigError):
+            parse_options(raw)
+
     def test_slow_requires_climate_domain(self) -> None:
         raw = options()
         raw["rooms"][0]["slow_heat"] = "switch.floor"
