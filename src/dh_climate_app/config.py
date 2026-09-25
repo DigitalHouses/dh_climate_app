@@ -264,7 +264,7 @@ def parse_options(raw: Any) -> AppConfig:
 
     sources: list[OutdoorSourceConfig] = []
     source_names: set[str] = set()
-    for index, item in enumerate(_as_list(outdoor_raw.get("sources"), "outdoor.sources")):
+    for index, item in enumerate(_as_list(outdoor_raw.get("sources", []), "outdoor.sources")):
         source = _as_mapping(item, f"outdoor.sources[{index}]")
         name = str(source.get("name") or f"source_{index + 1}").strip()
         if not name:

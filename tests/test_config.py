@@ -83,6 +83,15 @@ class ConfigTests(unittest.TestCase):
         self.assertIn("climate.floor", entity_ids)
         self.assertIn("switch.dehumidifier", entity_ids)
 
+    def test_empty_installation_config_is_safe(self) -> None:
+        raw = options()
+        raw["outdoor"]["sources"] = []
+        raw["rooms"] = []
+        config = parse_options(raw)
+        self.assertEqual((), config.outdoor.sources)
+        self.assertEqual((), config.rooms)
+        self.assertEqual(frozenset({"input_boolean.night_mode", "input_boolean.we_at_home"}), configured_entity_ids(config))
+
     def test_slow_climate_requires_target(self) -> None:
         raw = options()
         raw["rooms"][0]["devices"][0].pop("target_temperature")

@@ -24,10 +24,7 @@ options:
   outdoor:
     heat_threshold_default: 12.0
     cool_threshold_default: 20.0
-    sources:
-      - name: primary
-        temperature: ""
-        humidity: ""
+    sources: []
   rooms: []
   telemetry_enabled: false
   log_level: info
