@@ -1,36 +1,88 @@
 # DigitalHouses Climate App
 
-`dh_climate_app` is the compact Home Assistant implementation of DigitalHouses climate control.
+`dh_climate_app` is the compact Home Assistant App for whole-house climate control.
 
-The project reuses the **behavior contract** of the previous PostgreSQL DH Climate system while removing PostgreSQL orchestration, SQL jobs, Matrix/Dispatcher/UC layers and other infrastructure that is unnecessary inside a Home Assistant App.
+It preserves the useful **behavior contract** of the previous PostgreSQL DH Climate 5 system while replacing PostgreSQL orchestration, SQL jobs, Matrix/Dispatcher/UC and related runtime machinery with a small Python control core.
 
-Current design:
+## Architecture
 
 ```text
-HA sensors → Python Climate Core → direct HA device execution
-                         ↓
-                 MQTT Discovery facade
+Home Assistant states
+        ↓
+Python Climate Core
+ ├─ outdoor priority + rolling avg24
+ ├─ global HEAT / COOL / OFF season
+ ├─ room thermostat + profiles
+ ├─ humidity control
+ └─ FAST / SLOW + safety policy
+        ↓
+desired physical state
+        ↓
+Home Assistant services
+        ↓
+climate / switch / humidifier
+
+Python Climate Core
+        ↓
+MQTT Discovery
+        ↓
+Home Assistant facades
 ```
 
-Core features being implemented:
+SQLite under `/data/dh_climate.db` stores only durable installation state. It is not a business-rule or orchestration engine.
 
-- prioritized outdoor temperature/humidity sources;
-- time-weighted rolling 24h outdoor temperature;
-- global HEAT / COOL / OFF season;
-- two-threshold outdoor season thermostat;
-- room thermostat per room;
+## Implemented behavior
+
+- prioritized outdoor temperature and humidity fallback chains;
+- time-weighted rolling 24-hour outdoor average;
+- global `HEAT / COOL / OFF` season;
+- writable two-threshold `heat_cool` season thermostat;
+- one MQTT Device and one room thermostat per configured room;
 - `day / night / away / antifreeze` target profiles;
-- house-wide temperature hysteresis;
-- FAST and SLOW actuator classes;
-- separate floor/SLOW target temperature;
-- optional per-room humidifier/dehumidifier facade;
-- one MQTT Device per room so it can be assigned to a Home Assistant Area.
+- one house-wide temperature hysteresis;
+- persisted stateful room hysteresis;
+- FAST heat/cool actuators;
+- SLOW local floor thermostats with a separate comfort target;
+- optional humidifier/dehumidifier control;
+- optional room window context with per-device open-window shutdown;
+- legacy cold-weather protection for reversible heat/cool climate devices;
+- direct idempotent Home Assistant service reconciliation;
+- bounded retry and aggregate Problem diagnostic;
+- safe Home Assistant reconnect/snapshot handling;
+- Version and Started at diagnostics;
+- optional DigitalHouses Telemetry Protocol v1 support;
+- immutable multi-architecture GHCR delivery workflow.
 
-Documentation:
+## Configuration
+
+Home Assistant App option schemas have limited nesting depth, so the external configuration is intentionally flat:
+
+- global scalar options at the top level;
+- comma-separated entity lists;
+- one flat record per room.
+
+See [docs/CONFIG_EXAMPLE.yaml](docs/CONFIG_EXAMPLE.yaml) and [DOCS.md](DOCS.md).
+
+## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Legacy behavior contract](docs/LEGACY_BEHAVIOR.md)
-- [Proposed configuration](docs/CONFIG_EXAMPLE.yaml)
+- [Configuration example](docs/CONFIG_EXAMPLE.yaml)
 - [Implementation plan](docs/IMPLEMENTATION_PLAN.md)
+- [HAOS acceptance plan](HAOS_TEST_PLAN.md)
 
-The first code slice is a dependency-free, testable Python climate core under `src/dh_climate_app/core.py`.
+## Release status
+
+Version `0.1.0` is still an **experimental pre-release implementation**. Unit/CI and container-build validation are automated. The remaining release gate is end-to-end testing on a real Home Assistant OS installation with real MQTT discovery and physical actuator entities.
+
+Canonical release identity:
+
+```text
+digitalhouses_climate_app-v<version>
+```
+
+Production images:
+
+```text
+ghcr.io/digitalhouses/digitalhouses-climate-app:<version>
+```
