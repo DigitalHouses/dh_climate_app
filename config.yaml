@@ -16,39 +16,31 @@ homeassistant_api: true
 services:
   - mqtt:need
 options:
-  global:
-    hysteresis: 0.5
-    humidity_hysteresis: 3.0
-    night_mode: ""
-    we_at_home: ""
-  outdoor:
-    heat_threshold_default: 12.0
-    cool_threshold_default: 20.0
-  outdoor_sources: []
+  hysteresis: 0.5
+  humidity_hysteresis: 3.0
+  night_mode: ""
+  we_at_home: ""
+  heat_threshold_default: 12.0
+  cool_threshold_default: 20.0
+  outdoor_temperature_sources: ""
+  outdoor_humidity_sources: ""
   rooms: []
-  devices: []
-  humidity_controls: []
   telemetry_enabled: false
   log_level: info
 schema:
-  global:
-    hysteresis: float(0,5)
-    humidity_hysteresis: float(0,25)
-    night_mode: str
-    we_at_home: str
-  outdoor:
-    heat_threshold_default: float(-50,50)
-    cool_threshold_default: float(-50,50)
-  outdoor_sources:
-    - name: str
-      temperature: str
-      humidity: str
+  hysteresis: float(0,5)
+  humidity_hysteresis: float(0,25)
+  night_mode: str
+  we_at_home: str
+  heat_threshold_default: float(-50,50)
+  cool_threshold_default: float(-50,50)
+  outdoor_temperature_sources: str
+  outdoor_humidity_sources: str
   rooms:
     - id: str
       name: str
       temperature_sensors: str
       humidity_sensors: str
-      window_sensors: str
       heat_day: float
       heat_night: float
       heat_away: float
@@ -56,18 +48,12 @@ schema:
       cool_day: float
       cool_night: float
       cool_away: float
-  devices:
-    - room_id: str
-      entity_id: str
-      class: list(fast|slow)
-      function: list(heat|cool|heat_cool)
-      target_temperature: float?
-      window_policy: list(ignore|turn_off)
-      min_heating_outdoor_temperature: float?
-  humidity_controls:
-    - room_id: str
-      type: list(humidifier|dehumidifier)
-      target_default: float(0,100)
-      actuator_entity_id: str
+      fast_heat: str
+      fast_cool: str
+      slow_heat: str
+      slow_target: float
+      humidity_mode: list(off|humidifier|dehumidifier)
+      humidity_target: float(0,100)
+      humidity_actuator: str
   telemetry_enabled: bool
   log_level: list(debug|info|warning|error)
