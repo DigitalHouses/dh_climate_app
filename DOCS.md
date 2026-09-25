@@ -17,19 +17,26 @@ HA sensor states
 
 The App does not use PostgreSQL. SQLite under `/data/dh_climate.db` is only durable state.
 
+## Configuration shape
+
+The Home Assistant App schema is intentionally flat. Home Assistant limits nested option schemas, so lists of Home Assistant entities are entered as comma-separated strings. Room entries contain only primitive fields; the App compiles them into the typed internal model.
+
+See [docs/CONFIG_EXAMPLE.yaml](docs/CONFIG_EXAMPLE.yaml) for a complete example.
+
 ## Global settings
 
-`global.hysteresis` is the one house-wide temperature hysteresis used by the season and room temperature controllers.
 
-`global.humidity_hysteresis` is separate because relative humidity uses a different physical unit.
+`hysteresis` is the one house-wide temperature hysteresis used by the season and room temperature controllers.
+
+`humidity_hysteresis` is separate because relative humidity uses a different physical unit.
 
 `night_mode` and `we_at_home` are optional Home Assistant facts. When a configured `we_at_home` entity is unavailable, the App uses the safer `away` profile.
 
 ## Outdoor sources
 
-`outdoor.sources` is ordered by priority.
+`outdoor_temperature_sources` and `outdoor_humidity_sources` are comma-separated ordered entity lists. Temperature and humidity have independent priority chains.
 
-For each measurement independently, the App uses the first currently valid configured source. If it becomes unavailable, the next source is selected.
+For each measurement, the App uses the first currently valid configured entity. If it becomes unavailable, the next entity is selected.
 
 The App maintains a time-weighted rolling 24-hour outdoor average. Global season is:
 
@@ -80,15 +87,13 @@ Supported first-release domains:
 - `switch`;
 - `climate`.
 
-A FAST `switch` must declare one explicit thermal function: `heat` or `cool`.
-
-A FAST `climate` device may declare `heat`, `cool`, or `heat_cool`.
+`fast_heat` and `fast_cool` are comma-separated actuator lists. A `climate` entity may be present in both lists and is then treated as `heat_cool`. A `switch` must appear in only one list.
 
 ## SLOW devices
 
 SLOW is intended for underfloor heating or another high-inertia comfort loop with its own local thermostat and probe.
 
-For safety, v0.1 accepts SLOW devices only as Home Assistant `climate` entities.
+For safety, v0.1 accepts SLOW devices only as Home Assistant `climate` entities. They are listed in `slow_heat`, and all SLOW thermostats in one room use the room's separate `slow_target`.
 
 During HEAT season:
 
@@ -114,7 +119,7 @@ Humidity control is optional per room and can be:
 
 The App publishes a native Home Assistant `humidifier` entity containing current humidity and target humidity.
 
-Its physical actuator may be a `switch` or an existing Home Assistant `humidifier` entity.
+Its physical actuator may be a `switch` or an existing Home Assistant `humidifier` entity. Set `humidity_mode` to `off`, `humidifier`, or `dehumidifier`.
 
 ## Safety and reconciliation
 
