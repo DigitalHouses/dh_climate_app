@@ -92,7 +92,7 @@ class ClimateRuntime:
     async def run(self) -> None:
         self.facade.start()
         self.telemetry_runner.start()
-        self.facade.set_available(False)
+        self.facade.set_season_available(False)
         self.facade.set_rooms_available(False)
 
         tasks = [
@@ -136,7 +136,7 @@ class ClimateRuntime:
         self._ha_connected = connected
         if not connected:
             self.cache.clear()
-            self.facade.set_available(False)
+            self.facade.set_season_available(False)
             self.facade.set_rooms_available(False)
             return
 
@@ -195,7 +195,7 @@ class ClimateRuntime:
                 self.facade.publish_humidity(humidity_state)
 
             system_available = self._ha_connected and outdoor_state.available
-            self.facade.set_available(system_available)
+            self.facade.set_season_available(system_available)
 
             if self._ha_connected:
                 desired = compile_room_devices(
