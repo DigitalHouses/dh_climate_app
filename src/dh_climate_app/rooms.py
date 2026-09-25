@@ -78,10 +78,14 @@ class RoomEngine:
         *,
         season: Season,
     ) -> dict[str, RoomState]:
-        we_at_home = _binary_fact(
-            self.config.global_config.we_at_home,
-            states,
-            default=True,
+        we_at_home = (
+            True
+            if not self.config.global_config.we_at_home
+            else _binary_fact(
+                self.config.global_config.we_at_home,
+                states,
+                default=False,
+            )
         )
         night_mode = _binary_fact(
             self.config.global_config.night_mode,
