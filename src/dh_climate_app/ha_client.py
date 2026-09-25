@@ -187,7 +187,7 @@ class HomeAssistantClient:
             await self._authenticate(websocket)
             await self._subscribe_state_changed(websocket)
 
-            queue: asyncio.Queue[HaState] = asyncio.Queue()
+            queue: asyncio.Queue[HaState | None] = asyncio.Queue()
             reader = asyncio.create_task(
                 self._reader_loop(websocket, queue),
                 name="ha-state-reader",
@@ -201,6 +201,10 @@ class HomeAssistantClient:
                 while not stop_event.is_set():
                     state = await queue.get()
                     try:
+                        if state is None:
+                            raise ConnectionError(
+                                "Home Assistant websocket reader stopped"
+                            )
                         await on_state(state)
                     finally:
                         queue.task_done()
@@ -244,13 +248,16 @@ class HomeAssistantClient:
     async def _reader_loop(
         self,
         websocket: Any,
-        queue: asyncio.Queue[HaState],
+        queue: asyncio.Queue[HaState | None],
     ) -> None:
-        async for raw in websocket:
-            message = json.loads(raw)
-            state = self.parse_state_changed(message)
-            if state is not None and state.entity_id in self.entity_ids:
-                await queue.put(state)
+        try:
+            async for raw in websocket:
+                message = json.loads(raw)
+                state = self.parse_state_changed(message)
+                if state is not None and state.entity_id in self.entity_ids:
+                    await queue.put(state)
+        finally:
+            await queue.put(None)
 
     @staticmethod
     def parse_state_changed(message: Mapping[str, Any]) -> HaState | None:
