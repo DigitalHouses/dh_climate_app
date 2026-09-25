@@ -153,8 +153,9 @@ class ClimateRuntime:
     ) -> OutdoorState:
         async with self._calculation_lock:
             values = self.cache.values()
+            snapshot = self.cache.snapshot()
             outdoor_state = self.outdoor.evaluate(
-                values,
+                snapshot,
                 observed_at=observed_at,
                 record_sample=record_outdoor_sample,
             )
@@ -206,7 +207,7 @@ class ClimateRuntime:
                 )
                 self._last_reconcile = await self.executor.reconcile(
                     desired,
-                    self.cache.snapshot(),
+                    snapshot,
                 )
             else:
                 self._last_reconcile = ReconcileSummary(commands=0, problems=())
