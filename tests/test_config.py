@@ -101,6 +101,22 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaises(ConfigError):
             parse_options(raw)
 
+    def test_slow_switch_is_rejected(self) -> None:
+        raw = options()
+        raw["rooms"][0]["devices"][0] = {
+            "entity_id": "switch.floor",
+            "class": "slow",
+            "function": "heat",
+        }
+        with self.assertRaises(ConfigError):
+            parse_options(raw)
+
+    def test_same_actuator_cannot_be_owned_twice(self) -> None:
+        raw = options()
+        raw["rooms"][0]["humidity"]["actuator"]["entity_id"] = "switch.radiator"
+        with self.assertRaises(ConfigError):
+            parse_options(raw)
+
 
 if __name__ == "__main__":
     unittest.main()
