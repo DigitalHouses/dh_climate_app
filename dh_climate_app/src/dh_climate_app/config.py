@@ -388,12 +388,12 @@ def parse_options(raw: Any) -> AppConfig:
         temperature_sources=_entity_list(
             root.get("outdoor_temperature_sources", ""),
             "outdoor_temperature_sources",
-            ("sensor",),
+            ("sensor", "weather"),
         ),
         humidity_sources=_entity_list(
             root.get("outdoor_humidity_sources", ""),
             "outdoor_humidity_sources",
-            ("sensor",),
+            ("sensor", "weather"),
         ),
     )
 
