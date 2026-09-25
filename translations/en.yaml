@@ -1,0 +1,16 @@
+configuration:
+  global:
+    name: Global settings
+    description: House-wide climate parameters and Home Assistant profile inputs.
+  outdoor:
+    name: Outdoor climate
+    description: Ordered outdoor temperature and humidity sources plus default season thresholds.
+  rooms:
+    name: Rooms
+    description: Room sensors, targets, actuator bindings and optional humidity control.
+  telemetry_enabled:
+    name: Usage telemetry
+    description: Send minimal pseudonymous DigitalHouses product telemetry.
+  log_level:
+    name: Log level
+    description: Runtime logging verbosity.
