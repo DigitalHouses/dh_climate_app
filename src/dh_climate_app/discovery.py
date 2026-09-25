@@ -242,8 +242,9 @@ def room_humidity_discovery_payload(
 
 
 def _number(value: float | None, precision: int = 1) -> str:
+    # MQTT climate/humidifier numeric state uses None to clear stale values.
     if value is None:
-        return "unknown"
+        return "None"
     return f"{value:.{precision}f}"
 
 
@@ -295,6 +296,7 @@ def room_climate_state_topics(
         "published_profile": published_profile,
         "climate_control_enabled": state.climate_control_enabled,
         "control_action": state.control_action.value,
+        "window_state": state.window_state,
     }
     return {
         f"{base}/climate/availability": "online" if state.available else "offline",
