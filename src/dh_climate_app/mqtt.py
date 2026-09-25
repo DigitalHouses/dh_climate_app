@@ -10,6 +10,7 @@ import paho.mqtt.client as mqtt
 
 from .config import RoomConfig
 from .discovery import (
+    SEASON_AVAILABILITY_TOPIC,
     SYSTEM_AVAILABILITY_TOPIC,
     SYSTEM_PROBLEM_ATTRIBUTES_TOPIC,
     SYSTEM_PROBLEM_TOPIC,
@@ -292,9 +293,9 @@ class ClimateMqttFacade:
             retain=True,
         )
 
-    def set_available(self, available: bool) -> None:
+    def set_season_available(self, available: bool) -> None:
         self.bridge.publish(
-            SYSTEM_AVAILABILITY_TOPIC,
+            SEASON_AVAILABILITY_TOPIC,
             "online" if available else "offline",
             retain=True,
         )
