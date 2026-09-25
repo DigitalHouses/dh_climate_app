@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 from dh_climate_app.config import parse_options
 from dh_climate_app.core import Season
@@ -39,6 +40,37 @@ class OutdoorEngineTests(unittest.TestCase):
         self.assertEqual("sensor.outdoor_temperature", state.temperature_source)
         self.assertEqual(10.0, state.avg_24h_temperature)
         self.assertEqual(Season.HEAT, state.season)
+
+    def test_weather_entity_uses_temperature_and_humidity_attributes(self) -> None:
+        raw = options()
+        raw["outdoor_temperature_sources"] = "weather.forecast_home_assistant"
+        raw["outdoor_humidity_sources"] = "weather.forecast_home_assistant"
+        config = parse_options(raw)
+        engine = OutdoorEngine(
+            config=config.outdoor,
+            store=self.store,
+            hysteresis=config.global_config.hysteresis,
+        )
+        now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
+        state = engine.evaluate(
+            {
+                "weather.forecast_home_assistant": SimpleNamespace(
+                    state="partlycloudy",
+                    attributes={"temperature": 9.5, "humidity": 73},
+                )
+            },
+            observed_at=now,
+        )
+        self.assertEqual(9.5, state.current_temperature)
+        self.assertEqual(73.0, state.current_humidity)
+        self.assertEqual(
+            "weather.forecast_home_assistant",
+            state.temperature_source,
+        )
+        self.assertEqual(
+            "weather.forecast_home_assistant",
+            state.humidity_source,
+        )
 
     def test_priority_falls_back_to_second_source(self) -> None:
         now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
