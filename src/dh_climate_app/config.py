@@ -36,6 +36,8 @@ class DeviceConfig:
     device_class: DeviceClass
     function: str
     target_temperature: float | None
+    window_policy: str = "ignore"
+    min_heating_outdoor_temperature: float | None = None
 
 
 @dataclass(frozen=True)
@@ -63,6 +65,7 @@ class RoomConfig:
     name: str
     temperature_sensors: tuple[str, ...]
     humidity_sensors: tuple[str, ...]
+    window_sensors: tuple[str, ...]
     targets: RoomTargets
     devices: tuple[DeviceConfig, ...]
     humidity: HumidityConfig
@@ -168,7 +171,12 @@ def _room_targets(room: Mapping[str, Any], path: str) -> RoomTargets:
     return RoomTargets(heat=heat, cool=cool)
 
 
-def _room_devices(room: Mapping[str, Any], path: str) -> tuple[DeviceConfig, ...]:
+def _room_devices(
+    room: Mapping[str, Any],
+    path: str,
+    *,
+    ac_min_outdoor_temperature: float,
+) -> tuple[DeviceConfig, ...]:
     fast_heat = _entity_list(
         room.get("fast_heat"),
         f"{path}.fast_heat",
@@ -184,6 +192,13 @@ def _room_devices(room: Mapping[str, Any], path: str) -> tuple[DeviceConfig, ...
         f"{path}.slow_heat",
         ("climate",),
     )
+    window_off = set(
+        _entity_list(
+            room.get("window_off_devices"),
+            f"{path}.window_off_devices",
+            ("climate", "switch"),
+        )
+    )
 
     fast_heat_set = set(fast_heat)
     fast_cool_set = set(fast_cool)
@@ -192,6 +207,14 @@ def _room_devices(room: Mapping[str, Any], path: str) -> tuple[DeviceConfig, ...
     if overlap:
         raise ConfigError(
             f"{path}: devices cannot be both FAST and SLOW: {sorted(overlap)}"
+        )
+
+    all_thermal = fast_heat_set | fast_cool_set | slow_set
+    unknown_window_devices = window_off - all_thermal
+    if unknown_window_devices:
+        raise ConfigError(
+            f"{path}.window_off_devices contains non-thermal devices: "
+            f"{sorted(unknown_window_devices)}"
         )
 
     devices: list[DeviceConfig] = []
@@ -213,12 +236,24 @@ def _room_devices(room: Mapping[str, Any], path: str) -> tuple[DeviceConfig, ...
             raise ConfigError(
                 f"{path}: switch {entity_id} cannot be both heat and cool"
             )
+
+        # A climate entity configured for both heating and cooling represents
+        # the legacy AC/heat-pump class for low-outdoor-temperature protection.
+        minimum = (
+            ac_min_outdoor_temperature
+            if function == "heat_cool" and entity_id.startswith("climate.")
+            else None
+        )
         devices.append(
             DeviceConfig(
                 entity_id=entity_id,
                 device_class=DeviceClass.FAST,
                 function=function,
                 target_temperature=None,
+                window_policy=(
+                    "turn_off" if entity_id in window_off else "ignore"
+                ),
+                min_heating_outdoor_temperature=minimum,
             )
         )
 
@@ -233,6 +268,10 @@ def _room_devices(room: Mapping[str, Any], path: str) -> tuple[DeviceConfig, ...
                 device_class=DeviceClass.SLOW,
                 function="heat",
                 target_temperature=slow_target,
+                window_policy=(
+                    "turn_off" if entity_id in window_off else "ignore"
+                ),
+                min_heating_outdoor_temperature=None,
             )
         )
     return tuple(devices)
@@ -315,6 +354,11 @@ def parse_options(raw: Any) -> AppConfig:
             "heat_threshold_default must be lower than cool_threshold_default"
         )
 
+    ac_min_outdoor_temperature = _float(
+        root.get("ac_min_outdoor_temperature", -10.0),
+        "ac_min_outdoor_temperature",
+    )
+
     outdoor = OutdoorConfig(
         heat_threshold_default=heat_default,
         cool_threshold_default=cool_default,
@@ -358,6 +402,11 @@ def parse_options(raw: Any) -> AppConfig:
             f"{path}.humidity_sensors",
             ("sensor",),
         )
+        window_sensors = _entity_list(
+            room.get("window_sensors", ""),
+            f"{path}.window_sensors",
+            ("binary_sensor",),
+        )
 
         rooms.append(
             RoomConfig(
@@ -365,8 +414,13 @@ def parse_options(raw: Any) -> AppConfig:
                 name=name,
                 temperature_sensors=temperature_sensors,
                 humidity_sensors=humidity_sensors,
+                window_sensors=window_sensors,
                 targets=_room_targets(room, path),
-                devices=_room_devices(room, path),
+                devices=_room_devices(
+                    room,
+                    path,
+                    ac_min_outdoor_temperature=ac_min_outdoor_temperature,
+                ),
                 humidity=_room_humidity(room, path, humidity_sensors),
             )
         )
@@ -422,6 +476,7 @@ def configured_entity_ids(config: AppConfig) -> frozenset[str]:
     for room in config.rooms:
         result.update(room.temperature_sensors)
         result.update(room.humidity_sensors)
+        result.update(room.window_sensors)
         for device in room.devices:
             result.add(device.entity_id)
         if room.humidity.actuator is not None:
