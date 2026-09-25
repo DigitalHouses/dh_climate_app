@@ -170,6 +170,7 @@ class ClimateMqttFacade:
     def start(self) -> None:
         self.bridge.start()
         self.bridge.subscribe("DigitalHouses/Global/dh_climate_app/season/set/+")
+        self.bridge.subscribe("DigitalHouses/Global/dh_climate_app/system/set/+")
         self.bridge.subscribe(
             "DigitalHouses/Global/dh_climate_app/rooms/+/climate/set/+"
         )
@@ -328,6 +329,16 @@ class ClimateMqttFacade:
             self.command_queue.put_nowait(
                 MqttCommand(
                     scope="season",
+                    command=parts[2],
+                    payload=payload.strip(),
+                )
+            )
+            return
+
+        if len(parts) == 3 and parts[:2] == ["system", "set"]:
+            self.command_queue.put_nowait(
+                MqttCommand(
+                    scope="system",
                     command=parts[2],
                     payload=payload.strip(),
                 )
