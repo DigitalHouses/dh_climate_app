@@ -22,10 +22,10 @@ configuration:
     description: Legacy house-wide protection for reversible climate devices used for both heating and cooling.
   outdoor_temperature_sources:
     name: Outdoor temperature sources
-    description: Comma-separated sensor.* entities in priority order. The first valid source is used.
+    description: Comma-separated sensor.* or weather.* entities in priority order. weather.* uses its current temperature attribute.
   outdoor_humidity_sources:
     name: Outdoor humidity sources
-    description: Comma-separated sensor.* entities in independent priority order.
+    description: Comma-separated sensor.* or weather.* entities in independent priority order. weather.* uses its current humidity attribute.
   rooms:
     name: Rooms
     description: Room thermostats, targets and direct actuator bindings.
