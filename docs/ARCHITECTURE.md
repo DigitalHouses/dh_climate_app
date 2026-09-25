@@ -69,20 +69,18 @@ else night mode            → night
 else                       → day
 ```
 
-### 3.2 Outdoor providers
+### 3.2 Outdoor sources
 
-The configuration contains an **ordered list** of outdoor providers.
+The App configuration contains two independent ordered lists:
 
-Each provider may define:
+- `outdoor_temperature_sources`;
+- `outdoor_humidity_sources`.
 
-- temperature entity;
-- humidity entity.
+The first currently valid numeric entity in each list is selected. Temperature and humidity therefore fail over independently.
 
-Priority is the order in the configuration. The first currently valid numeric temperature source is selected. Humidity is selected independently using the same ordered list.
+`unknown`, `unavailable`, empty and non-numeric states are invalid and cause fallback to the next entity.
 
-`unknown`, `unavailable`, empty and non-numeric states are invalid and cause fallback to the next provider.
-
-Temperature is mandatory for season calculation. Humidity is supplementary.
+Temperature is required for live season control. If every live outdoor temperature source is unavailable, the App forces season to `OFF` even if historical avg24 data still exists.
 
 ### 3.3 Room sensors
 
@@ -286,24 +284,22 @@ The local physical thermostat then cycles the heating locally using its own prob
 
 The SLOW target is deliberately separate from room air target. A floor probe measures floor/screed temperature, not room air temperature.
 
-A SLOW `switch` means “season enable” and therefore remains ON through HEAT season. It must only be configured where that semantic is physically safe.
+A SLOW plain `switch` is rejected in v0.1. SLOW control requires a local HA `climate` thermostat so the physical floor/slab probe remains the final local safety and cycling loop.
 
 ## 9. Device capability binding
 
 Every configured actuator declares what it can do.
 
-Examples:
+External App configuration is intentionally flatter than the internal model:
 
 ```text
-FAST + heat
-FAST + cool
-FAST + heat/cool
-SLOW + heat
+fast_heat = comma-separated switch/climate entities
+fast_cool = comma-separated switch/climate entities
+slow_heat = comma-separated climate entities
+slow_target = one floor/comfort target for SLOW thermostats in the room
 ```
 
-A switch must have an explicit single function (`heat` or `cool`) because its HA domain does not describe thermal meaning.
-
-A climate device may support one or both functions.
+If the same `climate` entity is listed in both FAST lists, the internal model compiles it as `heat_cool`. A `switch` may appear in only one thermal list. An entity may have only one owner across the complete configuration.
 
 ## 10. Persistence
 
@@ -410,7 +406,7 @@ MQTT Discovery and current state are retained. Transient machine events are not 
 
 From `DigitalHouses/dh_climate_1`:
 
-- outdoor provider priority;
+- outdoor source priority/fallback;
 - outdoor current + 24h derived concept;
 - global `HEAT / COOL / OFF`;
 - two-slider `heat_cool` season thermostat;
@@ -452,7 +448,6 @@ Target Python layout:
 src/dh_climate_app/
 ├── app.py
 ├── config.py
-├── models.py
 ├── core.py
 ├── persistence.py
 ├── ha_client.py
@@ -501,4 +496,4 @@ configured room temperature sensors
 → FAST/SLOW desired state
 ```
 
-Only after these deterministic rules are covered by tests do we connect real HA service execution and MQTT command handling.
+These deterministic rules are now wired to the Home Assistant WebSocket/REST adapters, MQTT facade and direct device reconciliation. The remaining release gate is real HAOS integration testing against configured entities.
