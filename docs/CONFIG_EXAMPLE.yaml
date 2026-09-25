@@ -1,66 +1,66 @@
-# Proposed dh_climate_app options contract.
-# Entity IDs below are examples only.
+# DigitalHouses Climate App options example.
+#
+# Entity lists are comma-separated because Home Assistant App configuration
+# schemas support only limited nesting depth. Order is priority where noted.
 
-global:
-  hysteresis: 0.5
-  humidity_hysteresis: 3.0
-  night_mode: input_boolean.night_mode
-  we_at_home: input_boolean.we_at_home
+hysteresis: 0.5
+humidity_hysteresis: 3.0
 
-outdoor:
-  heat_threshold_default: 12.0
-  cool_threshold_default: 20.0
-  sources:
-    # Order is priority.
-    - name: primary
-      temperature: sensor.outdoor_temperature
-      humidity: sensor.outdoor_humidity
-    - name: backup
-      temperature: sensor.weather_station_temperature
-      humidity: sensor.weather_station_humidity
+night_mode: input_boolean.night_mode
+we_at_home: input_boolean.we_at_home
+
+heat_threshold_default: 12.0
+cool_threshold_default: 20.0
+
+# First currently valid entity wins.
+outdoor_temperature_sources: >-
+  sensor.outdoor_temperature,
+  sensor.weather_station_temperature
+
+# Humidity priority is independent from temperature priority.
+outdoor_humidity_sources: >-
+  sensor.outdoor_humidity,
+  sensor.weather_station_humidity
 
 rooms:
   - id: living_room
     name: Living room
 
-    temperature_sensors:
-      - sensor.living_room_temperature
+    # Multiple room sensors are averaged.
+    temperature_sensors: >-
+      sensor.living_room_temperature
 
-    humidity_sensors:
-      - sensor.living_room_humidity
+    humidity_sensors: >-
+      sensor.living_room_humidity
 
-    targets:
-      heat:
-        day: 23.0
-        night: 22.0
-        away: 18.0
-        antifreeze: 10.0
-      cool:
-        day: 24.0
-        night: 24.0
-        away: 28.0
+    # Room air targets: room × season × profile.
+    heat_day: 23.0
+    heat_night: 22.0
+    heat_away: 18.0
+    heat_antifreeze: 10.0
 
-    devices:
-      # Physical wall thermostat with a floor/screed probe.
-      - entity_id: climate.living_room_floor
-        class: slow
-        function: heat
-        target_temperature: 27.0
+    cool_day: 24.0
+    cool_night: 24.0
+    cool_away: 28.0
 
-      - entity_id: climate.living_room_radiator
-        class: fast
-        function: heat
+    # FAST devices follow room thermostat demand.
+    # A climate entity may appear in both lists and becomes heat_cool.
+    fast_heat: >-
+      switch.living_room_radiator
 
-      - entity_id: climate.living_room_ac
-        class: fast
-        function: cool
+    fast_cool: >-
+      climate.living_room_ac
 
-    humidity:
-      enabled: true
-      type: dehumidifier
-      target_default: 50
-      actuator:
-        entity_id: switch.living_room_dehumidifier
+    # SLOW accepts local climate thermostats only.
+    # All SLOW thermostats in this room use the separate floor/comfort target.
+    slow_heat: >-
+      climate.living_room_floor
+
+    slow_target: 27.0
+
+    humidity_mode: dehumidifier
+    humidity_target: 50
+    humidity_actuator: switch.living_room_dehumidifier
 
 telemetry_enabled: false
 log_level: info
