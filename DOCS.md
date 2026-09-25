@@ -148,3 +148,28 @@ The system MQTT Device exposes:
 - Problem.
 
 `Problem` is an aggregate diagnostic binary sensor with machine-readable problem details in attributes.
+
+
+## Usage telemetry
+
+Telemetry is optional and disabled by default with:
+
+```yaml
+telemetry_enabled: false
+```
+
+When enabled, the App sends the shared DigitalHouses Telemetry Protocol v1 heartbeat. The client payload contains only:
+
+- protocol schema version;
+- telemetry policy version;
+- a random persistent installation UUID;
+- product identifier `digitalhouses_climate_app`;
+- released App version.
+
+Country is derived server-side from network metadata. The App does not send room names, Home Assistant entity IDs, device inventory, climate values, targets, local/WAN addresses, Home Assistant identity or MQTT credentials.
+
+A successful heartbeat is normally sent about once per 24 hours with deterministic jitter. Enabling telemetry or installing a newer released version is eligible for an immediate best-effort heartbeat. Failure uses a persisted one-hour backoff and never changes climate control or product health.
+
+Disabling telemetry stops future heartbeats but does not delete retained server-side data. Use `button.dh_climate_app_delete_telemetry` for authenticated deletion of this installation's retained telemetry.
+
+Development versions ending in `-local` never send production telemetry.
