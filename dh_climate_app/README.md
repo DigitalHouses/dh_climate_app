@@ -38,7 +38,7 @@ SQLite under `/data/dh_climate.db` stores only durable installation state. It is
 - global `HEAT / COOL / OFF` season;
 - writable two-threshold `heat_cool` season thermostat;
 - one MQTT Device and one room thermostat per configured room;
-- `day / night / away / antifreeze` target profiles;
+- `day / night / away` native climate presets with internal `antifreeze` protection;
 - one house-wide temperature hysteresis;
 - persisted stateful room hysteresis;
 - FAST heat/cool actuators;
