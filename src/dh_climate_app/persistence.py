@@ -265,13 +265,34 @@ class StateStore:
         now: datetime,
         keep: timedelta = timedelta(hours=25),
     ) -> int:
+        """Prune old history but keep one baseline sample per metric.
+
+        The baseline is required for time-weighted integration at the left
+        edge of the rolling window when a sensor has not changed recently.
+        """
         cutoff = (now - keep).isoformat()
+        deleted = 0
         with self.connect() as db:
-            cursor = db.execute(
-                "DELETE FROM outdoor_samples WHERE observed_at < ?",
-                (cutoff,),
-            )
-            return int(cursor.rowcount)
+            for kind in ("temperature", "humidity"):
+                baseline = db.execute(
+                    """
+                    SELECT max(observed_at)
+                    FROM outdoor_samples
+                    WHERE kind=? AND observed_at<?
+                    """,
+                    (kind, cutoff),
+                ).fetchone()[0]
+                if baseline is None:
+                    continue
+                cursor = db.execute(
+                    """
+                    DELETE FROM outdoor_samples
+                    WHERE kind=? AND observed_at<? AND observed_at<>?
+                    """,
+                    (kind, cutoff, baseline),
+                )
+                deleted += int(cursor.rowcount)
+        return deleted
 
     def get_room_target(
         self,
