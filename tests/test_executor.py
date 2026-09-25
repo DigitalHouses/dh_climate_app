@@ -80,6 +80,60 @@ class ExecutorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(0, summary.commands)
         self.assertEqual("unavailable", summary.problems[0].reason)
 
+    async def test_unsupported_climate_mode_is_not_commanded(self) -> None:
+        ha = FakeHa()
+        executor = DeviceExecutor(ha)
+        summary = await executor.reconcile(
+            [
+                DesiredDeviceState(
+                    entity_id="climate.floor",
+                    domain="climate",
+                    hvac_mode="heat",
+                    target_temperature=27,
+                )
+            ],
+            {
+                "climate.floor": actual(
+                    "climate.floor",
+                    "off",
+                    temperature=22,
+                    hvac_modes=["off", "cool"],
+                    min_temp=5,
+                    max_temp=35,
+                )
+            },
+        )
+        self.assertEqual(0, summary.commands)
+        self.assertEqual("unsupported_mode", summary.problems[0].reason)
+        self.assertEqual([], ha.calls)
+
+    async def test_out_of_range_target_is_not_commanded(self) -> None:
+        ha = FakeHa()
+        executor = DeviceExecutor(ha)
+        summary = await executor.reconcile(
+            [
+                DesiredDeviceState(
+                    entity_id="climate.floor",
+                    domain="climate",
+                    hvac_mode="heat",
+                    target_temperature=40,
+                )
+            ],
+            {
+                "climate.floor": actual(
+                    "climate.floor",
+                    "heat",
+                    temperature=25,
+                    hvac_modes=["off", "heat"],
+                    min_temp=5,
+                    max_temp=35,
+                )
+            },
+        )
+        self.assertEqual(0, summary.commands)
+        self.assertEqual("target_out_of_range", summary.problems[0].reason)
+        self.assertEqual([], ha.calls)
+
 
 if __name__ == "__main__":
     unittest.main()
