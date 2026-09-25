@@ -23,4 +23,5 @@
 - Added opt-in DigitalHouses Telemetry Protocol v1 client with persistent installation credentials, daily jittered heartbeat, one-hour failure backoff and authenticated deletion.
 - Added flat Supervisor-compatible App configuration, English/Russian translations and user documentation.
 - Added immutable multi-architecture GHCR delivery workflow and canonical release-tag validation.
+- Added architecture-specific Home Assistant image labels so amd64 and aarch64 manifest variants report the canonical HA architecture names.
 - Added automated unit, contract, shell, Python compile and container-build CI validation.

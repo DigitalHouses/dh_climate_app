@@ -63,6 +63,21 @@ class ProductContractTests(unittest.TestCase):
         self.assertIn("contents: write", workflow)
         self.assertNotIn("workflow_dispatch:", workflow)
 
+    def test_multiarch_image_uses_home_assistant_arch_labels(self) -> None:
+        dockerfile = (APP_ROOT / "Dockerfile").read_text(encoding="utf-8")
+        config = (APP_ROOT / "config.yaml").read_text(encoding="utf-8")
+
+        self.assertIn("FROM base AS image-amd64", dockerfile)
+        self.assertIn('LABEL io.hass.arch="amd64"', dockerfile)
+        self.assertIn("FROM base AS image-arm64", dockerfile)
+        self.assertIn('LABEL io.hass.arch="aarch64"', dockerfile)
+        self.assertIn("FROM image-${TARGETARCH} AS final", dockerfile)
+        self.assertNotIn('io.hass.arch="${BUILD_ARCH}"', dockerfile)
+        self.assertRegex(
+            config,
+            r"(?ms)^arch:\s*\n\s*- amd64\s*\n\s*- aarch64\s*$",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

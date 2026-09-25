@@ -18,4 +18,4 @@ jobs:
       - run: python -m compileall -q dh_climate_app/src dh_climate_app/tests
       - run: python -m unittest discover -s dh_climate_app/tests -v
       - run: bash -n dh_climate_app/rootfs/run.sh
-      - run: docker build --build-arg BUILD_ARCH=amd64 --build-arg BUILD_VERSION=0.1.0 ./dh_climate_app
+      - run: docker build --build-arg BUILD_VERSION=0.1.0 ./dh_climate_app
