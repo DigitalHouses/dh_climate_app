@@ -12,6 +12,10 @@ we_at_home: input_boolean.we_at_home
 heat_threshold_default: 12.0
 cool_threshold_default: 20.0
 
+# Reversible climate devices configured in both FAST lists are treated as
+# AC/heat-pump devices for the legacy cold-weather heating protection.
+ac_min_outdoor_temperature: -10.0
+
 # First currently valid entity wins.
 outdoor_temperature_sources: >-
   sensor.outdoor_temperature,
@@ -33,6 +37,14 @@ rooms:
     humidity_sensors: >-
       sensor.living_room_humidity
 
+    # Optional window contacts. Any open contact makes the room window state open.
+    window_sensors: >-
+      binary_sensor.living_room_window
+
+    # Only listed thermal devices are forced off while a window is open.
+    window_off_devices: >-
+      climate.living_room_ac
+
     # Room air targets: room × season × profile.
     heat_day: 23.0
     heat_night: 22.0
@@ -46,7 +58,8 @@ rooms:
     # FAST devices follow room thermostat demand.
     # A climate entity may appear in both lists and becomes heat_cool.
     fast_heat: >-
-      switch.living_room_radiator
+      switch.living_room_radiator,
+      climate.living_room_ac
 
     fast_cool: >-
       climate.living_room_ac
