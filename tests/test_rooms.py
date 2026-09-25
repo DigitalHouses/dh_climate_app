@@ -58,6 +58,18 @@ class RoomEngineTests(unittest.TestCase):
         self.assertEqual(HvacAction.OFF, room.control_action)
         self.assertEqual("off", room.hvac_mode)
 
+    def test_unavailable_presence_uses_away_profile(self) -> None:
+        room = self.engine.evaluate_all(
+            {
+                "sensor.living_room_temperature": "20",
+                "input_boolean.we_at_home": "unavailable",
+                "input_boolean.night_mode": "off",
+            },
+            season=Season.HEAT,
+        )["living_room"]
+        self.assertEqual(Profile.AWAY, room.effective_profile)
+        self.assertEqual(18.0, room.target_temperature)
+
 
 class ProfileOverlayTests(unittest.TestCase):
     def test_overlay_expires(self) -> None:
