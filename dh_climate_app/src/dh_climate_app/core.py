@@ -36,6 +36,7 @@ class DeviceClass(StrEnum):
 class PrioritizedSource:
     name: str
     entity_id: str
+    attribute: str | None = None
 
 
 @dataclass(frozen=True)
@@ -64,7 +65,19 @@ def select_prioritized_value(
 ) -> tuple[str, float] | None:
     """Return the first valid configured source in declared priority order."""
     for source in sources:
-        value = _numeric_state(states.get(source.entity_id))
+        raw = states.get(source.entity_id)
+        if source.attribute is not None:
+            attributes = getattr(raw, "attributes", None)
+            if isinstance(attributes, Mapping):
+                raw = attributes.get(source.attribute)
+            elif isinstance(raw, Mapping):
+                nested = raw.get("attributes")
+                raw = nested.get(source.attribute) if isinstance(nested, Mapping) else None
+            else:
+                raw = None
+        elif hasattr(raw, "state"):
+            raw = getattr(raw, "state")
+        value = _numeric_state(raw)
         if value is not None:
             return source.name, value
     return None
