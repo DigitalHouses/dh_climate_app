@@ -3,13 +3,18 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timezone
 
-from dh_climate_app.core import Season
+from dh_climate_app.config import parse_options
+from dh_climate_app.core import HvacAction, Profile, Season
 from dh_climate_app.discovery import (
     diagnostic_discovery_payloads,
+    room_climate_discovery_payload,
+    room_humidity_discovery_payload,
     season_discovery_payload,
     season_state_topics,
 )
 from dh_climate_app.outdoor import OutdoorState
+from dh_climate_app.rooms import RoomState
+from test_config import options
 
 
 class DiscoveryTests(unittest.TestCase):
@@ -51,6 +56,39 @@ class DiscoveryTests(unittest.TestCase):
             topic for topic in topics if topic.endswith("/hvac_action")
         )
         self.assertEqual("heating", topics[action_topic])
+
+    def test_room_is_separate_mqtt_device(self) -> None:
+        config = parse_options(options())
+        room = config.rooms[0]
+        state = RoomState(
+            room_id=room.room_id,
+            name=room.name,
+            current_temperature=22,
+            current_humidity=45,
+            season=Season.HEAT,
+            effective_profile=Profile.DAY,
+            target_temperature=23,
+            climate_control_enabled=True,
+            control_action=HvacAction.HEATING,
+            hvac_mode="heat",
+            hvac_action=HvacAction.HEATING,
+        )
+        payload = room_climate_discovery_payload(room, state, "0.1.0")
+        self.assertEqual(["off", "heat"], payload["modes"])
+        self.assertEqual(
+            ["dh_climate_app_room_living_room"],
+            payload["device"]["identifiers"],
+        )
+        self.assertEqual("dh_climate_app", payload["device"]["via_device"])
+
+    def test_dehumidifier_facade(self) -> None:
+        config = parse_options(options())
+        payload = room_humidity_discovery_payload(
+            config.rooms[0],
+            "0.1.0",
+        )
+        self.assertEqual("dehumidifier", payload["device_class"])
+        self.assertIn("target_humidity_command_topic", payload)
 
 
 if __name__ == "__main__":
