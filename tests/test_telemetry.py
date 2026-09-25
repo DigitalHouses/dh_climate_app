@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-import tempfile\nimport unittest\nfrom pathlib import Path\n\nfrom dh_climate_app.telemetry import PRODUCT, TelemetryClient\n
+import tempfile
+import unittest
+from pathlib import Path
+
+from dh_climate_app.telemetry import PRODUCT, TelemetryClient
+
 
 class FakeTransport:
     def __init__(self, status: int = 204, error: Exception | None = None) -> None:
