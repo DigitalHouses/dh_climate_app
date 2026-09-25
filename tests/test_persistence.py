@@ -71,6 +71,27 @@ class PersistenceTests(unittest.TestCase):
         self.assertEqual([10.0, 12.0], [row.value for row in rows])
         self.assertTrue(self.store.integrity_check())
 
+    def test_window_load_includes_last_sample_before_window(self) -> None:
+        now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
+        self.store.add_outdoor_sample(
+            kind="temperature",
+            observed_at=now - timedelta(hours=25),
+            value=8.0,
+            source_name="primary",
+        )
+        self.store.add_outdoor_sample(
+            kind="temperature",
+            observed_at=now - timedelta(hours=12),
+            value=16.0,
+            source_name="primary",
+        )
+        rows = self.store.load_outdoor_samples(
+            kind="temperature",
+            since=now - timedelta(hours=24),
+            include_previous=True,
+        )
+        self.assertEqual([8.0, 16.0], [row.value for row in rows])
+
 
 if __name__ == "__main__":
     unittest.main()

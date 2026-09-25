@@ -209,17 +209,35 @@ class StateStore:
         *,
         kind: str,
         since: datetime,
+        include_previous: bool = False,
     ) -> list[Sample]:
+        if kind not in {"temperature", "humidity"}:
+            raise ValueError("kind must be temperature or humidity")
         with self.connect() as db:
-            rows = db.execute(
-                """
-                SELECT observed_at, value
-                FROM outdoor_samples
-                WHERE kind=? AND observed_at>=?
-                ORDER BY observed_at
-                """,
-                (kind, since.isoformat()),
-            ).fetchall()
+            rows = list(
+                db.execute(
+                    """
+                    SELECT observed_at, value
+                    FROM outdoor_samples
+                    WHERE kind=? AND observed_at>=?
+                    ORDER BY observed_at
+                    """,
+                    (kind, since.isoformat()),
+                ).fetchall()
+            )
+            if include_previous:
+                previous = db.execute(
+                    """
+                    SELECT observed_at, value
+                    FROM outdoor_samples
+                    WHERE kind=? AND observed_at<?
+                    ORDER BY observed_at DESC
+                    LIMIT 1
+                    """,
+                    (kind, since.isoformat()),
+                ).fetchone()
+                if previous is not None:
+                    rows.insert(0, previous)
         return [
             Sample(datetime.fromisoformat(str(row["observed_at"])), float(row["value"]))
             for row in rows

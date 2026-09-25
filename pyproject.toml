@@ -6,6 +6,10 @@ build-backend = "setuptools.build_meta"
 name = "dh-climate-app"
 version = "0.1.0"
 requires-python = ">=3.11"
+dependencies = [
+    "paho-mqtt>=2.0,<3",
+    "websockets>=13,<16",
+]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
