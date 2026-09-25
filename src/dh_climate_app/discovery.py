@@ -16,6 +16,8 @@ SEASON_BASE = f"{BASE_TOPIC}/season"
 ROOMS_BASE = f"{BASE_TOPIC}/rooms"
 SYSTEM_STATE_TOPIC = f"{BASE_TOPIC}/state"
 SYSTEM_AVAILABILITY_TOPIC = f"{BASE_TOPIC}/availability"
+SYSTEM_PROBLEM_TOPIC = f"{BASE_TOPIC}/problem"
+SYSTEM_PROBLEM_ATTRIBUTES_TOPIC = f"{BASE_TOPIC}/problem_attributes"
 
 SYSTEM_DEVICE_ID = "dh_climate_app"
 SEASON_OBJECT_ID = "dh_climate_app_season"
@@ -101,6 +103,22 @@ def diagnostic_discovery_payloads(app_version: str) -> dict[str, tuple[str, dict
                 "state_topic": SYSTEM_STATE_TOPIC,
                 "value_template": "{{ value_json.started_at }}",
                 "device_class": "timestamp",
+                "entity_category": "diagnostic",
+                "device": device,
+                "origin": origin,
+            },
+        ),
+        "problem": (
+            f"{DISCOVERY_PREFIX}/binary_sensor/dh_climate_app_problem/config",
+            {
+                "name": "Problem",
+                "unique_id": "dh_climate_app_problem",
+                "default_entity_id": "binary_sensor.dh_climate_app_problem",
+                "device_class": "problem",
+                "state_topic": SYSTEM_PROBLEM_TOPIC,
+                "payload_on": "ON",
+                "payload_off": "OFF",
+                "json_attributes_topic": SYSTEM_PROBLEM_ATTRIBUTES_TOPIC,
                 "entity_category": "diagnostic",
                 "device": device,
                 "origin": origin,
@@ -287,3 +305,25 @@ def system_state_payload(*, app_version: str, started_at: datetime) -> str:
         sort_keys=True,
         separators=(",", ":"),
     )
+
+
+def problem_state_payload(problems: tuple[object, ...]) -> tuple[str, str]:
+    payloads = []
+    for problem in problems:
+        if hasattr(problem, "payload"):
+            payloads.append(problem.payload())
+        elif isinstance(problem, dict):
+            payloads.append(problem)
+        else:
+            payloads.append({"code": str(problem)})
+    state = "ON" if payloads else "OFF"
+    attrs = json.dumps(
+        {
+            "count": len(payloads),
+            "problems": payloads,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return state, attrs
