@@ -13,6 +13,7 @@ from .rooms import RoomState
 DISCOVERY_PREFIX = "homeassistant"
 BASE_TOPIC = "DigitalHouses/Global/dh_climate_app"
 SEASON_BASE = f"{BASE_TOPIC}/season"
+SEASON_AVAILABILITY_TOPIC = f"{SEASON_BASE}/availability"
 ROOMS_BASE = f"{BASE_TOPIC}/rooms"
 SYSTEM_STATE_TOPIC = f"{BASE_TOPIC}/state"
 SYSTEM_AVAILABILITY_TOPIC = f"{BASE_TOPIC}/availability"
@@ -56,7 +57,11 @@ def season_discovery_payload(app_version: str) -> dict[str, Any]:
         "name": "Настройка сезонов",
         "unique_id": SEASON_OBJECT_ID,
         "default_entity_id": f"climate.{SEASON_OBJECT_ID}",
-        "availability_topic": SYSTEM_AVAILABILITY_TOPIC,
+        "availability": [
+            {"topic": SYSTEM_AVAILABILITY_TOPIC},
+            {"topic": SEASON_AVAILABILITY_TOPIC},
+        ],
+        "availability_mode": "all",
         "current_temperature_topic": f"{SEASON_BASE}/current_temperature",
         "current_humidity_topic": f"{SEASON_BASE}/current_humidity",
         "mode_state_topic": f"{SEASON_BASE}/hvac_mode",
@@ -177,7 +182,11 @@ def room_climate_discovery_payload(
         "name": "Thermostat",
         "unique_id": f"dh_climate_app_{room.room_id}",
         "default_entity_id": f"climate.dh_climate_app_{room.room_id}",
-        "availability_topic": f"{base}/climate/availability",
+        "availability": [
+            {"topic": SYSTEM_AVAILABILITY_TOPIC},
+            {"topic": f"{base}/climate/availability"},
+        ],
+        "availability_mode": "all",
         "current_temperature_topic": f"{base}/climate/current_temperature",
         "current_humidity_topic": f"{base}/climate/current_humidity",
         "temperature_state_topic": f"{base}/climate/target_temperature",
@@ -211,7 +220,11 @@ def room_humidity_discovery_payload(
         "unique_id": f"dh_climate_app_{room.room_id}_humidity",
         "default_entity_id": f"humidifier.dh_climate_app_{room.room_id}",
         "device_class": room.humidity.controller_type,
-        "availability_topic": f"{base}/humidity/availability",
+        "availability": [
+            {"topic": SYSTEM_AVAILABILITY_TOPIC},
+            {"topic": f"{base}/humidity/availability"},
+        ],
+        "availability_mode": "all",
         "state_topic": f"{base}/humidity/state",
         "command_topic": f"{base}/humidity/set/state",
         "payload_on": "ON",
