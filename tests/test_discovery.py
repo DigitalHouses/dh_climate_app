@@ -66,6 +66,28 @@ class DiscoveryTests(unittest.TestCase):
         )
         self.assertEqual("heating", topics[action_topic])
 
+    def test_missing_numeric_state_clears_mqtt_value(self) -> None:
+        now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
+        state = OutdoorState(
+            observed_at=now,
+            current_temperature=None,
+            current_humidity=None,
+            avg_24h_temperature=None,
+            avg_24h_humidity=None,
+            temperature_source=None,
+            humidity_source=None,
+            heat_threshold=12.0,
+            cool_threshold=20.0,
+            hysteresis=0.5,
+            season=Season.OFF,
+        )
+        topics = season_state_topics(state)
+        temperature_topic = next(
+            topic for topic in topics
+            if topic.endswith("/current_temperature")
+        )
+        self.assertEqual("None", topics[temperature_topic])
+
     def test_room_is_separate_mqtt_device(self) -> None:
         config = parse_options(options())
         room = config.rooms[0]
