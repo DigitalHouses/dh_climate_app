@@ -17,6 +17,9 @@ configuration:
   cool_threshold_default:
     name: Cooling season threshold
     description: Initial upper/blue threshold for the season thermostat. Later changes from Home Assistant are persisted.
+  ac_min_outdoor_temperature:
+    name: Minimum outdoor temperature for AC heating
+    description: Legacy house-wide protection for reversible climate devices used for both heating and cooling.
   outdoor_temperature_sources:
     name: Outdoor temperature sources
     description: Comma-separated sensor.* entities in priority order. The first valid source is used.
@@ -39,6 +42,12 @@ configuration:
       humidity_sensors:
         name: Humidity sensors
         description: Comma-separated sensor.* entities. Available values are averaged. May be empty.
+      window_sensors:
+        name: Window sensors
+        description: Comma-separated binary_sensor.* contacts. Any open contact makes the room window state open.
+      window_off_devices:
+        name: Devices off with open window
+        description: Comma-separated thermal actuators from this room that must be forced off while a configured window is open.
       heat_day:
         name: Heat · Day
         description: Room air target in heating season for the day profile.
