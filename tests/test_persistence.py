@@ -92,6 +92,35 @@ class PersistenceTests(unittest.TestCase):
         )
         self.assertEqual([8.0, 16.0], [row.value for row in rows])
 
+    def test_prune_keeps_one_pre_window_baseline(self) -> None:
+        now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
+        self.store.add_outdoor_sample(
+            kind="temperature",
+            observed_at=now - timedelta(hours=30),
+            value=5.0,
+            source_name="primary",
+        )
+        self.store.add_outdoor_sample(
+            kind="temperature",
+            observed_at=now - timedelta(hours=26),
+            value=8.0,
+            source_name="primary",
+        )
+        self.store.add_outdoor_sample(
+            kind="temperature",
+            observed_at=now - timedelta(hours=12),
+            value=16.0,
+            source_name="primary",
+        )
+        deleted = self.store.prune_outdoor_samples(now=now)
+        self.assertEqual(1, deleted)
+        rows = self.store.load_outdoor_samples(
+            kind="temperature",
+            since=now - timedelta(hours=24),
+            include_previous=True,
+        )
+        self.assertEqual([8.0, 16.0], [row.value for row in rows])
+
 
 if __name__ == "__main__":
     unittest.main()
