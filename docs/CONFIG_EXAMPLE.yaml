@@ -1,0 +1,66 @@
+# Proposed dh_climate_app options contract.
+# Entity IDs below are examples only.
+
+global:
+  hysteresis: 0.5
+  humidity_hysteresis: 3.0
+  night_mode: input_boolean.night_mode
+  we_at_home: input_boolean.we_at_home
+
+outdoor:
+  heat_threshold_default: 12.0
+  cool_threshold_default: 20.0
+  sources:
+    # Order is priority.
+    - name: primary
+      temperature: sensor.outdoor_temperature
+      humidity: sensor.outdoor_humidity
+    - name: backup
+      temperature: sensor.weather_station_temperature
+      humidity: sensor.weather_station_humidity
+
+rooms:
+  - id: living_room
+    name: Living room
+
+    temperature_sensors:
+      - sensor.living_room_temperature
+
+    humidity_sensors:
+      - sensor.living_room_humidity
+
+    targets:
+      heat:
+        day: 23.0
+        night: 22.0
+        away: 18.0
+        antifreeze: 10.0
+      cool:
+        day: 24.0
+        night: 24.0
+        away: 28.0
+
+    devices:
+      # Physical wall thermostat with a floor/screed probe.
+      - entity_id: climate.living_room_floor
+        class: slow
+        function: heat
+        target_temperature: 27.0
+
+      - entity_id: climate.living_room_radiator
+        class: fast
+        function: heat
+
+      - entity_id: climate.living_room_ac
+        class: fast
+        function: cool
+
+    humidity:
+      enabled: true
+      type: dehumidifier
+      target_default: 50
+      actuator:
+        entity_id: switch.living_room_dehumidifier
+
+telemetry_enabled: false
+log_level: info
