@@ -2,7 +2,7 @@ name: test
 
 on:
   push:
-    branches: [main]
+    branches: [main, experimental]
   pull_request:
 
 jobs:
@@ -14,8 +14,22 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install --upgrade pip
-      - run: python -m pip install -e ./dh_climate_app
+      - run: python -m pip install -e ./dh_climate_app pyyaml
       - run: python -m compileall -q dh_climate_app/src dh_climate_app/tests
       - run: python -m unittest discover -s dh_climate_app/tests -v
+      - name: Validate YAML
+        run: |
+          python - <<'PY'
+          import pathlib
+          import yaml
+
+          for path in (
+              pathlib.Path("dh_climate_app/config.yaml"),
+              pathlib.Path("dh_climate_app/translations/en.yaml"),
+              pathlib.Path("dh_climate_app/translations/ru.yaml"),
+          ):
+              yaml.safe_load(path.read_text(encoding="utf-8"))
+              print(f"YAML OK: {path}")
+          PY
       - run: bash -n dh_climate_app/rootfs/run.sh
-      - run: docker build --build-arg BUILD_VERSION=0.1.0 ./dh_climate_app
+      - run: docker build --build-arg BUILD_VERSION=0.1.0 --build-arg BUILD_ARCH=amd64 ./dh_climate_app

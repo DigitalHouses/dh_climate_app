@@ -6,7 +6,6 @@ import unittest
 
 
 APP_ROOT = Path(__file__).resolve().parents[1]
-REPO_ROOT = APP_ROOT.parent
 
 
 class ProductContractTests(unittest.TestCase):
@@ -44,35 +43,16 @@ class ProductContractTests(unittest.TestCase):
         config = (APP_ROOT / "config.yaml").read_text(encoding="utf-8")
         self.assertRegex(config, r"(?m)^slug:\s*dh_climate_app\s*$")
 
-    def test_immutable_delivery_contract(self) -> None:
+    def test_experimental_source_build_contract(self) -> None:
         config = (APP_ROOT / "config.yaml").read_text(encoding="utf-8")
-        workflow = (REPO_ROOT / ".github/workflows/release.yml").read_text(
-            encoding="utf-8"
-        )
-        self.assertRegex(
-            config,
-            r"(?m)^image:\s*ghcr\.io/digitalhouses/digitalhouses-climate-app\s*$",
-        )
-        self.assertIn("digitalhouses_climate_app-v*", workflow)
-        self.assertIn(
-            "ghcr.io/digitalhouses/digitalhouses-climate-app:",
-            workflow,
-        )
-        self.assertIn("context: ./dh_climate_app", workflow)
-        self.assertIn("gh release create", workflow)
-        self.assertIn("contents: write", workflow)
-        self.assertNotIn("workflow_dispatch:", workflow)
-
-    def test_multiarch_image_uses_home_assistant_arch_labels(self) -> None:
         dockerfile = (APP_ROOT / "Dockerfile").read_text(encoding="utf-8")
-        config = (APP_ROOT / "config.yaml").read_text(encoding="utf-8")
 
-        self.assertIn("FROM base AS image-amd64", dockerfile)
-        self.assertIn('LABEL io.hass.arch="amd64"', dockerfile)
-        self.assertIn("FROM base AS image-arm64", dockerfile)
-        self.assertIn('LABEL io.hass.arch="aarch64"', dockerfile)
-        self.assertIn("FROM image-${TARGETARCH} AS final", dockerfile)
-        self.assertNotIn('io.hass.arch="${BUILD_ARCH}"', dockerfile)
+        self.assertRegex(config, r"(?m)^stage:\s*experimental\s*$")
+        self.assertNotRegex(config, r"(?m)^image:")
+        self.assertIn("FROM ghcr.io/home-assistant/base:latest", dockerfile)
+        self.assertIn('ARG BUILD_ARCH="amd64"', dockerfile)
+        self.assertIn('io.hass.arch="${BUILD_ARCH}"', dockerfile)
+        self.assertNotIn("TARGETARCH", dockerfile)
         self.assertRegex(
             config,
             r"(?ms)^arch:\s*\n\s*- amd64\s*\n\s*- aarch64\s*$",
