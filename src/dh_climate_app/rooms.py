@@ -29,6 +29,7 @@ class RoomState:
     control_action: HvacAction
     hvac_mode: str
     hvac_action: HvacAction
+    window_state: str = "not_configured"
 
     @property
     def available(self) -> bool:
@@ -53,6 +54,30 @@ def _binary_fact(
     if value in {"off", "false", "0", "no", "not_home"}:
         return False
     return default
+
+
+def aggregate_window_state(
+    entity_ids: tuple[str, ...],
+    states: Mapping[str, object],
+) -> str:
+    """Legacy room window aggregation without a separate SQL contour.
+
+    Any open contact wins. If none are open but at least one configured
+    contact is unavailable/unknown, room window truth is unknown. Otherwise
+    all contacts are closed.
+    """
+    if not entity_ids:
+        return "not_configured"
+
+    saw_unknown = False
+    for entity_id in entity_ids:
+        value = str(states.get(entity_id, "unavailable")).strip().lower()
+        if value in {"on", "open", "opened", "true", "1"}:
+            return "open"
+        if value in {"off", "closed", "close", "false", "0"}:
+            continue
+        saw_unknown = True
+    return "unknown" if saw_unknown else "closed"
 
 
 class RoomEngine:
@@ -120,6 +145,10 @@ class RoomEngine:
             states.get(entity_id)
             for entity_id in room.humidity_sensors
         )
+        window_state = aggregate_window_state(
+            room.window_sensors,
+            states,
+        )
 
         climate_enabled = self.store.get_climate_control_enabled(room.room_id)
         profile = effective_profile(
@@ -179,6 +208,7 @@ class RoomEngine:
             control_action=control_action,
             hvac_mode=hvac_mode,
             hvac_action=hvac_action,
+            window_state=window_state,
         )
 
 
