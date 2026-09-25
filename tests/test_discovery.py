@@ -23,6 +23,8 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual(["heat_cool"], payload["modes"])
         self.assertIn("temperature_low_command_topic", payload)
         self.assertIn("temperature_high_command_topic", payload)
+        self.assertEqual("all", payload["availability_mode"])
+        self.assertEqual(2, len(payload["availability"]))
         self.assertEqual(
             ["dh_climate_app"],
             payload["device"]["identifiers"],
@@ -32,6 +34,13 @@ class DiscoveryTests(unittest.TestCase):
         diagnostics = diagnostic_discovery_payloads("0.1.0")
         self.assertIn("version", diagnostics)
         self.assertIn("started_at", diagnostics)
+        self.assertIn("problem", diagnostics)
+        self.assertIn("delete_telemetry", diagnostics)
+        delete = diagnostics["delete_telemetry"][1]
+        self.assertEqual(
+            "DigitalHouses/Global/dh_climate_app/system/set/delete_telemetry",
+            delete["command_topic"],
+        )
         started = diagnostics["started_at"][1]
         self.assertEqual("timestamp", started["device_class"])
         self.assertEqual("diagnostic", started["entity_category"])
@@ -75,6 +84,8 @@ class DiscoveryTests(unittest.TestCase):
         )
         payload = room_climate_discovery_payload(room, state, "0.1.0")
         self.assertEqual(["off", "heat"], payload["modes"])
+        self.assertEqual("all", payload["availability_mode"])
+        self.assertEqual(2, len(payload["availability"]))
         self.assertEqual(
             ["dh_climate_app_room_living_room"],
             payload["device"]["identifiers"],
