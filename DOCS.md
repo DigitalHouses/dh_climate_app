@@ -107,6 +107,20 @@ Supported first-release domains:
 
 A reversible `climate` entity present in both FAST lists also inherits the legacy cold-weather heating protection. Below `ac_min_outdoor_temperature` (default `-10 °C`) the App keeps that device out of heating mode while other allowed heat sources can continue.
 
+## Windows
+
+Room window contacts are optional and configured in `window_sensors`.
+
+Window state is **context**, not thermostat truth: opening a window does not rewrite the room target or HVAC action. Only devices explicitly listed in `window_off_devices` are forced off while any configured window is open. This preserves the legacy per-device window-policy behavior without recreating the old Firewall/Matrix layers.
+
+If a configured window contact is unavailable and no other contact is open, the room reports an `unknown` window state through the aggregate problem diagnostic. The App does not invent a closed state.
+
+## Cold-weather AC protection
+
+A reversible FAST `climate` entity configured in both `fast_heat` and `fast_cool` is treated as the AC/heat-pump class for the legacy low-outdoor-temperature heating limit.
+
+`ac_min_outdoor_temperature` is a global safety threshold. Below it, those reversible devices are inhibited from heating. Cooling behavior is unaffected. Heating-only switches and SLOW floor thermostats are not implicitly classified as AC devices.
+
 ## SLOW devices
 
 SLOW is intended for underfloor heating or another high-inertia comfort loop with its own local thermostat and probe.
