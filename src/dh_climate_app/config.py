@@ -163,6 +163,10 @@ def _parse_devices(raw: Any, path: str) -> tuple[DeviceConfig, ...]:
             raise ConfigError(
                 f"{path}[{index}]: slow devices support heat only in v0.1"
             )
+        if device_class is DeviceClass.SLOW and domain != "climate":
+            raise ConfigError(
+                f"{path}[{index}]: slow devices require a local climate thermostat in v0.1"
+            )
 
         target: float | None = None
         if current.get("target_temperature") is not None:
@@ -368,6 +372,26 @@ def parse_options(raw: Any) -> AppConfig:
                 humidity=humidity,
             )
         )
+
+    actuator_owners: dict[str, str] = {}
+    for room in rooms:
+        for device in room.devices:
+            owner = f"room:{room.room_id}:thermal"
+            previous = actuator_owners.get(device.entity_id)
+            if previous is not None:
+                raise ConfigError(
+                    f"actuator {device.entity_id} is configured twice: {previous}, {owner}"
+                )
+            actuator_owners[device.entity_id] = owner
+        if room.humidity.actuator is not None:
+            entity_id = room.humidity.actuator.entity_id
+            owner = f"room:{room.room_id}:humidity"
+            previous = actuator_owners.get(entity_id)
+            if previous is not None:
+                raise ConfigError(
+                    f"actuator {entity_id} is configured twice: {previous}, {owner}"
+                )
+            actuator_owners[entity_id] = owner
 
     telemetry_enabled = bool(root.get("telemetry_enabled", False))
     log_level = str(root.get("log_level", "info")).strip().lower()
