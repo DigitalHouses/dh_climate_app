@@ -72,6 +72,11 @@ class DeviceExecutor:
                 )
                 continue
 
+            capability_problem = self._capability_problem(desired, actual)
+            if capability_problem is not None:
+                problems.append(capability_problem)
+                continue
+
             mismatches = self._mismatches(desired, actual)
             if not mismatches:
                 self._attempts.pop(desired.entity_id, None)
@@ -132,6 +137,57 @@ class DeviceExecutor:
                     return float(value)
             except (TypeError, ValueError):
                 continue
+        return None
+
+    def _capability_problem(
+        self,
+        desired: DesiredDeviceState,
+        actual: HaState,
+    ) -> ExecutionProblem | None:
+        if desired.domain == "climate":
+            modes = actual.attributes.get("hvac_modes")
+            if (
+                desired.hvac_mode is not None
+                and isinstance(modes, (list, tuple))
+                and desired.hvac_mode not in modes
+            ):
+                return ExecutionProblem(
+                    desired.entity_id,
+                    "unsupported_mode",
+                    f"requested={desired.hvac_mode}; supported={list(modes)}",
+                )
+            if desired.target_temperature is not None:
+                minimum = self._float_attr(actual, "min_temp")
+                maximum = self._float_attr(actual, "max_temp")
+                if minimum is not None and desired.target_temperature < minimum:
+                    return ExecutionProblem(
+                        desired.entity_id,
+                        "target_out_of_range",
+                        f"target={desired.target_temperature}; min={minimum}",
+                    )
+                if maximum is not None and desired.target_temperature > maximum:
+                    return ExecutionProblem(
+                        desired.entity_id,
+                        "target_out_of_range",
+                        f"target={desired.target_temperature}; max={maximum}",
+                    )
+
+        if desired.domain == "humidifier" and desired.target_humidity is not None:
+            minimum = self._float_attr(actual, "min_humidity")
+            maximum = self._float_attr(actual, "max_humidity")
+            if minimum is not None and desired.target_humidity < minimum:
+                return ExecutionProblem(
+                    desired.entity_id,
+                    "target_out_of_range",
+                    f"target={desired.target_humidity}; min={minimum}",
+                )
+            if maximum is not None and desired.target_humidity > maximum:
+                return ExecutionProblem(
+                    desired.entity_id,
+                    "target_out_of_range",
+                    f"target={desired.target_humidity}; max={maximum}",
+                )
+
         return None
 
     def _mismatches(
