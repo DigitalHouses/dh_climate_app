@@ -58,6 +58,10 @@ class ProductContractTests(unittest.TestCase):
             "ghcr.io/digitalhouses/digitalhouses-climate-app:",
             workflow,
         )
+        self.assertIn("context: ./dh_climate_app", workflow)
+        self.assertIn("gh release create", workflow)
+        self.assertIn("contents: write", workflow)
+        self.assertNotIn("workflow_dispatch:", workflow)
 
 
 if __name__ == "__main__":
