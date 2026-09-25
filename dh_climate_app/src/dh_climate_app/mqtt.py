@@ -59,8 +59,10 @@ class MqttBridge:
         self.port = int(port)
         self.loop = loop
         self._last_payloads: dict[str, str] = {}
+        self._retained_payloads: dict[str, str] = {}
         self._subscriptions: set[str] = set()
         self._message_handler: Callable[[str, str, bool], None] | None = None
+        self._connected_once = False
 
         try:
             self.client = mqtt.Client(
@@ -115,7 +117,19 @@ class MqttBridge:
         info = self.client.publish(topic, payload=payload, qos=1, retain=retain)
         info.wait_for_publish(timeout=5.0)
         self._last_payloads[topic] = payload
+        if retain:
+            self._retained_payloads[topic] = payload
         return True
+
+    def _restore_retained_after_reconnect(self) -> None:
+        payloads = dict(self._retained_payloads)
+        payloads[SYSTEM_AVAILABILITY_TOPIC] = "online"
+        LOGGER.info(
+            "MQTT reconnected; restoring %s retained topics",
+            len(payloads),
+        )
+        for topic, payload in payloads.items():
+            self.publish(topic, payload, retain=True, force=True)
 
     def _on_connect(
         self,
@@ -128,6 +142,13 @@ class MqttBridge:
         LOGGER.info("MQTT connected: %s", reason_code)
         for topic in self._subscriptions:
             client.subscribe(topic, qos=1)
+
+        if self._connected_once:
+            self.loop.call_soon_threadsafe(
+                self._restore_retained_after_reconnect
+            )
+        else:
+            self._connected_once = True
 
     def _on_message(
         self,
