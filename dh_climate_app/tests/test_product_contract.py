@@ -5,14 +5,15 @@ import re
 import unittest
 
 
-ROOT = Path(__file__).resolve().parents[1]
+APP_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = APP_ROOT.parent
 
 
 class ProductContractTests(unittest.TestCase):
     def test_release_version_is_single_source_contract(self) -> None:
-        config = (ROOT / "config.yaml").read_text(encoding="utf-8")
-        dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
-        changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        config = (APP_ROOT / "config.yaml").read_text(encoding="utf-8")
+        dockerfile = (APP_ROOT / "Dockerfile").read_text(encoding="utf-8")
+        changelog = (APP_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
         config_match = re.search(r"^version:\s*([^\s]+)\s*$", config, re.MULTILINE)
         self.assertIsNotNone(config_match)
@@ -34,18 +35,18 @@ class ProductContractTests(unittest.TestCase):
             "translations/ru.yaml",
         ]
         for path in required:
-            self.assertTrue((ROOT / path).exists(), path)
+            self.assertTrue((APP_ROOT / path).exists(), path)
 
-        marker = (ROOT / "digitalhouses.app").read_text(encoding="utf-8")
+        marker = (APP_ROOT / "digitalhouses.app").read_text(encoding="utf-8")
         self.assertIn("type = haos_addon", marker)
 
     def test_slug_is_stable(self) -> None:
-        config = (ROOT / "config.yaml").read_text(encoding="utf-8")
+        config = (APP_ROOT / "config.yaml").read_text(encoding="utf-8")
         self.assertRegex(config, r"(?m)^slug:\s*dh_climate_app\s*$")
 
     def test_immutable_delivery_contract(self) -> None:
-        config = (ROOT / "config.yaml").read_text(encoding="utf-8")
-        workflow = (ROOT / ".github/workflows/release.yml").read_text(
+        config = (APP_ROOT / "config.yaml").read_text(encoding="utf-8")
+        workflow = (REPO_ROOT / ".github/workflows/release.yml").read_text(
             encoding="utf-8"
         )
         self.assertRegex(
