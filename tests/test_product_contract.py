@@ -43,6 +43,21 @@ class ProductContractTests(unittest.TestCase):
         config = (ROOT / "config.yaml").read_text(encoding="utf-8")
         self.assertRegex(config, r"(?m)^slug:\s*dh_climate_app\s*$")
 
+    def test_immutable_delivery_contract(self) -> None:
+        config = (ROOT / "config.yaml").read_text(encoding="utf-8")
+        workflow = (ROOT / ".github/workflows/release.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertRegex(
+            config,
+            r"(?m)^image:\s*ghcr\.io/digitalhouses/digitalhouses-climate-app\s*$",
+        )
+        self.assertIn("digitalhouses_climate_app-v*", workflow)
+        self.assertIn(
+            "ghcr.io/digitalhouses/digitalhouses-climate-app:",
+            workflow,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
