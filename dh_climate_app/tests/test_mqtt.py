@@ -37,6 +37,20 @@ class FakeMqttClient:
         return FakePublishInfo()
 
 
+class MutatingSubscriptionClient(FakeMqttClient):
+    def __init__(self, bridge) -> None:
+        super().__init__()
+        self.bridge = bridge
+        self.mutated = False
+
+    def subscribe(self, topic, qos=0):
+        result = super().subscribe(topic, qos=qos)
+        if not self.mutated:
+            self.mutated = True
+            self.bridge._subscriptions.add("DigitalHouses/test/late")
+        return result
+
+
 class MqttReconnectTests(unittest.IsolatedAsyncioTestCase):
     async def test_reconnect_restores_retained_topics_and_online_availability(self) -> None:
         bridge = object.__new__(MqttBridge)
@@ -74,6 +88,23 @@ class MqttReconnectTests(unittest.IsolatedAsyncioTestCase):
                 ("DigitalHouses/test/set", 1),
                 ("DigitalHouses/test/set", 1),
             ],
+            bridge.client.subscriptions,
+        )
+
+    async def test_connect_tolerates_subscription_set_mutation(self) -> None:
+        bridge = object.__new__(MqttBridge)
+        bridge.loop = asyncio.get_running_loop()
+        bridge._subscriptions = {"DigitalHouses/test/set"}
+        bridge._last_payloads = {}
+        bridge._retained_payloads = {}
+        bridge._connected_once = False
+        bridge.client = MutatingSubscriptionClient(bridge)
+
+        bridge._on_connect(bridge.client, None, None, 0)
+
+        self.assertIn("DigitalHouses/test/late", bridge._subscriptions)
+        self.assertEqual(
+            [("DigitalHouses/test/set", 1)],
             bridge.client.subscriptions,
         )
 

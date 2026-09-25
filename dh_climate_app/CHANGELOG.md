@@ -5,6 +5,8 @@
 - Established the compact Python architecture derived from DH Climate 5 behavior without PostgreSQL orchestration, Matrix, Dispatcher, UC, Confirmator or SQL business logic.
 - Added Home Assistant Supervisor REST/WebSocket input adapter with subscribe-before-snapshot reconnect handling and stale-event protection.
 - Added MQTT reconnect recovery that restores subscriptions, retained Discovery/state and online availability after broker restarts.
+- Fixed the MQTT startup/reconnect subscription-set race observed on real HAOS.
+- Enabled the Supervisor API permission required by the startup timezone lookup.
 - Added independent prioritized outdoor temperature and humidity source chains.
 - Added persisted, time-weighted rolling 24-hour outdoor averages and global `HEAT / COOL / OFF` season calculation.
 - Added MQTT Discovery two-threshold `heat_cool` season thermostat with persisted heating/cooling season thresholds.

@@ -12,6 +12,7 @@ init: false
 stage: experimental
 backup: cold
 homeassistant_api: true
+hassio_api: true
 services:
   - mqtt:need
 options:

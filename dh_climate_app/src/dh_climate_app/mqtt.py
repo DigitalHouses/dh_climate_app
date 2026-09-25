@@ -140,7 +140,7 @@ class MqttBridge:
         properties: object = None,
     ) -> None:
         LOGGER.info("MQTT connected: %s", reason_code)
-        for topic in self._subscriptions:
+        for topic in tuple(self._subscriptions):
             client.subscribe(topic, qos=1)
 
         if self._connected_once:
