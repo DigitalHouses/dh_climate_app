@@ -78,6 +78,22 @@ room × season × profile
 
 Selecting another profile through the thermostat is a short facade-only editing overlay, matching the previous DH Climate behavior. It resets after inactivity.
 
+## Window context
+
+Window contacts are optional per room through `window_sensors`.
+
+Room window truth follows the previous DH Climate behavior:
+
+```text
+any open contact           → open
+else any unavailable/other → unknown
+otherwise                  → closed
+```
+
+Window state does **not** change room thermostat demand. It is device context. Put only the actuators that must stop with an open window in `window_off_devices`. Other thermal devices continue according to their normal policy.
+
+An unknown configured window state is surfaced through the aggregate Problem diagnostic.
+
 ## FAST devices
 
 FAST devices follow room demand.
@@ -88,6 +104,8 @@ Supported first-release domains:
 - `climate`.
 
 `fast_heat` and `fast_cool` are comma-separated actuator lists. A `climate` entity may be present in both lists and is then treated as `heat_cool`. A `switch` must appear in only one list.
+
+A reversible `climate` entity present in both FAST lists also inherits the legacy cold-weather heating protection. Below `ac_min_outdoor_temperature` (default `-10 °C`) the App keeps that device out of heating mode while other allowed heat sources can continue.
 
 ## SLOW devices
 
