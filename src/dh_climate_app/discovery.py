@@ -124,6 +124,21 @@ def diagnostic_discovery_payloads(app_version: str) -> dict[str, tuple[str, dict
                 "origin": origin,
             },
         ),
+        "delete_telemetry": (
+            f"{DISCOVERY_PREFIX}/button/dh_climate_app_delete_telemetry/config",
+            {
+                "name": "Delete telemetry data",
+                "unique_id": "dh_climate_app_delete_telemetry",
+                "default_entity_id": "button.dh_climate_app_delete_telemetry",
+                "command_topic": f"{BASE_TOPIC}/system/set/delete_telemetry",
+                "payload_press": "DELETE",
+                "entity_category": "config",
+                "icon": "mdi:delete-outline",
+                "availability_topic": SYSTEM_AVAILABILITY_TOPIC,
+                "device": device,
+                "origin": origin,
+            },
+        ),
     }
 
 
