@@ -38,6 +38,8 @@ See [docs/CONFIG_EXAMPLE.yaml](docs/CONFIG_EXAMPLE.yaml) for a complete example.
 
 For each measurement, the App uses the first currently valid configured entity. If it becomes unavailable, the next entity is selected.
 
+A normal `sensor.*` source is read from its numeric state. A `weather.*` source is supported directly: the App reads its current `temperature` attribute for outdoor temperature and its current `humidity` attribute for outdoor humidity. This allows entities such as `weather.forecast_home_assistant` to be used as primary or fallback sources without template sensors.
+
 The App maintains a time-weighted rolling 24-hour outdoor average. Global season is:
 
 ```text
