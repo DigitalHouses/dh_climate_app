@@ -24,8 +24,10 @@ options:
   outdoor:
     heat_threshold_default: 12.0
     cool_threshold_default: 20.0
-    sources: []
+  outdoor_sources: []
   rooms: []
+  devices: []
+  humidity_controls: []
   telemetry_enabled: false
   log_level: info
 schema:
@@ -37,37 +39,35 @@ schema:
   outdoor:
     heat_threshold_default: float(-50,50)
     cool_threshold_default: float(-50,50)
-    sources:
-      - name: str
-        temperature: str
-        humidity: str
+  outdoor_sources:
+    - name: str
+      temperature: str
+      humidity: str
   rooms:
     - id: str
       name: str
-      temperature_sensors:
-        - str
-      humidity_sensors:
-        - str
-      targets:
-        heat:
-          day: float
-          night: float
-          away: float
-          antifreeze: float
-        cool:
-          day: float
-          night: float
-          away: float
-      devices:
-        - entity_id: str
-          class: list(fast|slow)
-          function: list(heat|cool|heat_cool)
-          target_temperature: float?
-      humidity:
-        enabled: bool
-        type: list(humidifier|dehumidifier)
-        target_default: float(0,100)
-        actuator:
-          entity_id: str
+      temperature_sensors: str
+      humidity_sensors: str
+      window_sensors: str
+      heat_day: float
+      heat_night: float
+      heat_away: float
+      heat_antifreeze: float
+      cool_day: float
+      cool_night: float
+      cool_away: float
+  devices:
+    - room_id: str
+      entity_id: str
+      class: list(fast|slow)
+      function: list(heat|cool|heat_cool)
+      target_temperature: float?
+      window_policy: list(ignore|turn_off)
+      min_heating_outdoor_temperature: float?
+  humidity_controls:
+    - room_id: str
+      type: list(humidifier|dehumidifier)
+      target_default: float(0,100)
+      actuator_entity_id: str
   telemetry_enabled: bool
   log_level: list(debug|info|warning|error)
