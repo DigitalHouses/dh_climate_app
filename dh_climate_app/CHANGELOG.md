@@ -2,6 +2,8 @@
 
 ## 0.1.0 — development
 
+- Added direct `weather.*` support for outdoor temperature and humidity sources using current weather attributes.
+
 - Established the compact Python architecture derived from DH Climate 5 behavior without PostgreSQL orchestration, Matrix, Dispatcher, UC, Confirmator or SQL business logic.
 - Added Home Assistant Supervisor REST/WebSocket input adapter with subscribe-before-snapshot reconnect handling and stale-event protection.
 - Added MQTT reconnect recovery that restores subscriptions, retained Discovery/state and online availability after broker restarts.
