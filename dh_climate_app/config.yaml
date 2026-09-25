@@ -42,9 +42,9 @@ schema:
     - id: str
       name: str
       temperature_sensors: str
-      humidity_sensors: str
-      window_sensors: str
-      window_off_devices: str
+      humidity_sensors: "str?"
+      window_sensors: "str?"
+      window_off_devices: "str?"
       heat_day: float
       heat_night: float
       heat_away: float
@@ -52,12 +52,12 @@ schema:
       cool_day: float
       cool_night: float
       cool_away: float
-      fast_heat: str
-      fast_cool: str
-      slow_heat: str
-      slow_target: float
+      fast_heat: "str?"
+      fast_cool: "str?"
+      slow_heat: "str?"
+      slow_target: "float?"
       humidity_mode: list(off|humidifier|dehumidifier)
-      humidity_target: float(0,100)
-      humidity_actuator: str
+      humidity_target: "float(0,100)?"
+      humidity_actuator: "str?"
   telemetry_enabled: bool
   log_level: list(debug|info|warning|error)
