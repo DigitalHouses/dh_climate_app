@@ -113,6 +113,13 @@ class DiscoveryTests(unittest.TestCase):
             payload["device"]["identifiers"],
         )
         self.assertEqual("dh_climate_app", payload["device"]["via_device"])
+        self.assertEqual(["day", "night", "away"], payload["preset_modes"])
+        self.assertIn("preset_mode_state_topic", payload)
+        self.assertIn("preset_mode_command_topic", payload)
+        self.assertNotIn("fan_modes", payload)
+        self.assertNotIn("fan_mode_state_topic", payload)
+        self.assertNotIn("fan_mode_command_topic", payload)
+        self.assertNotIn("antifreeze", payload["preset_modes"])
 
     def test_dehumidifier_facade(self) -> None:
         config = parse_options(options())
