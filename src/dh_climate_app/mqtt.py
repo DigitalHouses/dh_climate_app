@@ -37,6 +37,7 @@ class MqttBridge:
         self.port = int(port)
         self.loop = loop
         self._last_payloads: dict[str, str] = {}
+        self._subscriptions: set[str] = set()
         self._message_handler: Callable[[str, str, bool], None] | None = None
 
         try:
@@ -49,6 +50,12 @@ class MqttBridge:
 
         if username:
             self.client.username_pw_set(username, password)
+        self.client.will_set(
+            SYSTEM_AVAILABILITY_TOPIC,
+            payload="offline",
+            qos=1,
+            retain=True,
+        )
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
 
@@ -70,6 +77,7 @@ class MqttBridge:
             self.client.disconnect()
 
     def subscribe(self, topic: str) -> None:
+        self._subscriptions.add(topic)
         self.client.subscribe(topic, qos=1)
 
     def publish(
@@ -89,6 +97,8 @@ class MqttBridge:
 
     def _on_connect(self, client: mqtt.Client, userdata: object, flags: object, reason_code: object, properties: object = None) -> None:
         LOGGER.info("MQTT connected: %s", reason_code)
+        for topic in self._subscriptions:
+            client.subscribe(topic, qos=1)
 
     def _on_message(self, client: mqtt.Client, userdata: object, message: mqtt.MQTTMessage) -> None:
         if self._message_handler is None:

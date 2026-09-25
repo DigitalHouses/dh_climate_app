@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from dh_climate_app.config import ConfigError, parse_options
+from dh_climate_app.config import ConfigError, configured_entity_ids, parse_options
 from dh_climate_app.core import DeviceClass, Profile
 
 
@@ -74,6 +74,14 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual("living_room", config.rooms[0].room_id)
         self.assertEqual(DeviceClass.SLOW, config.rooms[0].devices[0].device_class)
         self.assertEqual(10.0, config.rooms[0].targets.heat[Profile.ANTIFREEZE])
+
+    def test_configured_entity_ids_contains_all_bindings(self) -> None:
+        config = parse_options(options())
+        entity_ids = configured_entity_ids(config)
+        self.assertIn("sensor.outdoor_temperature", entity_ids)
+        self.assertIn("sensor.living_room_temperature", entity_ids)
+        self.assertIn("climate.floor", entity_ids)
+        self.assertIn("switch.dehumidifier", entity_ids)
 
     def test_slow_climate_requires_target(self) -> None:
         raw = options()

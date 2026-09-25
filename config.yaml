@@ -1,0 +1,75 @@
+name: DigitalHouses Climate App
+version: 0.1.0
+slug: dh_climate_app
+description: Whole-house climate logic with room thermostats and direct Home Assistant device control.
+url: https://github.com/DigitalHouses/dh_climate_app
+arch:
+  - amd64
+  - aarch64
+startup: application
+boot: auto
+init: false
+stage: experimental
+backup: cold
+homeassistant_api: true
+services:
+  - mqtt:need
+options:
+  global:
+    hysteresis: 0.5
+    humidity_hysteresis: 3.0
+    night_mode: ""
+    we_at_home: ""
+  outdoor:
+    heat_threshold_default: 12.0
+    cool_threshold_default: 20.0
+    sources:
+      - name: primary
+        temperature: ""
+        humidity: ""
+  rooms: []
+  telemetry_enabled: false
+  log_level: info
+schema:
+  global:
+    hysteresis: float(0,5)
+    humidity_hysteresis: float(0,25)
+    night_mode: str
+    we_at_home: str
+  outdoor:
+    heat_threshold_default: float(-50,50)
+    cool_threshold_default: float(-50,50)
+    sources:
+      - name: str
+        temperature: str
+        humidity: str
+  rooms:
+    - id: str
+      name: str
+      temperature_sensors:
+        - str
+      humidity_sensors:
+        - str
+      targets:
+        heat:
+          day: float
+          night: float
+          away: float
+          antifreeze: float
+        cool:
+          day: float
+          night: float
+          away: float
+      devices:
+        - entity_id: str
+          class: list(fast|slow)
+          function: list(heat|cool|heat_cool)
+          target_temperature: float?
+      humidity:
+        enabled: bool
+        type: list(humidifier|dehumidifier)
+        target_default: float(0,100)
+        actuator:
+          entity_id: str
+  telemetry_enabled: bool
+  log_level: list(debug|info|warning|error)

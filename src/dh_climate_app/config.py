@@ -381,3 +381,28 @@ def parse_options(raw: Any) -> AppConfig:
         telemetry_enabled=telemetry_enabled,
         log_level=log_level,
     )
+
+
+def configured_entity_ids(config: AppConfig) -> frozenset[str]:
+    """Return every Home Assistant entity referenced by App configuration."""
+    result: set[str] = set()
+
+    if config.global_config.night_mode:
+        result.add(config.global_config.night_mode)
+    if config.global_config.we_at_home:
+        result.add(config.global_config.we_at_home)
+
+    for source in config.outdoor.sources:
+        result.add(source.temperature)
+        if source.humidity:
+            result.add(source.humidity)
+
+    for room in config.rooms:
+        result.update(room.temperature_sensors)
+        result.update(room.humidity_sensors)
+        for device in room.devices:
+            result.add(device.entity_id)
+        if room.humidity.actuator is not None:
+            result.add(room.humidity.actuator.entity_id)
+
+    return frozenset(result)
