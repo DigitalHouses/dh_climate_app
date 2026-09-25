@@ -53,6 +53,15 @@ def collect_problems(
                     room_id=room_id,
                 )
             )
+        if state.window_state == "unknown":
+            problems.append(
+                Problem(
+                    code="room_window_state_unknown",
+                    scope="room",
+                    severity="warning",
+                    room_id=room_id,
+                )
+            )
 
     for room_id, state in humidity.items():
         if state.current_humidity is None:
