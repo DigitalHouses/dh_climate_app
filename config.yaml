@@ -3,6 +3,7 @@ version: 0.1.0
 slug: dh_climate_app
 description: Whole-house climate logic with room thermostats and direct Home Assistant device control.
 url: https://github.com/DigitalHouses/dh_climate_app
+image: ghcr.io/digitalhouses/digitalhouses-climate-app
 arch:
   - amd64
   - aarch64
