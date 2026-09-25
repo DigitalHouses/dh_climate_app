@@ -99,6 +99,12 @@ def _float(value: Any, path: str) -> float:
         raise ConfigError(f"{path} must be numeric") from exc
 
 
+def _optional_float(value: Any, path: str) -> float | None:
+    if value is None or str(value).strip() == "":
+        return None
+    return _float(value, path)
+
+
 def _entity(
     value: Any,
     path: str,
@@ -168,6 +174,11 @@ def _room_targets(room: Mapping[str, Any], path: str) -> RoomTargets:
         Profile.NIGHT: _float(room.get("cool_night"), f"{path}.cool_night"),
         Profile.AWAY: _float(room.get("cool_away"), f"{path}.cool_away"),
     }
+    for profile, target in (*heat.items(), *cool.items()):
+        if not 5.0 <= target <= 35.0:
+            raise ConfigError(
+                f"{path}: target for {profile.value} must be between 5 and 35"
+            )
     return RoomTargets(heat=heat, cool=cool)
 
 
@@ -257,10 +268,14 @@ def _room_devices(
             )
         )
 
-    slow_target = _float(
-        room.get("slow_target", 27.0),
+    slow_target = _optional_float(
+        room.get("slow_target"),
         f"{path}.slow_target",
     )
+    if slow_heat and slow_target is None:
+        raise ConfigError(
+            f"{path}.slow_target is required when slow_heat is configured"
+        )
     for entity_id in slow_heat:
         devices.append(
             DeviceConfig(
@@ -294,10 +309,14 @@ def _room_humidity(
         raise ConfigError(
             f"{path}.humidity_sensors are required when humidity control is enabled"
         )
-    target = _float(
-        room.get("humidity_target", 50.0),
+    target = _optional_float(
+        room.get("humidity_target"),
         f"{path}.humidity_target",
     )
+    if target is None:
+        raise ConfigError(
+            f"{path}.humidity_target is required when humidity control is enabled"
+        )
     if not 0.0 <= target <= 100.0:
         raise ConfigError(f"{path}.humidity_target must be between 0 and 100")
     actuator = HumidityActuatorConfig(
@@ -358,6 +377,10 @@ def parse_options(raw: Any) -> AppConfig:
         root.get("ac_min_outdoor_temperature", -10.0),
         "ac_min_outdoor_temperature",
     )
+    if not -50.0 <= ac_min_outdoor_temperature <= 20.0:
+        raise ConfigError(
+            "ac_min_outdoor_temperature must be between -50 and 20"
+        )
 
     outdoor = OutdoorConfig(
         heat_threshold_default=heat_default,
