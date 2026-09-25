@@ -9,17 +9,22 @@ from pathlib import Path
 import signal
 
 from .config import AppConfig, configured_entity_ids, parse_options
+from .core import Profile, Season
+from .devices import compile_room_devices
+from .executor import DeviceExecutor, ReconcileSummary
 from .ha_client import HaState, HomeAssistantClient, StateCache
-from .mqtt import MqttBridge, SeasonMqttFacade
+from .humidity import HumidityEngine, HumidityState
+from .mqtt import ClimateMqttFacade, MqttBridge, MqttCommand
 from .outdoor import OutdoorEngine, OutdoorState
 from .persistence import StateStore
+from .rooms import ProfileEditOverlay, RoomEngine, RoomState
 
 
 LOGGER = logging.getLogger(__name__)
 OPTIONS_FILE = Path("/data/options.json")
 DATABASE_FILE = Path("/data/dh_climate.db")
 APP_VERSION = os.environ.get("APP_VERSION", "0.1.0-local")
-OUTDOOR_TICK_SECONDS = 300.0
+RUNTIME_TICK_SECONDS = 10.0
 
 
 def load_options(path: Path = OPTIONS_FILE) -> AppConfig:
@@ -43,9 +48,17 @@ class ClimateRuntime:
             store=self.store,
             hysteresis=config.global_config.hysteresis,
         )
-        self.command_queue: asyncio.Queue[tuple[str, str]] = asyncio.Queue()
+        self.rooms = RoomEngine(config=config, store=self.store)
+        self.humidity = HumidityEngine(config=config, store=self.store)
+        self.profile_overlay = ProfileEditOverlay(idle_timeout_seconds=10.0)
+
+        self.command_queue: asyncio.Queue[MqttCommand] = asyncio.Queue()
         self._calculation_lock = asyncio.Lock()
+        self._ha_connected = False
         self._last_outdoor_state: OutdoorState | None = None
+        self._last_room_states: dict[str, RoomState] = {}
+        self._last_humidity_states: dict[str, HumidityState] = {}
+        self._last_reconcile = ReconcileSummary(commands=0, problems=())
 
         loop = asyncio.get_running_loop()
         self.mqtt = MqttBridge(
@@ -55,20 +68,23 @@ class ClimateRuntime:
             password=os.environ.get("MQTT_PASSWORD", ""),
             loop=loop,
         )
-        self.facade = SeasonMqttFacade(
+        self.facade = ClimateMqttFacade(
             bridge=self.mqtt,
             app_version=APP_VERSION,
             started_at=self.started_at,
+            rooms=config.rooms,
             command_queue=self.command_queue,
         )
         self.ha = HomeAssistantClient(
             token=os.environ["SUPERVISOR_TOKEN"],
             entity_ids=self.cache.allowed,
         )
+        self.executor = DeviceExecutor(self.ha)
 
     async def run(self) -> None:
         self.facade.start()
         self.facade.set_available(False)
+        self.facade.set_rooms_available(False)
 
         tasks = [
             asyncio.create_task(
@@ -80,8 +96,8 @@ class ClimateRuntime:
                 ),
                 name="ha-client",
             ),
-            asyncio.create_task(self._command_loop(), name="season-commands"),
-            asyncio.create_task(self._periodic_outdoor_loop(), name="outdoor-tick"),
+            asyncio.create_task(self._command_loop(), name="mqtt-commands"),
+            asyncio.create_task(self._periodic_loop(), name="runtime-tick"),
         ]
         try:
             await self.stop_event.wait()
@@ -95,7 +111,7 @@ class ClimateRuntime:
         self.cache.replace_snapshot(states)
         await self._recalculate(
             observed_at=datetime.now(timezone.utc),
-            record_sample=True,
+            record_outdoor_sample=True,
         )
 
     async def _on_state(self, state: HaState) -> None:
@@ -103,63 +119,144 @@ class ClimateRuntime:
             return
         await self._recalculate(
             observed_at=state.last_updated,
-            record_sample=True,
+            record_outdoor_sample=True,
         )
 
     async def _on_connection(self, connected: bool) -> None:
+        self._ha_connected = connected
         if not connected:
             self.cache.clear()
             self.facade.set_available(False)
+            self.facade.set_rooms_available(False)
             return
-        self.facade.set_available(
-            self._last_outdoor_state.available
-            if self._last_outdoor_state is not None
-            else False
+
+        await self._recalculate(
+            observed_at=datetime.now(timezone.utc),
+            record_outdoor_sample=False,
         )
 
     async def _recalculate(
         self,
         *,
         observed_at: datetime,
-        record_sample: bool,
+        record_outdoor_sample: bool,
     ) -> OutdoorState:
         async with self._calculation_lock:
-            state = self.outdoor.evaluate(
-                self.cache.values(),
+            values = self.cache.values()
+            outdoor_state = self.outdoor.evaluate(
+                values,
                 observed_at=observed_at,
-                record_sample=record_sample,
+                record_sample=record_outdoor_sample,
             )
-            self._last_outdoor_state = state
-            self.facade.publish_state(state)
-            self.facade.set_available(state.available)
-            return state
+            room_states = self.rooms.evaluate_all(
+                values,
+                season=outdoor_state.season,
+            )
+            humidity_states = self.humidity.evaluate_all(values)
 
-    async def _periodic_outdoor_loop(self) -> None:
+            self._last_outdoor_state = outdoor_state
+            self._last_room_states = room_states
+            self._last_humidity_states = humidity_states
+
+            self.facade.publish_season(outdoor_state)
+
+            for room_id, room_state in room_states.items():
+                published_profile = self.profile_overlay.selected(
+                    room_id,
+                    effective_profile=room_state.effective_profile,
+                )
+                published_target = room_state.target_temperature
+                if room_state.season is not Season.OFF:
+                    selected_target = self.store.get_room_target(
+                        room_id,
+                        room_state.season,
+                        published_profile,
+                    )
+                    if selected_target is not None:
+                        published_target = selected_target
+
+                self.facade.publish_room(
+                    room_state,
+                    published_profile=published_profile.value,
+                    published_target=published_target,
+                )
+
+            for humidity_state in humidity_states.values():
+                self.facade.publish_humidity(humidity_state)
+
+            system_available = self._ha_connected and outdoor_state.available
+            self.facade.set_available(system_available)
+
+            if self._ha_connected:
+                desired = compile_room_devices(
+                    config=self.config,
+                    room_states=room_states,
+                    humidity_states=humidity_states,
+                )
+                self._last_reconcile = await self.executor.reconcile(
+                    desired,
+                    self.cache.snapshot(),
+                )
+
+            return outdoor_state
+
+    async def _periodic_loop(self) -> None:
         while not self.stop_event.is_set():
             try:
                 await asyncio.wait_for(
                     self.stop_event.wait(),
-                    timeout=OUTDOOR_TICK_SECONDS,
+                    timeout=RUNTIME_TICK_SECONDS,
                 )
             except TimeoutError:
-                await self._recalculate(
-                    observed_at=datetime.now(timezone.utc),
-                    record_sample=False,
-                )
+                if self._ha_connected:
+                    await self._recalculate(
+                        observed_at=datetime.now(timezone.utc),
+                        record_outdoor_sample=False,
+                    )
 
     async def _command_loop(self) -> None:
         while not self.stop_event.is_set():
-            command, payload = await self.command_queue.get()
+            command = await self.command_queue.get()
             try:
-                await self._handle_season_command(command, payload)
+                await self._handle_command(command)
             except Exception:
                 LOGGER.exception(
-                    "Season command failed: command=%s payload=%s",
-                    command,
-                    payload,
+                    "MQTT command failed: scope=%s room=%s command=%s payload=%s",
+                    command.scope,
+                    command.room_id,
+                    command.command,
+                    command.payload,
                 )
             finally:
                 self.command_queue.task_done()
+
+    async def _handle_command(self, command: MqttCommand) -> None:
+        if command.scope == "season":
+            await self._handle_season_command(command.command, command.payload)
+        elif command.scope == "room":
+            if command.room_id is None:
+                raise ValueError("room command requires room_id")
+            await self._handle_room_command(
+                command.room_id,
+                command.command,
+                command.payload,
+            )
+        elif command.scope == "humidity":
+            if command.room_id is None:
+                raise ValueError("humidity command requires room_id")
+            await self._handle_humidity_command(
+                command.room_id,
+                command.command,
+                command.payload,
+            )
+        else:
+            raise ValueError(f"unsupported command scope={command.scope}")
+
+        if self._ha_connected:
+            await self._recalculate(
+                observed_at=datetime.now(timezone.utc),
+                record_outdoor_sample=False,
+            )
 
     async def _handle_season_command(self, command: str, payload: str) -> None:
         if command == "hvac_mode":
@@ -184,10 +281,108 @@ class ClimateRuntime:
             raise ValueError(f"unsupported season command: {command}")
 
         self.outdoor.set_thresholds(heat=heat, cool=cool)
-        await self._recalculate(
-            observed_at=datetime.now(timezone.utc),
-            record_sample=False,
-        )
+
+    async def _handle_room_command(
+        self,
+        room_id: str,
+        command: str,
+        payload: str,
+    ) -> None:
+        state = self._last_room_states.get(room_id)
+        if state is None:
+            raise ValueError(f"room state is not available: {room_id}")
+
+        if command == "hvac_mode":
+            mode = payload.strip().lower()
+            if mode == "off":
+                self.store.set_climate_control_enabled(room_id, False)
+                return
+            if state.season is Season.HEAT and mode == "heat":
+                self.store.set_climate_control_enabled(room_id, True)
+                return
+            if state.season is Season.COOL and mode == "cool":
+                self.store.set_climate_control_enabled(room_id, True)
+                return
+            if state.season is Season.OFF and mode in {"heat", "cool"}:
+                return
+            raise ValueError(
+                f"hvac_mode={mode} is not allowed in season={state.season.value}"
+            )
+
+        if command == "profile":
+            try:
+                profile = Profile(payload.strip().lower())
+            except ValueError as exc:
+                raise ValueError(f"unsupported room profile={payload}") from exc
+            if profile is Profile.ANTIFREEZE and state.season is not Season.HEAT:
+                raise ValueError("antifreeze profile is only editable in HEAT season")
+            self.profile_overlay.select(
+                room_id,
+                profile,
+                effective_profile=state.effective_profile,
+            )
+            return
+
+        if command == "target_temperature":
+            if state.season is Season.OFF:
+                return
+            try:
+                target = round(float(payload), 1)
+            except ValueError as exc:
+                raise ValueError(f"invalid room target={payload}") from exc
+            if not 5.0 <= target <= 35.0:
+                raise ValueError("room target must be between 5 and 35")
+
+            selected_profile = self.profile_overlay.selected(
+                room_id,
+                effective_profile=state.effective_profile,
+            )
+            if (
+                selected_profile is Profile.ANTIFREEZE
+                and state.season is not Season.HEAT
+            ):
+                raise ValueError("antifreeze target exists only in HEAT season")
+            self.store.set_room_target(
+                room_id,
+                state.season,
+                selected_profile,
+                target,
+            )
+            self.profile_overlay.touch(room_id)
+            return
+
+        raise ValueError(f"unsupported room command={command}")
+
+    async def _handle_humidity_command(
+        self,
+        room_id: str,
+        command: str,
+        payload: str,
+    ) -> None:
+        if room_id not in self._last_humidity_states:
+            raise ValueError(f"humidity is not configured for room={room_id}")
+
+        if command == "state":
+            state = payload.strip().upper()
+            if state == "ON":
+                self.store.set_humidity_control_enabled(room_id, True)
+                return
+            if state == "OFF":
+                self.store.set_humidity_control_enabled(room_id, False)
+                return
+            raise ValueError(f"invalid humidity state={payload}")
+
+        if command == "target":
+            try:
+                target = round(float(payload), 1)
+            except ValueError as exc:
+                raise ValueError(f"invalid humidity target={payload}") from exc
+            if not 0.0 <= target <= 100.0:
+                raise ValueError("humidity target must be between 0 and 100")
+            self.store.set_humidity_target(room_id, target)
+            return
+
+        raise ValueError(f"unsupported humidity command={command}")
 
 
 async def async_main() -> int:
