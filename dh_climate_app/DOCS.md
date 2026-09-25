@@ -68,7 +68,16 @@ The room thermostat exposes:
 - room target;
 - current season-constrained HVAC mode;
 - HVAC action;
-- `day / night / away / antifreeze` profile selector.
+- native climate presets `day / night / away`.
+
+The room thermostat deliberately does not publish profile selection as
+`fan_mode`. This keeps the entity semantically compatible with native
+thermostat consumers such as HomeKit/Apple Home and avoids exposing climate
+profiles as fan speeds.
+
+`antifreeze` is an internal protection profile. In HEAT season, switching a
+room thermostat off keeps the antifreeze target active internally; it is not
+published as a user-selectable preset.
 
 Multiple room temperature or humidity sensors are averaged from their latest available values.
 
