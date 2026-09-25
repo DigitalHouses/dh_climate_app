@@ -17,6 +17,7 @@ from .humidity import HumidityEngine, HumidityState
 from .mqtt import ClimateMqttFacade, MqttBridge, MqttCommand
 from .outdoor import OutdoorEngine, OutdoorState
 from .persistence import StateStore
+from .problems import Problem, collect_problems
 from .rooms import ProfileEditOverlay, RoomEngine, RoomState
 
 
@@ -59,6 +60,7 @@ class ClimateRuntime:
         self._last_room_states: dict[str, RoomState] = {}
         self._last_humidity_states: dict[str, HumidityState] = {}
         self._last_reconcile = ReconcileSummary(commands=0, problems=())
+        self._last_problems: tuple[Problem, ...] = ()
 
         loop = asyncio.get_running_loop()
         self.mqtt = MqttBridge(
@@ -197,6 +199,16 @@ class ClimateRuntime:
                     desired,
                     self.cache.snapshot(),
                 )
+            else:
+                self._last_reconcile = ReconcileSummary(commands=0, problems=())
+
+            self._last_problems = collect_problems(
+                outdoor=outdoor_state,
+                rooms=room_states,
+                humidity=humidity_states,
+                execution=self._last_reconcile.problems,
+            )
+            self.facade.publish_problems(self._last_problems)
 
             return outdoor_state
 
