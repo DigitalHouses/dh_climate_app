@@ -19,6 +19,7 @@ from .outdoor import OutdoorEngine, OutdoorState
 from .persistence import StateStore
 from .problems import Problem, collect_problems
 from .rooms import ProfileEditOverlay, RoomEngine, RoomState
+from .telemetry import TelemetryClient, TelemetryRunner
 
 
 LOGGER = logging.getLogger(__name__)
@@ -82,9 +83,15 @@ class ClimateRuntime:
             entity_ids=self.cache.allowed,
         )
         self.executor = DeviceExecutor(self.ha)
+        self.telemetry = TelemetryClient(
+            enabled=config.telemetry_enabled,
+            version=APP_VERSION,
+        )
+        self.telemetry_runner = TelemetryRunner(self.telemetry)
 
     async def run(self) -> None:
         self.facade.start()
+        self.telemetry_runner.start()
         self.facade.set_available(False)
         self.facade.set_rooms_available(False)
 
@@ -107,6 +114,7 @@ class ClimateRuntime:
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
+            self.telemetry_runner.stop()
             self.facade.stop()
 
     async def _on_snapshot(self, states: list[HaState]) -> None:
@@ -243,7 +251,9 @@ class ClimateRuntime:
                 self.command_queue.task_done()
 
     async def _handle_command(self, command: MqttCommand) -> None:
-        if command.scope == "season":
+        if command.scope == "system":
+            await self._handle_system_command(command.command, command.payload)
+        elif command.scope == "season":
             await self._handle_season_command(command.command, command.payload)
         elif command.scope == "room":
             if command.room_id is None:
@@ -269,6 +279,16 @@ class ClimateRuntime:
                 observed_at=datetime.now(timezone.utc),
                 record_outdoor_sample=False,
             )
+
+    async def _handle_system_command(self, command: str, payload: str) -> None:
+        if command == "delete_telemetry":
+            if payload.strip().upper() != "DELETE":
+                raise ValueError("invalid delete telemetry command payload")
+            deleted = await asyncio.to_thread(self.telemetry.delete)
+            if not deleted:
+                raise RuntimeError("telemetry deletion failed")
+            return
+        raise ValueError(f"unsupported system command={command}")
 
     async def _handle_season_command(self, command: str, payload: str) -> None:
         if command == "hvac_mode":
