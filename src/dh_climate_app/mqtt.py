@@ -1,24 +1,42 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 import json
 import logging
-from typing import Callable
+from typing import Callable, Iterable
 
 import paho.mqtt.client as mqtt
 
+from .config import RoomConfig
 from .discovery import (
     SYSTEM_AVAILABILITY_TOPIC,
     diagnostic_discovery_payloads,
+    room_climate_discovery_payload,
+    room_climate_discovery_topic,
+    room_climate_state_topics,
+    room_humidity_discovery_payload,
+    room_humidity_discovery_topic,
+    room_humidity_state_topics,
     season_discovery_payload,
     season_discovery_topic,
     season_state_topics,
     system_state_payload,
 )
+from .humidity import HumidityState
 from .outdoor import OutdoorState
+from .rooms import RoomState
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class MqttCommand:
+    scope: str
+    command: str
+    payload: str
+    room_id: str | None = None
 
 
 class MqttBridge:
@@ -95,12 +113,24 @@ class MqttBridge:
         self._last_payloads[topic] = payload
         return True
 
-    def _on_connect(self, client: mqtt.Client, userdata: object, flags: object, reason_code: object, properties: object = None) -> None:
+    def _on_connect(
+        self,
+        client: mqtt.Client,
+        userdata: object,
+        flags: object,
+        reason_code: object,
+        properties: object = None,
+    ) -> None:
         LOGGER.info("MQTT connected: %s", reason_code)
         for topic in self._subscriptions:
             client.subscribe(topic, qos=1)
 
-    def _on_message(self, client: mqtt.Client, userdata: object, message: mqtt.MQTTMessage) -> None:
+    def _on_message(
+        self,
+        client: mqtt.Client,
+        userdata: object,
+        message: mqtt.MQTTMessage,
+    ) -> None:
         if self._message_handler is None:
             return
         try:
@@ -117,25 +147,33 @@ class MqttBridge:
         )
 
 
-class SeasonMqttFacade:
+class ClimateMqttFacade:
     def __init__(
         self,
         *,
         bridge: MqttBridge,
         app_version: str,
         started_at,
-        command_queue: asyncio.Queue[tuple[str, str]],
+        rooms: Iterable[RoomConfig],
+        command_queue: asyncio.Queue[MqttCommand],
     ) -> None:
         self.bridge = bridge
         self.app_version = app_version
         self.started_at = started_at
+        self.rooms = {room.room_id: room for room in rooms}
         self.command_queue = command_queue
         self.bridge.set_message_handler(self._on_message)
 
     def start(self) -> None:
         self.bridge.start()
         self.bridge.subscribe("DigitalHouses/Global/dh_climate_app/season/set/+")
-        self.publish_discovery()
+        self.bridge.subscribe(
+            "DigitalHouses/Global/dh_climate_app/rooms/+/climate/set/+"
+        )
+        self.bridge.subscribe(
+            "DigitalHouses/Global/dh_climate_app/rooms/+/humidity/set/+"
+        )
+        self.publish_system_discovery()
         self.bridge.publish(
             SYSTEM_AVAILABILITY_TOPIC,
             "online",
@@ -146,7 +184,7 @@ class SeasonMqttFacade:
     def stop(self) -> None:
         self.bridge.stop()
 
-    def publish_discovery(self) -> None:
+    def publish_system_discovery(self) -> None:
         self.bridge.publish(
             season_discovery_topic(),
             json.dumps(
@@ -182,9 +220,62 @@ class SeasonMqttFacade:
             force=True,
         )
 
-    def publish_state(self, state: OutdoorState) -> int:
+    def publish_season(self, state: OutdoorState) -> int:
         count = 0
         for topic, payload in season_state_topics(state).items():
+            count += int(self.bridge.publish(topic, payload, retain=True))
+        return count
+
+    def publish_room(
+        self,
+        state: RoomState,
+        *,
+        published_profile: str,
+        published_target: float | None,
+    ) -> int:
+        room = self.rooms[state.room_id]
+        count = int(
+            self.bridge.publish(
+                room_climate_discovery_topic(room.room_id),
+                json.dumps(
+                    room_climate_discovery_payload(
+                        room,
+                        state,
+                        self.app_version,
+                    ),
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+                retain=True,
+            )
+        )
+        for topic, payload in room_climate_state_topics(
+            state,
+            published_profile=published_profile,
+            published_target=published_target,
+        ).items():
+            count += int(self.bridge.publish(topic, payload, retain=True))
+        return count
+
+    def publish_humidity(self, state: HumidityState) -> int:
+        room = self.rooms[state.room_id]
+        count = int(
+            self.bridge.publish(
+                room_humidity_discovery_topic(room.room_id),
+                json.dumps(
+                    room_humidity_discovery_payload(
+                        room,
+                        self.app_version,
+                    ),
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+                retain=True,
+            )
+        )
+        for topic, payload in room_humidity_state_topics(state).items():
             count += int(self.bridge.publish(topic, payload, retain=True))
         return count
 
@@ -196,16 +287,40 @@ class SeasonMqttFacade:
         )
 
     def _on_message(self, topic: str, payload: str, retained: bool) -> None:
-        # Retained commands are ignored so an old command cannot modify
-        # runtime truth after restart/reconnect.
         if retained:
             return
-        if topic.endswith("/target_temp_low"):
-            command = "target_temp_low"
-        elif topic.endswith("/target_temp_high"):
-            command = "target_temp_high"
-        elif topic.endswith("/hvac_mode"):
-            command = "hvac_mode"
-        else:
+
+        prefix = "DigitalHouses/Global/dh_climate_app/"
+        if not topic.startswith(prefix):
             return
-        self.command_queue.put_nowait((command, payload.strip()))
+        suffix = topic[len(prefix):]
+        parts = suffix.split("/")
+
+        if len(parts) == 3 and parts[:2] == ["season", "set"]:
+            self.command_queue.put_nowait(
+                MqttCommand(
+                    scope="season",
+                    command=parts[2],
+                    payload=payload.strip(),
+                )
+            )
+            return
+
+        if len(parts) == 5 and parts[0] == "rooms":
+            room_id = parts[1]
+            if room_id not in self.rooms or parts[3] != "set":
+                return
+            if parts[2] == "climate":
+                scope = "room"
+            elif parts[2] == "humidity":
+                scope = "humidity"
+            else:
+                return
+            self.command_queue.put_nowait(
+                MqttCommand(
+                    scope=scope,
+                    room_id=room_id,
+                    command=parts[4],
+                    payload=payload.strip(),
+                )
+            )
