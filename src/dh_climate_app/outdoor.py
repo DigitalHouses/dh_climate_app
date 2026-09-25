@@ -25,7 +25,10 @@ class OutdoorState:
 
     @property
     def available(self) -> bool:
-        return self.avg_24h_temperature is not None
+        return (
+            self.current_temperature is not None
+            and self.avg_24h_temperature is not None
+        )
 
 
 class OutdoorEngine:
@@ -71,6 +74,7 @@ class OutdoorEngine:
             self._record_if_changed("temperature", temperature, observed_at)
             self._record_if_changed("humidity", humidity, observed_at)
 
+        self.store.prune_outdoor_samples(now=observed_at)
         since = observed_at - timedelta(hours=24)
         temperature_samples = self.store.load_outdoor_samples(
             kind="temperature",
@@ -93,11 +97,15 @@ class OutdoorEngine:
         )
 
         thresholds = self.store.get_season_thresholds()
-        season = decide_season(
-            avg_temperature,
-            heat_threshold=thresholds.heat,
-            cool_threshold=thresholds.cool,
-            hysteresis=self.hysteresis,
+        season = (
+            decide_season(
+                avg_temperature,
+                heat_threshold=thresholds.heat,
+                cool_threshold=thresholds.cool,
+                hysteresis=self.hysteresis,
+            )
+            if temperature is not None
+            else Season.OFF
         )
 
         return OutdoorState(
