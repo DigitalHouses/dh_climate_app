@@ -90,6 +90,14 @@ class StateStore:
                     room_id TEXT PRIMARY KEY,
                     target REAL NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS humidity_runtime (
+                    room_id TEXT PRIMARY KEY,
+                    previous_active INTEGER NOT NULL DEFAULT 0
+                        CHECK (previous_active IN (0, 1)),
+                    control_enabled INTEGER NOT NULL DEFAULT 1
+                        CHECK (control_enabled IN (0, 1))
+                );
                 """
             )
             db.execute(
@@ -146,6 +154,14 @@ class StateStore:
                         VALUES (?, ?)
                         """,
                         (room.room_id, float(room.humidity.target_default)),
+                    )
+                    db.execute(
+                        """
+                        INSERT OR IGNORE INTO humidity_runtime(
+                            room_id, previous_active, control_enabled
+                        ) VALUES (?, 0, 1)
+                        """,
+                        (room.room_id,),
                     )
 
     def integrity_check(self) -> bool:
@@ -365,4 +381,45 @@ class StateStore:
                 DO UPDATE SET target=excluded.target
                 """,
                 (room_id, float(target)),
+            )
+
+
+    def get_humidity_previous_active(self, room_id: str) -> bool:
+        with self.connect() as db:
+            row = db.execute(
+                "SELECT previous_active FROM humidity_runtime WHERE room_id=?",
+                (room_id,),
+            ).fetchone()
+        return False if row is None else bool(row["previous_active"])
+
+    def set_humidity_previous_active(self, room_id: str, active: bool) -> None:
+        with self.connect() as db:
+            db.execute(
+                """
+                INSERT INTO humidity_runtime(room_id, previous_active, control_enabled)
+                VALUES (?, ?, 1)
+                ON CONFLICT(room_id)
+                DO UPDATE SET previous_active=excluded.previous_active
+                """,
+                (room_id, int(bool(active))),
+            )
+
+    def get_humidity_control_enabled(self, room_id: str) -> bool:
+        with self.connect() as db:
+            row = db.execute(
+                "SELECT control_enabled FROM humidity_runtime WHERE room_id=?",
+                (room_id,),
+            ).fetchone()
+        return True if row is None else bool(row["control_enabled"])
+
+    def set_humidity_control_enabled(self, room_id: str, enabled: bool) -> None:
+        with self.connect() as db:
+            db.execute(
+                """
+                INSERT INTO humidity_runtime(room_id, previous_active, control_enabled)
+                VALUES (?, 0, ?)
+                ON CONFLICT(room_id)
+                DO UPDATE SET control_enabled=excluded.control_enabled
+                """,
+                (room_id, int(bool(enabled))),
             )
