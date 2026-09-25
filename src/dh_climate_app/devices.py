@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .config import AppConfig
+from .config import AppConfig, DeviceConfig
 from .core import DeviceClass, HvacAction, Season
 from .humidity import HumidityState
 from .rooms import RoomState
@@ -39,12 +39,45 @@ def _function_matches(function: str, action: HvacAction) -> bool:
     return False
 
 
+def _thermal_inhibited(
+    device: DeviceConfig,
+    *,
+    room_state: RoomState,
+    outdoor_temperature: float | None,
+    heating: bool,
+) -> bool:
+    if (
+        device.window_policy == "turn_off"
+        and room_state.window_state == "open"
+    ):
+        return True
+
+    minimum = device.min_heating_outdoor_temperature
+    if (
+        heating
+        and minimum is not None
+        and outdoor_temperature is not None
+        and outdoor_temperature < minimum
+    ):
+        return True
+
+    return False
+
+
 def compile_room_devices(
     *,
     config: AppConfig,
     room_states: dict[str, RoomState],
     humidity_states: dict[str, HumidityState],
+    outdoor_temperature: float | None = None,
 ) -> list[DesiredDeviceState]:
+    """Compile physical desired state from room truth.
+
+    Window state remains context, not thermostat truth: it can inhibit only
+    devices whose explicit window_policy is turn_off. Likewise the legacy
+    low-outdoor-temperature AC safety is represented as an explicit
+    per-device heating limit instead of a device-type registry.
+    """
     desired: list[DesiredDeviceState] = []
 
     for room in config.rooms:
@@ -54,30 +87,42 @@ def compile_room_devices(
 
             if device.device_class is DeviceClass.SLOW:
                 active = state.season is Season.HEAT
-                if domain == "switch":
-                    desired.append(
-                        DesiredDeviceState(
-                            entity_id=device.entity_id,
-                            domain=domain,
-                            power=active,
-                            source=f"room:{room.room_id}:slow",
-                        )
+                if active and _thermal_inhibited(
+                    device,
+                    room_state=state,
+                    outdoor_temperature=outdoor_temperature,
+                    heating=True,
+                ):
+                    active = False
+                desired.append(
+                    DesiredDeviceState(
+                        entity_id=device.entity_id,
+                        domain=domain,
+                        hvac_mode="heat" if active else "off",
+                        target_temperature=(
+                            device.target_temperature if active else None
+                        ),
+                        source=f"room:{room.room_id}:slow",
                     )
-                else:
-                    desired.append(
-                        DesiredDeviceState(
-                            entity_id=device.entity_id,
-                            domain=domain,
-                            hvac_mode="heat" if active else "off",
-                            target_temperature=(
-                                device.target_temperature if active else None
-                            ),
-                            source=f"room:{room.room_id}:slow",
-                        )
-                    )
+                )
                 continue
 
-            active = _function_matches(device.function, state.control_action)
+            active = _function_matches(
+                device.function,
+                state.control_action,
+            )
+            heating = (
+                active
+                and state.control_action is HvacAction.HEATING
+            )
+            if active and _thermal_inhibited(
+                device,
+                room_state=state,
+                outdoor_temperature=outdoor_temperature,
+                heating=heating,
+            ):
+                active = False
+
             if domain == "switch":
                 desired.append(
                     DesiredDeviceState(
