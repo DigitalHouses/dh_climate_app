@@ -21,7 +21,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          CONFIG_VERSION="$(awk '/^version:/ {print $2; exit}' config.yaml | tr -d '"')"
+          CONFIG_VERSION="$(awk '/^version:/ {print $2; exit}' dh_climate_app/config.yaml | tr -d '"')"
           if [[ -z "${CONFIG_VERSION}" ]]; then
             echo "config.yaml version is missing" >&2
             exit 1
@@ -50,7 +50,7 @@ jobs:
       - name: Build and publish immutable image
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ./dh_climate_app
           platforms: linux/amd64,linux/arm64
           push: true
           build-args: |
