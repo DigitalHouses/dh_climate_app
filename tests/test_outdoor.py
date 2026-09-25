@@ -36,9 +36,22 @@ class OutdoorEngineTests(unittest.TestCase):
             },
             observed_at=now,
         )
-        self.assertEqual("primary", state.temperature_source)
+        self.assertEqual("sensor.outdoor_temperature", state.temperature_source)
         self.assertEqual(10.0, state.avg_24h_temperature)
         self.assertEqual(Season.HEAT, state.season)
+
+    def test_priority_falls_back_to_second_source(self) -> None:
+        now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
+        state = self.engine.evaluate(
+            {
+                "sensor.outdoor_temperature": "unavailable",
+                "sensor.weather_temperature": "11.5",
+                "sensor.outdoor_humidity": "45",
+            },
+            observed_at=now,
+        )
+        self.assertEqual("sensor.weather_temperature", state.temperature_source)
+        self.assertEqual(11.5, state.current_temperature)
 
     def test_rolling_average_changes_season(self) -> None:
         now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
