@@ -2,11 +2,24 @@
 
 ## 0.1.0 — development
 
-- Add opt-in DigitalHouses Telemetry Protocol v1 client with persistent installation identity, daily jittered heartbeat, one-hour failure backoff and authenticated deletion.
-
-- Established architecture baseline for the compact Home Assistant App.
-- Extracted legacy DH Climate 5 behavior contract.
-- Added pure Python core for source priority, rolling avg24, season selection, profiles, thermostat hysteresis and FAST/SLOW policy.
-- Added typed App configuration model and validation.
-- Added lightweight SQLite persistence for season thresholds, rolling outdoor samples, room targets, humidity targets and thermostat hysteresis continuity.
-- Added unit coverage for configuration and persistence.
+- Established the compact Python architecture derived from DH Climate 5 behavior without PostgreSQL orchestration, Matrix, Dispatcher, UC, Confirmator or SQL business logic.
+- Added Home Assistant Supervisor REST/WebSocket input adapter with subscribe-before-snapshot reconnect handling and stale-event protection.
+- Added independent prioritized outdoor temperature and humidity source chains.
+- Added persisted, time-weighted rolling 24-hour outdoor averages and global `HEAT / COOL / OFF` season calculation.
+- Added MQTT Discovery two-threshold `heat_cool` season thermostat with persisted heating/cooling season thresholds.
+- Added one MQTT Device and room `climate` facade per configured room.
+- Added `day / night / away / antifreeze` target profiles and the legacy short-lived profile-edit overlay.
+- Added one house-wide temperature hysteresis and persisted stateful room thermostat action.
+- Added direct FAST heat/cool actuator policy for Home Assistant `switch` and `climate` entities.
+- Added SLOW floor/comfort control through local `climate` thermostats with a separate SLOW target.
+- Added optional per-room humidifier/dehumidifier facade and direct actuator control with separate humidity hysteresis.
+- Added optional room window-contact aggregation and per-device open-window shutdown policy.
+- Added legacy cold-weather heating protection for reversible FAST climate devices, defaulting to `-10 °C`.
+- Added idempotent Home Assistant service reconciliation, capability/range checks, bounded retry and cooldown.
+- Added aggregate `Problem` diagnostic plus `Version` and `Started at` diagnostics.
+- Added fail-safe behavior for unavailable outdoor temperature, room sensors, Home Assistant disconnects and unavailable presence input.
+- Added lightweight SQLite persistence for season thresholds, outdoor samples, room targets, humidity targets and hysteresis continuity.
+- Added opt-in DigitalHouses Telemetry Protocol v1 client with persistent installation credentials, daily jittered heartbeat, one-hour failure backoff and authenticated deletion.
+- Added flat Supervisor-compatible App configuration, English/Russian translations and user documentation.
+- Added immutable multi-architecture GHCR delivery workflow and canonical release-tag validation.
+- Added automated unit, contract, shell, Python compile and container-build CI validation.
