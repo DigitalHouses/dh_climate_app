@@ -48,11 +48,12 @@ class DeviceCompilerTests(unittest.TestCase):
         self.assertTrue(by_id["switch.radiator"].power)
         self.assertTrue(by_id["switch.dehumidifier"].power)
 
-    def test_open_window_inhibits_only_opted_in_device(self) -> None:
+    def test_open_window_inhibits_only_selected_device(self) -> None:
         raw = options()
-        raw["rooms"][0]["window_sensors"] = "binary_sensor.window"
-        raw["devices"][0]["window_policy"] = "ignore"
-        raw["devices"][1]["window_policy"] = "turn_off"
+        room = raw["rooms"][0]
+        room["window_sensors"] = "binary_sensor.window"
+        room["window_off_devices"] = "switch.radiator"
+
         states = {
             "sensor.living_room_temperature": "21",
             "sensor.living_room_humidity": "45",
@@ -69,25 +70,20 @@ class DeviceCompilerTests(unittest.TestCase):
         )
         by_id = {item.entity_id: item for item in desired}
 
-        # SLOW floor ignores the window because its policy says so.
+        # SLOW floor is not listed in window_off_devices.
         self.assertEqual("heat", by_id["climate.floor"].hvac_mode)
-        # FAST radiator is explicitly stopped by the room window context.
+        # FAST radiator is explicitly stopped.
         self.assertFalse(by_id["switch.radiator"].power)
-        # Window context does not alter room thermostat truth itself.
+        # Window is context only: thermostat truth remains heating.
         self.assertEqual("heating", rooms["living_room"].control_action.value)
 
-    def test_low_outdoor_temperature_inhibits_heat_device(self) -> None:
+    def test_low_outdoor_temperature_inhibits_reversible_climate(self) -> None:
         raw = options()
-        raw["devices"].append(
-            {
-                "room_id": "living_room",
-                "entity_id": "climate.heat_pump",
-                "class": "fast",
-                "function": "heat",
-                "window_policy": "ignore",
-                "min_heating_outdoor_temperature": -10,
-            }
-        )
+        room = raw["rooms"][0]
+        room["fast_heat"] = "switch.radiator, climate.living_room_ac"
+        room["fast_cool"] = "climate.living_room_ac"
+        raw["ac_min_outdoor_temperature"] = -10.0
+
         states = {
             "sensor.living_room_temperature": "21",
             "sensor.living_room_humidity": "45",
@@ -95,6 +91,7 @@ class DeviceCompilerTests(unittest.TestCase):
             "input_boolean.night_mode": "off",
         }
         config, rooms, humidity = self._build(raw, states, Season.HEAT)
+
         desired = compile_room_devices(
             config=config,
             room_states=rooms,
@@ -102,7 +99,7 @@ class DeviceCompilerTests(unittest.TestCase):
             outdoor_temperature=-15.0,
         )
         by_id = {item.entity_id: item for item in desired}
-        self.assertEqual("off", by_id["climate.heat_pump"].hvac_mode)
+        self.assertEqual("off", by_id["climate.living_room_ac"].hvac_mode)
 
         desired = compile_room_devices(
             config=config,
@@ -111,7 +108,7 @@ class DeviceCompilerTests(unittest.TestCase):
             outdoor_temperature=-5.0,
         )
         by_id = {item.entity_id: item for item in desired}
-        self.assertEqual("heat", by_id["climate.heat_pump"].hvac_mode)
+        self.assertEqual("heat", by_id["climate.living_room_ac"].hvac_mode)
 
 
 if __name__ == "__main__":
