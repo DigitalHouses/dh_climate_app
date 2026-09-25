@@ -286,6 +286,22 @@ class ClimateMqttFacade:
             retain=True,
         )
 
+    def set_rooms_available(self, available: bool) -> None:
+        payload = "online" if available else "offline"
+        for room_id, room in self.rooms.items():
+            base = f"DigitalHouses/Global/dh_climate_app/rooms/{room_id}"
+            self.bridge.publish(
+                f"{base}/climate/availability",
+                payload,
+                retain=True,
+            )
+            if room.humidity.enabled:
+                self.bridge.publish(
+                    f"{base}/humidity/availability",
+                    payload,
+                    retain=True,
+                )
+
     def _on_message(self, topic: str, payload: str, retained: bool) -> None:
         if retained:
             return
