@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 — development
+## 0.1.1 — development
 
 - Added direct `weather.*` support for outdoor temperature and humidity sources using current weather attributes.
 
