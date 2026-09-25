@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import re
 from typing import Any, Mapping
 
@@ -41,6 +41,8 @@ class DeviceConfig:
     device_class: DeviceClass
     function: str
     target_temperature: float | None
+    window_policy: str = "ignore"
+    min_heating_outdoor_temperature: float | None = None
 
 
 @dataclass(frozen=True)
@@ -68,6 +70,7 @@ class RoomConfig:
     name: str
     temperature_sensors: tuple[str, ...]
     humidity_sensors: tuple[str, ...]
+    window_sensors: tuple[str, ...]
     targets: RoomTargets
     devices: tuple[DeviceConfig, ...]
     humidity: HumidityConfig
@@ -102,7 +105,19 @@ def _float(value: Any, path: str) -> float:
     return parsed
 
 
-def _entity(value: Any, path: str, domains: tuple[str, ...], *, required: bool = True) -> str:
+def _optional_float(value: Any, path: str) -> float | None:
+    if value is None or str(value).strip() == "":
+        return None
+    return _float(value, path)
+
+
+def _entity(
+    value: Any,
+    path: str,
+    domains: tuple[str, ...],
+    *,
+    required: bool = True,
+) -> str:
     text = str(value or "").strip()
     if not text:
         if required:
@@ -117,111 +132,194 @@ def _entity(value: Any, path: str, domains: tuple[str, ...], *, required: bool =
     return text
 
 
-def _parse_profile_targets(raw: Mapping[str, Any], path: str, *, heat: bool) -> dict[Profile, float]:
-    required = (Profile.DAY, Profile.NIGHT, Profile.AWAY)
-    if heat:
-        required = required + (Profile.ANTIFREEZE,)
-    result: dict[Profile, float] = {}
-    for profile in required:
-        if profile.value not in raw:
-            raise ConfigError(f"{path}.{profile.value} is required")
-        result[profile] = _float(raw[profile.value], f"{path}.{profile.value}")
-    return result
-
-
-def _parse_devices(raw: Any, path: str) -> tuple[DeviceConfig, ...]:
-    result: list[DeviceConfig] = []
+def _entity_list(
+    value: Any,
+    path: str,
+    domains: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Parse a flat HAOS option field containing comma-separated entity IDs."""
+    if value is None:
+        return ()
+    if isinstance(value, list):
+        raw_items = value
+    else:
+        raw_items = [
+            item.strip()
+            for item in str(value).replace("\n", ",").split(",")
+            if item.strip()
+        ]
+    result: list[str] = []
     seen: set[str] = set()
-    for index, item in enumerate(_as_list(raw, path)):
-        current = _as_mapping(item, f"{path}[{index}]")
-        entity_id = _entity(
-            current.get("entity_id"),
-            f"{path}[{index}].entity_id",
-            ("climate", "switch"),
-        )
-        if entity_id in seen:
-            raise ConfigError(f"{path}[{index}].entity_id duplicates {entity_id}")
-        seen.add(entity_id)
-
-        class_text = str(current.get("class", "")).strip().lower()
-        try:
-            device_class = DeviceClass(class_text)
-        except ValueError as exc:
-            raise ConfigError(f"{path}[{index}].class must be fast or slow") from exc
-
-        function = str(current.get("function", "")).strip().lower()
-        if function not in {"heat", "cool", "heat_cool"}:
-            raise ConfigError(
-                f"{path}[{index}].function must be heat, cool or heat_cool"
-            )
-        domain = entity_id.split(".", 1)[0]
-        if domain == "switch" and function == "heat_cool":
-            raise ConfigError(
-                f"{path}[{index}]: switch devices must have one explicit function"
-            )
-        if device_class is DeviceClass.SLOW and function != "heat":
-            raise ConfigError(
-                f"{path}[{index}]: slow devices support heat only in v0.1"
-            )
-        if device_class is DeviceClass.SLOW and domain != "climate":
-            raise ConfigError(
-                f"{path}[{index}]: slow devices require a local climate thermostat in v0.1"
-            )
-
-        target: float | None = None
-        if current.get("target_temperature") is not None:
-            target = _float(
-                current.get("target_temperature"),
-                f"{path}[{index}].target_temperature",
-            )
-        if device_class is DeviceClass.SLOW and domain == "climate" and target is None:
-            raise ConfigError(
-                f"{path}[{index}].target_temperature is required for slow climate"
-            )
-
-        result.append(
-            DeviceConfig(
-                entity_id=entity_id,
-                device_class=device_class,
-                function=function,
-                target_temperature=target,
-            )
-        )
+    for index, raw in enumerate(raw_items):
+        entity_id = _entity(raw, f"{path}[{index}]", domains)
+        if entity_id not in seen:
+            result.append(entity_id)
+            seen.add(entity_id)
     return tuple(result)
 
 
-def _parse_humidity(raw: Any, path: str) -> HumidityConfig:
-    if raw is None:
-        return HumidityConfig(False, None, None, None)
-    data = _as_mapping(raw, path)
-    enabled = bool(data.get("enabled", False))
-    if not enabled:
-        return HumidityConfig(False, None, None, None)
+def _parse_room_targets(
+    room: Mapping[str, Any],
+    path: str,
+) -> RoomTargets:
+    # Accept the pre-release nested shape as a compatibility convenience.
+    if isinstance(room.get("targets"), Mapping):
+        targets = _as_mapping(room["targets"], f"{path}.targets")
+        heat = _as_mapping(targets.get("heat"), f"{path}.targets.heat")
+        cool = _as_mapping(targets.get("cool"), f"{path}.targets.cool")
+        return RoomTargets(
+            heat={
+                Profile.DAY: _float(heat.get("day"), f"{path}.targets.heat.day"),
+                Profile.NIGHT: _float(
+                    heat.get("night"),
+                    f"{path}.targets.heat.night",
+                ),
+                Profile.AWAY: _float(heat.get("away"), f"{path}.targets.heat.away"),
+                Profile.ANTIFREEZE: _float(
+                    heat.get("antifreeze"),
+                    f"{path}.targets.heat.antifreeze",
+                ),
+            },
+            cool={
+                Profile.DAY: _float(cool.get("day"), f"{path}.targets.cool.day"),
+                Profile.NIGHT: _float(
+                    cool.get("night"),
+                    f"{path}.targets.cool.night",
+                ),
+                Profile.AWAY: _float(cool.get("away"), f"{path}.targets.cool.away"),
+            },
+        )
 
+    return RoomTargets(
+        heat={
+            Profile.DAY: _float(room.get("heat_day"), f"{path}.heat_day"),
+            Profile.NIGHT: _float(room.get("heat_night"), f"{path}.heat_night"),
+            Profile.AWAY: _float(room.get("heat_away"), f"{path}.heat_away"),
+            Profile.ANTIFREEZE: _float(
+                room.get("heat_antifreeze"),
+                f"{path}.heat_antifreeze",
+            ),
+        },
+        cool={
+            Profile.DAY: _float(room.get("cool_day"), f"{path}.cool_day"),
+            Profile.NIGHT: _float(room.get("cool_night"), f"{path}.cool_night"),
+            Profile.AWAY: _float(room.get("cool_away"), f"{path}.cool_away"),
+        },
+    )
+
+
+def _parse_device(item: Any, path: str) -> tuple[str, DeviceConfig]:
+    current = _as_mapping(item, path)
+    room_id = str(current.get("room_id", "")).strip().lower()
+    entity_id = _entity(
+        current.get("entity_id"),
+        f"{path}.entity_id",
+        ("climate", "switch"),
+    )
+
+    class_text = str(current.get("class", "")).strip().lower()
+    try:
+        device_class = DeviceClass(class_text)
+    except ValueError as exc:
+        raise ConfigError(f"{path}.class must be fast or slow") from exc
+
+    function = str(current.get("function", "")).strip().lower()
+    if function not in {"heat", "cool", "heat_cool"}:
+        raise ConfigError(
+            f"{path}.function must be heat, cool or heat_cool"
+        )
+
+    domain = entity_id.split(".", 1)[0]
+    if domain == "switch" and function == "heat_cool":
+        raise ConfigError(
+            f"{path}: switch devices must have one explicit function"
+        )
+    if device_class is DeviceClass.SLOW and function != "heat":
+        raise ConfigError(f"{path}: slow devices support heat only in v0.1")
+    if device_class is DeviceClass.SLOW and domain != "climate":
+        raise ConfigError(
+            f"{path}: slow devices require a local climate thermostat in v0.1"
+        )
+
+    target = _optional_float(
+        current.get("target_temperature"),
+        f"{path}.target_temperature",
+    )
+    if device_class is DeviceClass.SLOW and target is None:
+        raise ConfigError(
+            f"{path}.target_temperature is required for slow climate"
+        )
+
+    window_policy = str(
+        current.get("window_policy", "ignore")
+    ).strip().lower()
+    if window_policy not in {"ignore", "turn_off"}:
+        raise ConfigError(
+            f"{path}.window_policy must be ignore or turn_off"
+        )
+
+    min_outdoor = _optional_float(
+        current.get("min_heating_outdoor_temperature"),
+        f"{path}.min_heating_outdoor_temperature",
+    )
+    if min_outdoor is not None and function == "cool":
+        raise ConfigError(
+            f"{path}.min_heating_outdoor_temperature requires a heat-capable device"
+        )
+
+    return room_id, DeviceConfig(
+        entity_id=entity_id,
+        device_class=device_class,
+        function=function,
+        target_temperature=target,
+        window_policy=window_policy,
+        min_heating_outdoor_temperature=min_outdoor,
+    )
+
+
+def _disabled_humidity() -> HumidityConfig:
+    return HumidityConfig(False, None, None, None)
+
+
+def _parse_humidity_control(
+    item: Any,
+    path: str,
+) -> tuple[str, HumidityConfig]:
+    data = _as_mapping(item, path)
+    room_id = str(data.get("room_id", "")).strip().lower()
     controller_type = str(data.get("type", "")).strip().lower()
     if controller_type not in {"humidifier", "dehumidifier"}:
-        raise ConfigError(f"{path}.type must be humidifier or dehumidifier")
+        raise ConfigError(
+            f"{path}.type must be humidifier or dehumidifier"
+        )
 
     target = _float(data.get("target_default"), f"{path}.target_default")
     if not 0.0 <= target <= 100.0:
         raise ConfigError(f"{path}.target_default must be between 0 and 100")
 
-    actuator_raw = _as_mapping(data.get("actuator"), f"{path}.actuator")
     actuator = HumidityActuatorConfig(
         entity_id=_entity(
-            actuator_raw.get("entity_id"),
-            f"{path}.actuator.entity_id",
+            data.get("actuator_entity_id"),
+            f"{path}.actuator_entity_id",
             ("switch", "humidifier"),
         )
     )
-    return HumidityConfig(True, controller_type, target, actuator)
+    return room_id, HumidityConfig(
+        True,
+        controller_type,
+        target,
+        actuator,
+    )
 
 
 def parse_options(raw: Any) -> AppConfig:
     root = _as_mapping(raw, "options")
 
     global_raw = _as_mapping(root.get("global", {}), "global")
-    hysteresis = _float(global_raw.get("hysteresis", 0.5), "global.hysteresis")
+    hysteresis = _float(
+        global_raw.get("hysteresis", 0.5),
+        "global.hysteresis",
+    )
     if not 0.0 <= hysteresis <= 5.0:
         raise ConfigError("global.hysteresis must be between 0 and 5")
     humidity_hysteresis = _float(
@@ -229,7 +327,9 @@ def parse_options(raw: Any) -> AppConfig:
         "global.humidity_hysteresis",
     )
     if not 0.0 <= humidity_hysteresis <= 25.0:
-        raise ConfigError("global.humidity_hysteresis must be between 0 and 25")
+        raise ConfigError(
+            "global.humidity_hysteresis must be between 0 and 25"
+        )
 
     global_config = GlobalConfig(
         hysteresis=hysteresis,
@@ -248,7 +348,7 @@ def parse_options(raw: Any) -> AppConfig:
         ),
     )
 
-    outdoor_raw = _as_mapping(root.get("outdoor"), "outdoor")
+    outdoor_raw = _as_mapping(root.get("outdoor", {}), "outdoor")
     heat_default = _float(
         outdoor_raw.get("heat_threshold_default", 12.0),
         "outdoor.heat_threshold_default",
@@ -259,16 +359,26 @@ def parse_options(raw: Any) -> AppConfig:
     )
     if heat_default >= cool_default:
         raise ConfigError(
-            "outdoor.heat_threshold_default must be lower than cool_threshold_default"
+            "outdoor.heat_threshold_default must be lower than "
+            "cool_threshold_default"
         )
+
+    source_rows = root.get("outdoor_sources")
+    if source_rows is None:
+        # Compatibility with the pre-release nested options shape.
+        source_rows = outdoor_raw.get("sources", [])
 
     sources: list[OutdoorSourceConfig] = []
     source_names: set[str] = set()
-    for index, item in enumerate(_as_list(outdoor_raw.get("sources", []), "outdoor.sources")):
-        source = _as_mapping(item, f"outdoor.sources[{index}]")
+    for index, item in enumerate(
+        _as_list(source_rows, "outdoor_sources")
+    ):
+        source = _as_mapping(item, f"outdoor_sources[{index}]")
         name = str(source.get("name") or f"source_{index + 1}").strip()
         if not name:
-            raise ConfigError(f"outdoor.sources[{index}].name must not be empty")
+            raise ConfigError(
+                f"outdoor_sources[{index}].name must not be empty"
+            )
         if name in source_names:
             raise ConfigError(f"outdoor source name duplicates {name}")
         source_names.add(name)
@@ -277,22 +387,30 @@ def parse_options(raw: Any) -> AppConfig:
                 name=name,
                 temperature=_entity(
                     source.get("temperature"),
-                    f"outdoor.sources[{index}].temperature",
+                    f"outdoor_sources[{index}].temperature",
                     ("sensor",),
                 ),
                 humidity=_entity(
                     source.get("humidity"),
-                    f"outdoor.sources[{index}].humidity",
+                    f"outdoor_sources[{index}].humidity",
                     ("sensor",),
                     required=False,
                 ),
             )
         )
-    outdoor = OutdoorConfig(heat_default, cool_default, tuple(sources))
+    outdoor = OutdoorConfig(
+        heat_default,
+        cool_default,
+        tuple(sources),
+    )
 
+    room_rows = _as_list(root.get("rooms", []), "rooms")
     rooms: list[RoomConfig] = []
     room_ids: set[str] = set()
-    for index, item in enumerate(_as_list(root.get("rooms", []), "rooms")):
+    inline_devices: list[tuple[str, DeviceConfig]] = []
+    inline_humidity: dict[str, HumidityConfig] = {}
+
+    for index, item in enumerate(room_rows):
         room_raw = _as_mapping(item, f"rooms[{index}]")
         room_id = str(room_raw.get("id", "")).strip().lower()
         if not ROOM_ID_RE.fullmatch(room_id):
@@ -302,58 +420,32 @@ def parse_options(raw: Any) -> AppConfig:
         if room_id in room_ids:
             raise ConfigError(f"rooms[{index}].id duplicates {room_id}")
         room_ids.add(room_id)
+
         name = str(room_raw.get("name", "")).strip()
         if not name:
             raise ConfigError(f"rooms[{index}].name is required")
 
-        temperature_sensors = tuple(
-            _entity(
-                entity_id,
-                f"rooms[{index}].temperature_sensors[{sensor_index}]",
-                ("sensor",),
-            )
-            for sensor_index, entity_id in enumerate(
-                _as_list(
-                    room_raw.get("temperature_sensors", []),
-                    f"rooms[{index}].temperature_sensors",
-                )
-            )
+        temperature_sensors = _entity_list(
+            room_raw.get("temperature_sensors"),
+            f"rooms[{index}].temperature_sensors",
+            ("sensor",),
         )
         if not temperature_sensors:
             raise ConfigError(
-                f"rooms[{index}].temperature_sensors must contain at least one sensor"
+                f"rooms[{index}].temperature_sensors must contain "
+                "at least one sensor"
             )
-        humidity_sensors = tuple(
-            _entity(
-                entity_id,
-                f"rooms[{index}].humidity_sensors[{sensor_index}]",
-                ("sensor",),
-            )
-            for sensor_index, entity_id in enumerate(
-                _as_list(
-                    room_raw.get("humidity_sensors", []),
-                    f"rooms[{index}].humidity_sensors",
-                )
-            )
-        )
 
-        targets_raw = _as_mapping(room_raw.get("targets"), f"rooms[{index}].targets")
-        heat_raw = _as_mapping(targets_raw.get("heat"), f"rooms[{index}].targets.heat")
-        cool_raw = _as_mapping(targets_raw.get("cool"), f"rooms[{index}].targets.cool")
-        targets = RoomTargets(
-            heat=_parse_profile_targets(
-                heat_raw, f"rooms[{index}].targets.heat", heat=True
-            ),
-            cool=_parse_profile_targets(
-                cool_raw, f"rooms[{index}].targets.cool", heat=False
-            ),
+        humidity_sensors = _entity_list(
+            room_raw.get("humidity_sensors"),
+            f"rooms[{index}].humidity_sensors",
+            ("sensor",),
         )
-
-        humidity = _parse_humidity(room_raw.get("humidity"), f"rooms[{index}].humidity")
-        if humidity.enabled and not humidity_sensors:
-            raise ConfigError(
-                f"rooms[{index}].humidity_sensors are required when humidity control is enabled"
-            )
+        window_sensors = _entity_list(
+            room_raw.get("window_sensors"),
+            f"rooms[{index}].window_sensors",
+            ("binary_sensor",),
+        )
 
         rooms.append(
             RoomConfig(
@@ -361,44 +453,148 @@ def parse_options(raw: Any) -> AppConfig:
                 name=name,
                 temperature_sensors=temperature_sensors,
                 humidity_sensors=humidity_sensors,
-                targets=targets,
-                devices=_parse_devices(
-                    room_raw.get("devices", []),
-                    f"rooms[{index}].devices",
+                window_sensors=window_sensors,
+                targets=_parse_room_targets(
+                    room_raw,
+                    f"rooms[{index}]",
                 ),
-                humidity=humidity,
+                devices=(),
+                humidity=_disabled_humidity(),
             )
         )
 
-    actuator_owners: dict[str, str] = {}
-    for room in rooms:
-        for device in room.devices:
-            owner = f"room:{room.room_id}:thermal"
-            previous = actuator_owners.get(device.entity_id)
-            if previous is not None:
-                raise ConfigError(
-                    f"actuator {device.entity_id} is configured twice: {previous}, {owner}"
+        # Compatibility with the pre-release nested shape.
+        for device_index, device in enumerate(
+            _as_list(room_raw.get("devices", []), f"rooms[{index}].devices")
+        ):
+            legacy = dict(_as_mapping(
+                device,
+                f"rooms[{index}].devices[{device_index}]",
+            ))
+            legacy["room_id"] = room_id
+            inline_devices.append(
+                _parse_device(
+                    legacy,
+                    f"rooms[{index}].devices[{device_index}]",
                 )
-            actuator_owners[device.entity_id] = owner
-        if room.humidity.actuator is not None:
-            entity_id = room.humidity.actuator.entity_id
+            )
+
+        humidity_raw = room_raw.get("humidity")
+        if isinstance(humidity_raw, Mapping) and bool(
+            humidity_raw.get("enabled", False)
+        ):
+            actuator = _as_mapping(
+                humidity_raw.get("actuator"),
+                f"rooms[{index}].humidity.actuator",
+            )
+            legacy_humidity = {
+                "room_id": room_id,
+                "type": humidity_raw.get("type"),
+                "target_default": humidity_raw.get("target_default"),
+                "actuator_entity_id": actuator.get("entity_id"),
+            }
+            _, parsed = _parse_humidity_control(
+                legacy_humidity,
+                f"rooms[{index}].humidity",
+            )
+            inline_humidity[room_id] = parsed
+
+    devices_by_room: dict[str, list[DeviceConfig]] = {
+        room_id: [] for room_id in room_ids
+    }
+    device_rows = root.get("devices")
+    parsed_devices: list[tuple[str, DeviceConfig]]
+    if device_rows is None:
+        parsed_devices = inline_devices
+    else:
+        parsed_devices = [
+            _parse_device(item, f"devices[{index}]")
+            for index, item in enumerate(
+                _as_list(device_rows, "devices")
+            )
+        ]
+
+    actuator_owners: dict[str, str] = {}
+    for room_id, device in parsed_devices:
+        if room_id not in room_ids:
+            raise ConfigError(
+                f"device {device.entity_id} references unknown room {room_id}"
+            )
+        owner = f"room:{room_id}:thermal"
+        previous = actuator_owners.get(device.entity_id)
+        if previous is not None:
+            raise ConfigError(
+                f"actuator {device.entity_id} is configured twice: "
+                f"{previous}, {owner}"
+            )
+        actuator_owners[device.entity_id] = owner
+        devices_by_room[room_id].append(device)
+
+    humidity_by_room: dict[str, HumidityConfig] = {
+        room_id: config
+        for room_id, config in inline_humidity.items()
+    }
+    humidity_rows = root.get("humidity_controls")
+    if humidity_rows is not None:
+        humidity_by_room = {}
+        for index, item in enumerate(
+            _as_list(humidity_rows, "humidity_controls")
+        ):
+            room_id, humidity = _parse_humidity_control(
+                item,
+                f"humidity_controls[{index}]",
+            )
+            if room_id not in room_ids:
+                raise ConfigError(
+                    f"humidity control references unknown room {room_id}"
+                )
+            if room_id in humidity_by_room:
+                raise ConfigError(
+                    f"humidity control is configured twice for room {room_id}"
+                )
+            humidity_by_room[room_id] = humidity
+
+    final_rooms: list[RoomConfig] = []
+    for room in rooms:
+        humidity = humidity_by_room.get(
+            room.room_id,
+            _disabled_humidity(),
+        )
+        if humidity.enabled and not room.humidity_sensors:
+            raise ConfigError(
+                f"room {room.room_id} requires humidity_sensors when "
+                "humidity control is configured"
+            )
+        if humidity.actuator is not None:
+            entity_id = humidity.actuator.entity_id
             owner = f"room:{room.room_id}:humidity"
             previous = actuator_owners.get(entity_id)
             if previous is not None:
                 raise ConfigError(
-                    f"actuator {entity_id} is configured twice: {previous}, {owner}"
+                    f"actuator {entity_id} is configured twice: "
+                    f"{previous}, {owner}"
                 )
             actuator_owners[entity_id] = owner
+
+        final_rooms.append(
+            replace(
+                room,
+                devices=tuple(devices_by_room[room.room_id]),
+                humidity=humidity,
+            )
+        )
 
     telemetry_enabled = bool(root.get("telemetry_enabled", False))
     log_level = str(root.get("log_level", "info")).strip().lower()
     if log_level not in {"debug", "info", "warning", "error"}:
-        raise ConfigError("log_level must be debug, info, warning or error")
+        raise ConfigError(
+            "log_level must be debug, info, warning or error"
+        )
 
     return AppConfig(
         global_config=global_config,
         outdoor=outdoor,
-        rooms=tuple(rooms),
+        rooms=tuple(final_rooms),
         telemetry_enabled=telemetry_enabled,
         log_level=log_level,
     )
@@ -421,6 +617,7 @@ def configured_entity_ids(config: AppConfig) -> frozenset[str]:
     for room in config.rooms:
         result.update(room.temperature_sensors)
         result.update(room.humidity_sensors)
+        result.update(room.window_sensors)
         for device in room.devices:
             result.add(device.entity_id)
         if room.humidity.actuator is not None:
