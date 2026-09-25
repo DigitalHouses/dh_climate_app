@@ -1,16 +1,89 @@
 configuration:
-  global:
-    name: Общие настройки
-    description: Общедомовые параметры климата и входы профилей Home Assistant.
-  outdoor:
-    name: Уличный климат
-    description: Приоритетные источники температуры и влажности и начальные пороги сезонов.
+  hysteresis:
+    name: Гистерезис температуры
+    description: Единый общедомовой гистерезис в °C для выбора сезона и комнатных термостатов.
+  humidity_hysteresis:
+    name: Гистерезис влажности
+    description: Общедомовой гистерезис относительной влажности в процентных пунктах.
+  night_mode:
+    name: Сущность ночного режима
+    description: Необязательный input_boolean.* или binary_sensor.*. Оставьте пустым, если ночной профиль не используется.
+  we_at_home:
+    name: Сущность присутствия дома
+    description: Необязательный input_boolean.* или binary_sensor.*. Недоступная настроенная сущность считается режимом away.
+  heat_threshold_default:
+    name: Порог отопительного сезона
+    description: Начальный нижний/красный порог сезонного термостата. Изменения из Home Assistant сохраняются.
+  cool_threshold_default:
+    name: Порог сезона охлаждения
+    description: Начальный верхний/синий порог сезонного термостата. Изменения из Home Assistant сохраняются.
+  outdoor_temperature_sources:
+    name: Источники уличной температуры
+    description: sensor.* через запятую в порядке приоритета. Используется первый доступный источник.
+  outdoor_humidity_sources:
+    name: Источники уличной влажности
+    description: sensor.* через запятую в независимом порядке приоритета.
   rooms:
     name: Комнаты
-    description: Датчики комнаты, уставки, исполнительные устройства и управление влажностью.
+    description: Комнатные термостаты, уставки и прямые привязки исполнительных устройств.
+    fields:
+      id:
+        name: ID комнаты
+        description: Стабильный ID строчными буквами для MQTT, например living_room.
+      name:
+        name: Название комнаты
+        description: Название MQTT-устройства комнаты в Home Assistant.
+      temperature_sensors:
+        name: Датчики температуры
+        description: sensor.* через запятую. Доступные значения усредняются.
+      humidity_sensors:
+        name: Датчики влажности
+        description: sensor.* через запятую. Доступные значения усредняются. Можно оставить пустым.
+      heat_day:
+        name: Отопление · День
+        description: Целевая температура воздуха в отопительный сезон для профиля day.
+      heat_night:
+        name: Отопление · Ночь
+        description: Целевая температура воздуха в отопительный сезон для профиля night.
+      heat_away:
+        name: Отопление · Away
+        description: Целевая температура воздуха в отопительный сезон для профиля away.
+      heat_antifreeze:
+        name: Отопление · Антизамерзание
+        description: Защитная уставка при выключенном климате комнаты в отопительный сезон.
+      cool_day:
+        name: Охлаждение · День
+        description: Целевая температура воздуха в сезон охлаждения для профиля day.
+      cool_night:
+        name: Охлаждение · Ночь
+        description: Целевая температура воздуха в сезон охлаждения для профиля night.
+      cool_away:
+        name: Охлаждение · Away
+        description: Целевая температура воздуха в сезон охлаждения для профиля away.
+      fast_heat:
+        name: FAST отопление
+        description: switch.* или climate.* через запятую, которые следуют запросу комнаты на отопление.
+      fast_cool:
+        name: FAST охлаждение
+        description: switch.* или climate.* через запятую, которые следуют запросу комнаты на охлаждение.
+      slow_heat:
+        name: SLOW термостаты
+        description: climate.* через запятую с собственным локальным датчиком пола/стяжки.
+      slow_target:
+        name: Уставка SLOW
+        description: Целевая температура пола/комфорта для SLOW термостатов в отопительный сезон.
+      humidity_mode:
+        name: Управление влажностью
+        description: off, humidifier или dehumidifier.
+      humidity_target:
+        name: Целевая влажность
+        description: Целевая относительная влажность комнаты.
+      humidity_actuator:
+        name: Исполнитель влажности
+        description: switch.* или humidifier.*. Оставьте пустым при humidity_mode=off.
   telemetry_enabled:
     name: Телеметрия использования
-    description: Отправлять минимальную псевдонимную телеметрию DigitalHouses.
+    description: Отправлять минимальную псевдонимную телеметрию DigitalHouses. По умолчанию выключено.
   log_level:
     name: Уровень логов
     description: Подробность журналирования приложения.
