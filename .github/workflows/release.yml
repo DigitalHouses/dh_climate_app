@@ -4,10 +4,9 @@ on:
   push:
     tags:
       - "digitalhouses_climate_app-v*"
-  workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
@@ -15,24 +14,39 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Resolve release version
+      - name: Resolve and validate release
         id: version
         shell: bash
         run: |
           set -Eeuo pipefail
-          CONFIG_VERSION="$(awk '/^version:/ {print $2; exit}' dh_climate_app/config.yaml | tr -d '"')"
+
+          CONFIG="dh_climate_app/config.yaml"
+          CHANGELOG="dh_climate_app/CHANGELOG.md"
+          CONFIG_VERSION="$(awk '/^version:/ {print $2; exit}' "${CONFIG}" | tr -d '"')"
+
           if [[ -z "${CONFIG_VERSION}" ]]; then
             echo "config.yaml version is missing" >&2
             exit 1
           fi
 
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            EXPECTED_TAG="digitalhouses_climate_app-v${CONFIG_VERSION}"
-            if [[ "${GITHUB_REF_NAME}" != "${EXPECTED_TAG}" ]]; then
-              echo "Tag ${GITHUB_REF_NAME} does not match ${EXPECTED_TAG}" >&2
-              exit 1
-            fi
+          EXPECTED_TAG="digitalhouses_climate_app-v${CONFIG_VERSION}"
+          if [[ "${GITHUB_REF_NAME}" != "${EXPECTED_TAG}" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match ${EXPECTED_TAG}" >&2
+            exit 1
+          fi
+
+          if ! grep -Eq "^##[[:space:]]+${CONFIG_VERSION}([[:space:]]|$)" "${CHANGELOG}"; then
+            echo "CHANGELOG has no section for ${CONFIG_VERSION}" >&2
+            exit 1
+          fi
+
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "${GITHUB_SHA}" "origin/main"; then
+            echo "Release tag must point to a commit on main" >&2
+            exit 1
           fi
 
           echo "version=${CONFIG_VERSION}" >> "${GITHUB_OUTPUT}"
@@ -48,6 +62,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and publish immutable image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: ./dh_climate_app
@@ -61,3 +76,38 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
+
+      - name: Build release notes
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -Eeuo pipefail
+          awk -v version="${VERSION}" '
+            $0 ~ "^## " version "([[:space:]]|$)" {inside=1; next}
+            inside && /^## / {exit}
+            inside {print}
+          ' dh_climate_app/CHANGELOG.md > release-notes.md
+
+          {
+            echo
+            echo "### Artifact provenance"
+            echo
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Image: \`ghcr.io/digitalhouses/digitalhouses-climate-app:${VERSION}\`"
+            echo "- Digest: \`${IMAGE_DIGEST}\`"
+            echo "- CI: \`${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\`"
+          } >> release-notes.md
+
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -Eeuo pipefail
+          gh release create "${GITHUB_REF_NAME}" \
+            --verify-tag \
+            --title "DigitalHouses Climate App v${VERSION}" \
+            --notes-file release-notes.md
