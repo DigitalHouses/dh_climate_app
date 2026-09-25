@@ -202,6 +202,7 @@ class ClimateRuntime:
                     config=self.config,
                     room_states=room_states,
                     humidity_states=humidity_states,
+                    outdoor_temperature=outdoor_state.current_temperature,
                 )
                 self._last_reconcile = await self.executor.reconcile(
                     desired,
