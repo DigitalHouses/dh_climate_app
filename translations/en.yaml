@@ -19,6 +19,9 @@ configuration:
     description: Initial upper/blue threshold for the season thermostat. Later changes from Home Assistant are persisted.
   ac_min_outdoor_temperature:
     name: Minimum outdoor temperature for AC heating
+    description: Reversible FAST climate devices are prevented from heating below this outdoor temperature.
+  ac_min_outdoor_temperature:
+    name: Minimum outdoor temperature for AC heating
     description: Legacy house-wide protection for reversible climate devices used for both heating and cooling.
   outdoor_temperature_sources:
     name: Outdoor temperature sources
@@ -42,6 +45,12 @@ configuration:
       humidity_sensors:
         name: Humidity sensors
         description: Comma-separated sensor.* entities. Available values are averaged. May be empty.
+      window_sensors:
+        name: Window sensors
+        description: Comma-separated binary_sensor.* contacts. Any open contact makes the room window state open.
+      window_off_devices:
+        name: Devices stopped by open window
+        description: Comma-separated thermal devices from this room that must be forced off while a configured window is open.
       window_sensors:
         name: Window sensors
         description: Comma-separated binary_sensor.* contacts. Any open contact makes the room window state open.
