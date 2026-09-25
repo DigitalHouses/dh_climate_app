@@ -87,7 +87,10 @@ Temperature is required for live season control. If every live outdoor temperatu
 Each room may define one or more:
 
 - temperature sensors;
-- humidity sensors.
+- humidity sensors;
+- optional window contact sensors.
+
+Window contacts are aggregated with legacy semantics: any open contact wins; otherwise any unavailable/unknown contact yields `unknown`; otherwise the room window state is `closed`. Window state is device context and does not change room `hvac_action`.
 
 For room temperature/humidity the legacy room behavior is retained: use the mean of the latest valid readings from all configured available sensors of that kind.
 
@@ -286,6 +289,36 @@ The SLOW target is deliberately separate from room air target. A floor probe mea
 
 A SLOW plain `switch` is rejected in v0.1. SLOW control requires a local HA `climate` thermostat so the physical floor/slab probe remains the final local safety and cycling loop.
 
+### 8.3 Window and cold-weather safety
+
+The old Firewall/Matrix restrictions are represented directly as deterministic device policy rather than separate subsystems.
+
+Window behavior:
+
+```text
+room thermostat action stays unchanged
++
+room window is open
++
+device is listed in window_off_devices
+→ desired state for that device = off
+```
+
+This preserves the legacy rule that a window is context for device applicability, not an input to thermostat demand.
+
+Cold-weather reversible-climate protection:
+
+```text
+FAST climate entity appears in both fast_heat and fast_cool
++
+room requests heating
++
+current outdoor temperature < ac_min_outdoor_temperature
+→ that reversible climate device = off
+```
+
+The default threshold is `-10 °C`, matching the legacy PostgreSQL setting. Other heat sources remain independently eligible.
+
 ## 9. Device capability binding
 
 Every configured actuator declares what it can do.
@@ -297,6 +330,8 @@ fast_heat = comma-separated switch/climate entities
 fast_cool = comma-separated switch/climate entities
 slow_heat = comma-separated climate entities
 slow_target = one floor/comfort target for SLOW thermostats in the room
+window_sensors = comma-separated binary_sensor entities
+window_off_devices = thermal actuators to inhibit while a window is open
 ```
 
 If the same `climate` entity is listed in both FAST lists, the internal model compiles it as `heat_cool`. A `switch` may appear in only one thermal list. An entity may have only one owner across the complete configuration.
@@ -417,6 +452,8 @@ From `DigitalHouses/dh_climate_1`:
 - profile editing through thermostat facade;
 - temperature/humidity normalization;
 - fallback/unavailable semantics;
+- room window aggregation and per-device open-window inhibition;
+- low-outdoor-temperature protection for reversible climate heating;
 - MQTT Discovery facade concepts.
 
 ## 15. Legacy architecture intentionally removed
