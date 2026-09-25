@@ -22,6 +22,7 @@ options:
   we_at_home: ""
   heat_threshold_default: 12.0
   cool_threshold_default: 20.0
+  ac_min_outdoor_temperature: -10.0
   outdoor_temperature_sources: ""
   outdoor_humidity_sources: ""
   rooms: []
@@ -34,6 +35,7 @@ schema:
   we_at_home: str
   heat_threshold_default: float(-50,50)
   cool_threshold_default: float(-50,50)
+  ac_min_outdoor_temperature: float(-50,20)
   outdoor_temperature_sources: str
   outdoor_humidity_sources: str
   rooms:
@@ -41,6 +43,8 @@ schema:
       name: str
       temperature_sensors: str
       humidity_sensors: str
+      window_sensors: str
+      window_off_devices: str
       heat_day: float
       heat_night: float
       heat_away: float
