@@ -56,16 +56,15 @@ class OutdoorEngine:
     ) -> OutdoorState:
         temperature = select_prioritized_value(
             [
-                PrioritizedSource(source.name, source.temperature)
-                for source in self.config.sources
+                PrioritizedSource(entity_id, entity_id)
+                for entity_id in self.config.temperature_sources
             ],
             states,
         )
         humidity = select_prioritized_value(
             [
-                PrioritizedSource(source.name, source.humidity)
-                for source in self.config.sources
-                if source.humidity
+                PrioritizedSource(entity_id, entity_id)
+                for entity_id in self.config.humidity_sources
             ],
             states,
         )
