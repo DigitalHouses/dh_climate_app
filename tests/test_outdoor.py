@@ -65,6 +65,26 @@ class OutdoorEngineTests(unittest.TestCase):
         self.assertAlmostEqual(16.0, state.avg_24h_temperature)
         self.assertEqual(Season.OFF, state.season)
 
+    def test_all_live_sources_unavailable_forces_off(self) -> None:
+        now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
+        self.store.add_outdoor_sample(
+            kind="temperature",
+            observed_at=now - timedelta(hours=1),
+            value=5.0,
+            source_name="primary",
+        )
+        state = self.engine.evaluate(
+            {
+                "sensor.outdoor_temperature": "unavailable",
+                "sensor.outdoor_humidity": "unavailable",
+            },
+            observed_at=now,
+            record_sample=False,
+        )
+        self.assertEqual(Season.OFF, state.season)
+        self.assertFalse(state.available)
+        self.assertIsNotNone(state.avg_24h_temperature)
+
     def test_threshold_change_is_persistent(self) -> None:
         self.engine.set_thresholds(heat=8.0, cool=22.0)
         thresholds = self.store.get_season_thresholds()
