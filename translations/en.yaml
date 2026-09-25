@@ -1,16 +1,89 @@
 configuration:
-  global:
-    name: Global settings
-    description: House-wide climate parameters and Home Assistant profile inputs.
-  outdoor:
-    name: Outdoor climate
-    description: Ordered outdoor temperature and humidity sources plus default season thresholds.
+  hysteresis:
+    name: Temperature hysteresis
+    description: One house-wide hysteresis in °C used by season selection and room thermostats.
+  humidity_hysteresis:
+    name: Humidity hysteresis
+    description: House-wide relative-humidity hysteresis in percentage points.
+  night_mode:
+    name: Night mode entity
+    description: Optional input_boolean.* or binary_sensor.*. Leave empty when night profile switching is not used.
+  we_at_home:
+    name: Home presence entity
+    description: Optional input_boolean.* or binary_sensor.*. An unavailable configured entity resolves to away.
+  heat_threshold_default:
+    name: Heating season threshold
+    description: Initial lower/red threshold for the season thermostat. Later changes from Home Assistant are persisted.
+  cool_threshold_default:
+    name: Cooling season threshold
+    description: Initial upper/blue threshold for the season thermostat. Later changes from Home Assistant are persisted.
+  outdoor_temperature_sources:
+    name: Outdoor temperature sources
+    description: Comma-separated sensor.* entities in priority order. The first valid source is used.
+  outdoor_humidity_sources:
+    name: Outdoor humidity sources
+    description: Comma-separated sensor.* entities in independent priority order.
   rooms:
     name: Rooms
-    description: Room sensors, targets, actuator bindings and optional humidity control.
+    description: Room thermostats, targets and direct actuator bindings.
+    fields:
+      id:
+        name: Room ID
+        description: Stable lowercase ID used for MQTT identity, for example living_room.
+      name:
+        name: Room name
+        description: Home Assistant device name shown to the user.
+      temperature_sensors:
+        name: Temperature sensors
+        description: Comma-separated sensor.* entities. Available values are averaged.
+      humidity_sensors:
+        name: Humidity sensors
+        description: Comma-separated sensor.* entities. Available values are averaged. May be empty.
+      heat_day:
+        name: Heat · Day
+        description: Room air target in heating season for the day profile.
+      heat_night:
+        name: Heat · Night
+        description: Room air target in heating season for the night profile.
+      heat_away:
+        name: Heat · Away
+        description: Room air target in heating season for the away profile.
+      heat_antifreeze:
+        name: Heat · Antifreeze
+        description: Protection target used when room climate control is off during heating season.
+      cool_day:
+        name: Cool · Day
+        description: Room air target in cooling season for the day profile.
+      cool_night:
+        name: Cool · Night
+        description: Room air target in cooling season for the night profile.
+      cool_away:
+        name: Cool · Away
+        description: Room air target in cooling season for the away profile.
+      fast_heat:
+        name: FAST heating devices
+        description: Comma-separated switch.* or climate.* entities that follow room heating demand.
+      fast_cool:
+        name: FAST cooling devices
+        description: Comma-separated switch.* or climate.* entities that follow room cooling demand.
+      slow_heat:
+        name: SLOW heating thermostats
+        description: Comma-separated climate.* entities with their own local floor/slab probe.
+      slow_target:
+        name: SLOW target
+        description: Floor/comfort temperature target sent to SLOW thermostats during heating season.
+      humidity_mode:
+        name: Humidity control
+        description: off, humidifier or dehumidifier.
+      humidity_target:
+        name: Humidity target
+        description: Relative-humidity target for the room.
+      humidity_actuator:
+        name: Humidity actuator
+        description: switch.* or humidifier.* entity. Leave empty when humidity control is off.
   telemetry_enabled:
     name: Usage telemetry
-    description: Send minimal pseudonymous DigitalHouses product telemetry.
+    description: Send minimal pseudonymous DigitalHouses product telemetry. Disabled by default.
   log_level:
     name: Log level
-    description: Runtime logging verbosity.
+    description: Application logging verbosity.
