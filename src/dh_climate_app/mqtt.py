@@ -11,6 +11,8 @@ import paho.mqtt.client as mqtt
 from .config import RoomConfig
 from .discovery import (
     SYSTEM_AVAILABILITY_TOPIC,
+    SYSTEM_PROBLEM_ATTRIBUTES_TOPIC,
+    SYSTEM_PROBLEM_TOPIC,
     diagnostic_discovery_payloads,
     room_climate_discovery_payload,
     room_climate_discovery_topic,
@@ -18,6 +20,7 @@ from .discovery import (
     room_humidity_discovery_payload,
     room_humidity_discovery_topic,
     room_humidity_state_topics,
+    problem_state_payload,
     season_discovery_payload,
     season_discovery_topic,
     season_state_topics,
@@ -278,6 +281,15 @@ class ClimateMqttFacade:
         for topic, payload in room_humidity_state_topics(state).items():
             count += int(self.bridge.publish(topic, payload, retain=True))
         return count
+
+    def publish_problems(self, problems: tuple[object, ...]) -> None:
+        state, attrs = problem_state_payload(problems)
+        self.bridge.publish(SYSTEM_PROBLEM_TOPIC, state, retain=True)
+        self.bridge.publish(
+            SYSTEM_PROBLEM_ATTRIBUTES_TOPIC,
+            attrs,
+            retain=True,
+        )
 
     def set_available(self, available: bool) -> None:
         self.bridge.publish(
