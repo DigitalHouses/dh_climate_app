@@ -41,6 +41,7 @@ class ProblemTests(unittest.TestCase):
                 control_action=HvacAction.OFF,
                 hvac_mode="off",
                 hvac_action=HvacAction.OFF,
+                window_state="unknown",
             )
         }
         humidity = {
@@ -69,10 +70,11 @@ class ProblemTests(unittest.TestCase):
         self.assertIn("outdoor_temperature_unavailable", codes)
         self.assertIn("room_temperature_unavailable", codes)
         self.assertIn("device_unavailable", codes)
+        self.assertIn("room_window_state_unknown", codes)
 
         state, attrs = problem_state_payload(problems)
         self.assertEqual("ON", state)
-        self.assertIn('"count":3', attrs)
+        self.assertIn('"count":4', attrs)
 
     def test_no_problems_is_off(self) -> None:
         state, attrs = problem_state_payload(())
