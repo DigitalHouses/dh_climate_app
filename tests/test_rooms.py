@@ -7,7 +7,11 @@ from pathlib import Path
 from dh_climate_app.config import parse_options
 from dh_climate_app.core import HvacAction, Profile, Season
 from dh_climate_app.persistence import StateStore
-from dh_climate_app.rooms import ProfileEditOverlay, RoomEngine
+from dh_climate_app.rooms import (
+    ProfileEditOverlay,
+    RoomEngine,
+    aggregate_window_state,
+)
 from test_config import options
 
 
@@ -21,6 +25,47 @@ class RoomEngineTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
+
+
+    def test_window_aggregation_matches_legacy_contract(self) -> None:
+        self.assertEqual(
+            "not_configured",
+            aggregate_window_state((), {}),
+        )
+        sensors = (
+            "binary_sensor.window_a",
+            "binary_sensor.window_b",
+        )
+        self.assertEqual(
+            "closed",
+            aggregate_window_state(
+                sensors,
+                {
+                    "binary_sensor.window_a": "off",
+                    "binary_sensor.window_b": "closed",
+                },
+            ),
+        )
+        self.assertEqual(
+            "unknown",
+            aggregate_window_state(
+                sensors,
+                {
+                    "binary_sensor.window_a": "off",
+                    "binary_sensor.window_b": "unavailable",
+                },
+            ),
+        )
+        self.assertEqual(
+            "open",
+            aggregate_window_state(
+                sensors,
+                {
+                    "binary_sensor.window_a": "unavailable",
+                    "binary_sensor.window_b": "on",
+                },
+            ),
+        )
 
     def test_heat_room_demands_heat(self) -> None:
         states = {
