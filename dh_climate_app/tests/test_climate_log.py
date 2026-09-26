@@ -48,6 +48,24 @@ class ClimateLogTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(1, len(ha.calls))
 
+    async def test_mirror_preserves_write_order(self) -> None:
+        ha = FakeHa()
+        climate_log = ClimateLog(ha)
+
+        climate_log.write2climate_log("FAST · livingroom", "desired=on")
+        climate_log.write2climate_log("FAST · livingroom", "CALL switch.turn_on")
+        climate_log.write2climate_log("FAST · livingroom", "CONFIRMED")
+        await climate_log.flush()
+
+        self.assertEqual(
+            [
+                "desired=on",
+                "CALL switch.turn_on",
+                "CONFIRMED",
+            ],
+            [call[2]["message"] for call in ha.calls],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
