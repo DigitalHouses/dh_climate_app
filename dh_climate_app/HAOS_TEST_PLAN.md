@@ -66,8 +66,11 @@ Acceptance:
 - no redundant temperature/humidity sensor entities are created merely to duplicate thermostat values;
 - multiple configured room temperature sensors are averaged;
 - unavailable room temperature makes the room climate facade unavailable;
-- room climate capabilities remain stable as `off/heat/cool` across all
-  seasons so MQTT Discovery does not rebuild the entity on season transitions;
+- room climate capabilities follow the global season exactly:
+  HEAT -> `off/heat`, COOL -> `off/cool`, OFF -> `off`;
+- changing season updates MQTT Discovery without losing the native
+  `day/night/away` preset; the new season-scoped retained preset topic is
+  consumed when Home Assistant resubscribes after the Discovery update;
 - an enabled room publishes state `heat` in HEAT season and state `cool`
   in COOL season; interseason publishes state `off`;
 - HVAC action independently exposes the current room action:
