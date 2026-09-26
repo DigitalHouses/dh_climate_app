@@ -7,6 +7,7 @@ from dh_climate_app.config import parse_options
 from dh_climate_app.core import HvacAction, Profile, Season
 from dh_climate_app.discovery import (
     diagnostic_discovery_payloads,
+    weather_discovery_payloads,
     room_climate_discovery_payload,
     ROOM_TARGET_KEYS,
     room_humidity_discovery_payload,
@@ -38,6 +39,12 @@ class DiscoveryTests(unittest.TestCase):
         self.assertIn("started_at", diagnostics)
         self.assertIn("problem", diagnostics)
         self.assertIn("delete_telemetry", diagnostics)
+        self.assertIn("event", diagnostics)
+        event = diagnostics["event"][1]
+        self.assertEqual("event", event["default_entity_id"].split(".")[0])
+        self.assertEqual(1, event["qos"])
+        self.assertIn("precipitation_type_changed", event["event_types"])
+        self.assertIn("problem_recovered", event["event_types"])
         delete = diagnostics["delete_telemetry"][1]
         self.assertEqual(
             "DigitalHouses/Global/dh_climate_app/system/set/delete_telemetry",
@@ -141,6 +148,21 @@ class DiscoveryTests(unittest.TestCase):
             "number.dh_climate_app_living_room_heat_night",
             target["default_entity_id"],
         )
+
+    def test_weather_precipitation_discovery(self) -> None:
+        weather = weather_discovery_payloads("0.1.8")
+        precipitation_type = weather["precipitation_type"][1]
+        precipitation_amount = weather["precipitation_amount"][1]
+        self.assertEqual(
+            "sensor.dh_climate_app_precipitation_type",
+            precipitation_type["default_entity_id"],
+        )
+        self.assertEqual(
+            "sensor.dh_climate_app_precipitation_amount",
+            precipitation_amount["default_entity_id"],
+        )
+        self.assertEqual("precipitation", precipitation_amount["device_class"])
+        self.assertEqual("mm", precipitation_amount["unit_of_measurement"])
 
     def test_dehumidifier_facade(self) -> None:
         config = parse_options(options())
