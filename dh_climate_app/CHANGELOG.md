@@ -1,11 +1,12 @@
 # Changelog
 
-## 0.1.20 — development
+## 0.1.20 — 2026-09-27
 
 - Added outdoor-temperature source observability: every public one-decimal temperature change is logged with the currently active source.
 - Added explicit source-switch logging and the machine Event `outdoor_temperature_source_changed` with previous/current source and temperature values.
 - Confirmed and documented the existing ordered fallback contract: `outdoor_temperature_sources` accepts mixed comma-separated `sensor.*` and `weather.*` entities; the first currently valid source wins and the preferred source is restored automatically when it recovers.
 - Extended HAOS acceptance with deterministic primary/backup outdoor sources, failover, preferred-source recovery, log assertions, and source-change Event assertions.
+- Passed bundled live HAOS acceptance on 2026-09-27, including primary→backup failover, preferred-source recovery, temperature-change logging, source-switch logging/Event payloads, the existing room-climate/safety suite, App-only backup/restore, and final clean baseline.
 
 ## 0.1.19 — 2026-09-27
 
