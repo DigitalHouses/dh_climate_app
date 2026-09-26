@@ -319,6 +319,169 @@ current outdoor temperature < ac_min_outdoor_temperature
 
 The default threshold is `-10 °C`, matching the legacy PostgreSQL setting. Other heat sources remain independently eligible.
 
+### 8.4 Target logical device model (planned)
+
+The current v0.1 configuration keeps the implemented FAST/SLOW lists. The
+following model is the target for the next device-policy refactor; it is
+documented now so ventilation, humidity and more complex equipment can be
+added without changing the basic control architecture.
+
+A logical controllable device is described by independent properties:
+
+```text
+DEVICE
+├─ roles
+├─ inertia
+├─ control_source
+├─ control_profile
+├─ scope
+└─ equipment_id (optional)
+```
+
+These properties answer different questions and must not be collapsed into one
+device type.
+
+**roles** describe what the logical device can do for climate control, not how
+Home Assistant exposes it. Initial role vocabulary:
+
+```text
+heat
+cool
+ventilation_supply
+ventilation_exhaust
+humidify
+dehumidify
+```
+
+One logical device may expose more than one role. A reversible climate unit is
+therefore one device with `roles: [heat, cool]`, not two competing logical
+owners of the same HA entity.
+
+**inertia** describes the response character of the device:
+
+```text
+fast
+medium
+slow
+```
+
+It is intentionally independent from the role and from the source of control.
+For example, a slow heating device and a fast heating device may both have the
+`heat` role but require different control behavior.
+
+**control_source** identifies the controller/demand source that governs the
+device. It is not the raw sensor itself. Planned sources include:
+
+```text
+season
+room_thermostat
+co2
+humidity
+```
+
+Examples:
+
+- underfloor heating can follow `season` and stay enabled through HEAT while
+  its own local thermostat performs physical cycling;
+- an air conditioner can follow `room_thermostat` and react to room
+  heating/cooling/idle demand;
+- supply/exhaust ventilation can follow a CO₂ controller;
+- humidifiers and dehumidifiers can follow the humidity controller.
+
+The controller converts sensor facts into normalized demand. Devices should not
+independently reinterpret raw CO₂, humidity or room-temperature measurements.
+
+**control_profile** describes only how the App communicates the requested
+state to the HA entity: the ordered command sets, dependencies between commands
+and verification requirements. It does not describe the device's thermal role,
+inertia or control source.
+
+The first generic profile name is:
+
+```text
+control_standart
+```
+
+A profile can be reused by unrelated devices when their HA command sequence is
+the same. For example, a cooling air conditioner and a heating heat pump may
+both use `control_standart`.
+
+A Control Profile may compile one desired state into an ordered Command Plan,
+for example:
+
+```text
+activate:
+  1. set_hvac_mode
+  2. set_temperature
+  3. set_fan_mode (when required)
+
+deactivate:
+  1. set_hvac_mode(off)
+```
+
+A different profile may require:
+
+```text
+activate:
+  1. power_on
+  2. wait/verify power
+  3. set_hvac_mode
+  4. set_temperature
+  5. set_fan_mode
+```
+
+The general Executor must execute the plan; the command order must not be
+hard-coded globally.
+
+**scope** describes where the logical device acts:
+
+```text
+room
+house
+```
+
+This allows both room-level and house-level ventilation without inventing
+different execution mechanisms.
+
+**equipment_id** optionally groups multiple logical HA control endpoints that
+belong to one physical installation. The design principle is:
+
+```text
+one HA entity = one logical controllable device
+multiple logical devices may belong to one physical equipment
+```
+
+Example supply-air installation:
+
+```text
+equipment_id: supply_ahu
+
+fan.supply
+  roles: [ventilation_supply]
+  scope: house
+
+climate.supply_reheat
+  roles: [heat]
+  scope: house
+```
+
+A room supply damper can remain a separate logical device:
+
+```text
+valve.livingroom_supply
+  roles: [ventilation_supply]
+  scope: room
+  room_id: livingroom
+```
+
+A future CO₂ controller can therefore coordinate house supply/exhaust devices
+and room dampers while every physical endpoint keeps its own command execution,
+verification and Problem state.
+
+This section defines the model only. It does not add ventilation, CO₂ control,
+room dampers or new nested Supervisor configuration to the current v0.1
+implementation.
+
 ## 9. Device capability binding
 
 Every configured actuator declares what it can do.
@@ -409,6 +572,52 @@ current HA state
 ```
 
 This preserves reliability without recreating the PostgreSQL command lifecycle.
+
+### 12.1 Target command-plan and verification model (planned)
+
+Control Profiles are expected to compile a desired device state into an ordered
+Command Plan containing one or more steps.
+
+The useful legacy idea is retained at the behavior level: one desired state may
+require several ordered HA service calls. The old PostgreSQL/UC implementation
+is not retained.
+
+A plan may choose whether an individual step requires verification before the
+next step. Simple devices can send several idempotent service calls and verify
+only the final desired state; devices with ordering/timing constraints can
+require a settled state before advancing.
+
+Target lifecycle:
+
+```text
+DESIRED_CHANGED
+→ PLAN_CREATED
+→ STEP_SENT
+→ state_changed / settle delay / step verification when required
+→ NEXT_STEP
+→ FINAL_VERIFY
+→ PLAN_VERIFIED_HA
+```
+
+A command is never considered physically confirmed merely because the HA
+service call succeeded. A successful service result means only that Home
+Assistant accepted the call.
+
+Verification is event-oriented:
+
+- a relevant HA `state_changed` event can schedule a delayed state check;
+- the settle delay avoids treating an immediate optimistic echo as final
+  evidence;
+- a watchdog deadline handles the case where no state event arrives;
+- after a plan is verified, a later state transition away from the still-current
+  desired state becomes a drift candidate and is checked after a settle delay;
+- if desired state changes while a plan is running, the old plan is superseded
+  and its pending checks become obsolete.
+
+`PLAN_VERIFIED_HA` intentionally means that Home Assistant still reports the
+desired state after the verification delay. It is not proof of physical
+operation. Independent physical evidence may be added by a future profile when
+available.
 
 ## 13. MQTT topology
 
