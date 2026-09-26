@@ -36,6 +36,21 @@ Acceptance:
 - avg24 above upper threshold plus hysteresis -> COOL;
 - between thresholds -> OFF.
 
+## 2.1 Weather precipitation and events
+
+When a `weather.*` source is configured:
+
+- current condition classifies rain/snow/mixed/hail/none correctly;
+- hourly forecast precipitation is exposed in millimetres;
+- rain → snow (and snow → rain) emits `precipitation_type_changed`;
+- dry → precipitation emits `precipitation_started`;
+- precipitation → dry emits `precipitation_stopped`;
+- the MQTT Event payload is QoS 1 and non-retained;
+- initial startup/reconnect establishes a baseline and does not replay a false
+  transition;
+- season, window and Problem transitions use the same
+  `event.dh_climate_app_event` contract.
+
 ## 3. Room MQTT device
 
 Create one test room.
@@ -48,9 +63,13 @@ Acceptance:
 - no redundant temperature/humidity sensor entities are created merely to duplicate thermostat values;
 - multiple configured room temperature sensors are averaged;
 - unavailable room temperature makes the room climate facade unavailable;
-- HEAT season exposes only `off/heat`;
-- COOL season exposes only `off/cool`;
-- OFF season exposes only `off`.
+- room climate advertises stable `off/auto` capabilities;
+- HEAT/COOL + enabled room publishes `auto`;
+- OFF season keeps the climate entity available when room temperature is valid,
+  publishes HVAC mode `off`, exposes current temperature, and no seasonal
+  target;
+- target/HVAC commands sent to the room thermostat during OFF season do not
+  modify persisted room control state.
 
 ## 4. Room profiles and hysteresis
 
