@@ -1595,7 +1595,6 @@ echo "Acceptance log: $LOG"
   actual="$(attr_value "$entity" "$attr" 2>/dev/null || true)"
   fail "$entity.$attr is not numeric: $actual"
 }
-
 wait_number() {
   local entity="$1"
   local expected="$2"
