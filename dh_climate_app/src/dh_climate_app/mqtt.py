@@ -20,6 +20,8 @@ from .discovery import (
     room_climate_state_topics,
     room_humidity_discovery_payload,
     room_humidity_discovery_topic,
+    room_profile_discovery_payload,
+    room_profile_discovery_topic,
     room_humidity_state_topics,
     problem_state_payload,
     season_discovery_payload,
@@ -267,6 +269,21 @@ class ClimateMqttFacade:
                     room_climate_discovery_payload(
                         room,
                         state,
+                        self.app_version,
+                    ),
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+                retain=True,
+            )
+        )
+        count += int(
+            self.bridge.publish(
+                room_profile_discovery_topic(room.room_id),
+                json.dumps(
+                    room_profile_discovery_payload(
+                        room,
                         self.app_version,
                     ),
                     ensure_ascii=False,
