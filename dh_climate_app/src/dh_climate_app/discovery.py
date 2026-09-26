@@ -297,9 +297,12 @@ def room_climate_discovery_payload(
     app_version: str,
 ) -> dict[str, Any]:
     base = room_base(room.room_id)
-    # Stable HomeKit capability contract. The room is either disabled or in
-    # DigitalHouses automatic control; HEAT/COOL/OFF is an internal season.
-    modes = ["off", "auto"]
+    if state.season.value == "heat":
+        modes = ["off", "heat"]
+    elif state.season.value == "cool":
+        modes = ["off", "cool"]
+    else:
+        modes = ["off"]
 
     return {
         "name": "Thermostat",
@@ -317,6 +320,9 @@ def room_climate_discovery_payload(
         "mode_state_topic": f"{base}/climate/hvac_mode",
         "mode_command_topic": f"{base}/climate/set/hvac_mode",
         "action_topic": f"{base}/climate/hvac_action",
+        "preset_mode_state_topic": f"{base}/climate/profile",
+        "preset_mode_command_topic": f"{base}/climate/set/profile",
+        "preset_modes": ["day", "night", "away"],
         "json_attributes_topic": f"{base}/climate/attributes",
         "modes": modes,
         "min_temp": 5.0,
@@ -439,11 +445,17 @@ def season_state_topics(state: OutdoorState) -> dict[str, str]:
     }
 
 
-def room_climate_state_topics(state: RoomState) -> dict[str, str]:
+def room_climate_state_topics(
+    state: RoomState,
+    *,
+    published_profile: str,
+    published_target: float | None,
+) -> dict[str, str]:
     base = room_base(state.room_id)
     attrs = {
         "season": state.season.value,
         "effective_profile": state.effective_profile.value,
+        "published_profile": published_profile,
         "climate_control_enabled": state.climate_control_enabled,
         "control_action": state.control_action.value,
         "window_state": state.window_state,
@@ -452,9 +464,10 @@ def room_climate_state_topics(state: RoomState) -> dict[str, str]:
         f"{base}/climate/availability": "online" if state.available else "offline",
         f"{base}/climate/current_temperature": _number(state.current_temperature),
         f"{base}/climate/current_humidity": _number(state.current_humidity),
-        f"{base}/climate/target_temperature": _number(state.target_temperature),
+        f"{base}/climate/target_temperature": _number(published_target),
         f"{base}/climate/hvac_mode": state.hvac_mode,
         f"{base}/climate/hvac_action": state.hvac_action.value,
+        f"{base}/climate/profile": published_profile,
         f"{base}/climate/attributes": json.dumps(
             attrs,
             ensure_ascii=False,
