@@ -344,8 +344,12 @@ class ClimateRuntime:
             )
 
         if command == "profile":
+            requested_profile = payload.strip().lower()
+            if requested_profile == "none":
+                self.profile_overlay.clear(room_id)
+                return
             try:
-                profile = Profile(payload.strip().lower())
+                profile = Profile(requested_profile)
             except ValueError as exc:
                 raise ValueError(f"unsupported room profile={payload}") from exc
             if profile is Profile.ANTIFREEZE and state.season is not Season.HEAT:
