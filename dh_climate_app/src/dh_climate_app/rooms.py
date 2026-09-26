@@ -37,7 +37,7 @@ class RoomState:
         if self.current_temperature is None:
             return False
         if self.season is Season.OFF:
-            return False
+            return True
         return self.target_temperature is not None
 
 
@@ -196,15 +196,18 @@ class RoomEngine:
         if control_action is not previous:
             self.store.set_previous_action(room.room_id, control_action)
 
-        if not climate_enabled:
+        if season is Season.OFF:
+            # Interseason facade stays readable but not controllable: Home
+            # Assistant / HomeKit can still show current room temperature,
+            # while no inactive seasonal target is exposed.
+            hvac_mode = "off"
+            hvac_action = HvacAction.OFF
+        elif not climate_enabled:
             hvac_mode = "off"
             hvac_action = HvacAction.OFF
         else:
             hvac_mode = "auto"
-            if season in {Season.HEAT, Season.COOL}:
-                hvac_action = control_action
-            else:
-                hvac_action = HvacAction.IDLE
+            hvac_action = control_action
 
         return RoomState(
             room_id=room.room_id,
