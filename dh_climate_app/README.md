@@ -71,13 +71,14 @@ See [docs/CONFIG_EXAMPLE.yaml](docs/CONFIG_EXAMPLE.yaml) and [DOCS.md](DOCS.md).
 - [Architecture](docs/ARCHITECTURE.md)
 - [Legacy behavior contract](docs/LEGACY_BEHAVIOR.md)
 - [Configuration example](docs/CONFIG_EXAMPLE.yaml)
+- [Machine events](docs/EVENTS.md)
 - [Implementation plan](docs/IMPLEMENTATION_PLAN.md)
 - [HAOS acceptance plan](HAOS_TEST_PLAN.md)
 - [Experimental update runbook](docs/EXPERIMENTAL_UPDATE_RUNBOOK.md)
 
 ## Release status
 
-Version `0.1.7` is still an **experimental pre-release implementation**. Unit/CI and container-build validation are automated. The remaining release gate is end-to-end testing on a real Home Assistant OS installation with real MQTT discovery and physical actuator entities.
+Version `0.1.8` is still an **experimental pre-release implementation**. Unit/CI and container-build validation are automated. The remaining release gate is end-to-end testing on a real Home Assistant OS installation with real MQTT discovery and physical actuator entities.
 
 Canonical release identity:
 
