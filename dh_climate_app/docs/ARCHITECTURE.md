@@ -139,13 +139,15 @@ The room thermostat contains:
 - HVAC action determined by room demand;
 - profile presented through the same user-facing behavior as legacy DH Climate.
 
-The published MQTT Climate capability list is stable:
+The published MQTT Climate capability list follows the global season:
 
 ```text
-off, heat, cool
+HEAT → off, heat
+COOL → off, cool
+OFF  → off
 ```
 
-The **current HVAC state** follows the global season:
+The **current HVAC state** follows the same season contract:
 
 ```text
 HEAT → heat
@@ -153,9 +155,14 @@ COOL → cool
 OFF  → off
 ```
 
-Opposite-season commands are rejected by the App runtime. Keeping Discovery
-capabilities stable avoids Home Assistant rebuilding the MQTT Climate entity on
-every season transition, which would reset native preset state.
+Opposite-season commands are rejected by the App runtime.
+
+Home Assistant resets MQTT Climate `preset_mode` to `none` while processing
+a Discovery update. To preserve the authoritative `day/night/away` profile,
+the App uses a season-scoped preset state topic
+(`.../climate/profile/heat|cool|off`). The retained preset is published before
+the season-specific Discovery payload. Because the preset state topic changes,
+Home Assistant resubscribes and immediately consumes that retained value.
 
 The target matrix remains:
 

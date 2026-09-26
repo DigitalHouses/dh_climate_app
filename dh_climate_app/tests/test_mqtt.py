@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import unittest
 from datetime import datetime, timezone
 
 from dh_climate_app.config import parse_options
+from dh_climate_app.core import HvacAction, Profile, Season
 from dh_climate_app.discovery import SYSTEM_AVAILABILITY_TOPIC
 from dh_climate_app.mqtt import ClimateMqttFacade, MqttBridge
+from dh_climate_app.rooms import RoomState
 from test_config import options
 
 
@@ -111,6 +114,122 @@ class MqttReconnectTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             [("DigitalHouses/test/set", 1)],
             bridge.client.subscriptions,
+        )
+
+
+class MqttSeasonalClimatePublicationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.bridge = FakeBridge()
+        self.config = parse_options(options())
+        self.facade = ClimateMqttFacade(
+            bridge=self.bridge,
+            app_version="0.1.18",
+            started_at=datetime.now(timezone.utc),
+            rooms=self.config.rooms,
+            command_queue=asyncio.Queue(),
+        )
+
+    def _state(self, season: Season) -> RoomState:
+        if season is Season.HEAT:
+            hvac_mode = "heat"
+            action = HvacAction.HEATING
+            target = 23.0
+        elif season is Season.COOL:
+            hvac_mode = "cool"
+            action = HvacAction.COOLING
+            target = 25.0
+        else:
+            hvac_mode = "off"
+            action = HvacAction.OFF
+            target = None
+        room = self.config.rooms[0]
+        return RoomState(
+            room_id=room.room_id,
+            name=room.name,
+            current_temperature=21.0,
+            current_humidity=45.0,
+            season=season,
+            effective_profile=Profile.DAY,
+            target_temperature=target,
+            climate_control_enabled=True,
+            control_action=action,
+            hvac_mode=hvac_mode,
+            hvac_action=action,
+        )
+
+    def test_seasonal_preset_state_is_retained_before_discovery(self) -> None:
+        self.facade.publish_room(
+            self._state(Season.HEAT),
+            published_profile="day",
+            published_target=23.0,
+            profile_targets={},
+        )
+
+        profile_topic = (
+            "DigitalHouses/Global/dh_climate_app/rooms/"
+            "living_room/climate/profile/heat"
+        )
+        discovery_topic = "homeassistant/climate/dh_climate_app_living_room/config"
+
+        profile_index = next(
+            i
+            for i, publication in enumerate(self.bridge.publications)
+            if publication[0] == profile_topic
+        )
+        discovery_index = next(
+            i
+            for i, publication in enumerate(self.bridge.publications)
+            if publication[0] == discovery_topic
+        )
+
+        self.assertLess(profile_index, discovery_index)
+        self.assertEqual(
+            (profile_topic, "day", True, False),
+            self.bridge.publications[profile_index],
+        )
+
+        discovery_payload = json.loads(
+            self.bridge.publications[discovery_index][1]
+        )
+        self.assertEqual(["off", "heat"], discovery_payload["modes"])
+        self.assertEqual(
+            profile_topic,
+            discovery_payload["preset_mode_state_topic"],
+        )
+
+    def test_cool_transition_uses_new_preset_topic_before_discovery(self) -> None:
+        self.facade.publish_room(
+            self._state(Season.COOL),
+            published_profile="day",
+            published_target=25.0,
+            profile_targets={},
+        )
+
+        profile_topic = (
+            "DigitalHouses/Global/dh_climate_app/rooms/"
+            "living_room/climate/profile/cool"
+        )
+        discovery_topic = "homeassistant/climate/dh_climate_app_living_room/config"
+
+        profile_index = next(
+            i
+            for i, publication in enumerate(self.bridge.publications)
+            if publication[0] == profile_topic
+        )
+        discovery_index = next(
+            i
+            for i, publication in enumerate(self.bridge.publications)
+            if publication[0] == discovery_topic
+        )
+        self.assertLess(profile_index, discovery_index)
+
+        discovery_payload = json.loads(
+            self.bridge.publications[discovery_index][1]
+        )
+        self.assertEqual(["off", "cool"], discovery_payload["modes"])
+        self.assertEqual(
+            profile_topic,
+            discovery_payload["preset_mode_state_topic"],
         )
 
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.18 — development
+
+- Restored season-specific room Climate capabilities: HEAT exposes only `off / heat`, COOL exposes only `off / cool`, and interseason exposes only `off`.
+- Preserved native `day / night / away` presets across those MQTT Discovery updates by using season-scoped retained preset-state topics and publishing the authoritative preset before the Discovery payload.
+- Removed the user-visible opposite-season HVAC mode from the room thermostat while retaining runtime rejection of invalid opposite-season commands.
+
 ## 0.1.17 — 2026-09-27
 
 - Restored native room thermostat semantics: the room state is `heat` in HEAT season, `cool` in COOL season, and `off` in interseason.

@@ -270,6 +270,17 @@ def room_profile_discovery_topic(room_id: str) -> str:
     return f"{DISCOVERY_PREFIX}/select/{object_id}/config"
 
 
+def room_profile_state_topic(room_id: str, season: str) -> str:
+    """Season-scoped preset state topic.
+
+    MQTT Climate resets preset_mode to 'none' on every Discovery update. Using
+    a different state topic per season forces Home Assistant to resubscribe on
+    HEAT/COOL/OFF capability changes and immediately consume the retained
+    authoritative preset for that season.
+    """
+    return f"{room_base(room_id)}/climate/profile/{season}"
+
+
 ROOM_TARGET_KEYS = (
     ("heat_day", "Heat day target"),
     ("heat_night", "Heat night target"),
@@ -297,10 +308,12 @@ def room_climate_discovery_payload(
     app_version: str,
 ) -> dict[str, Any]:
     base = room_base(room.room_id)
-    # Keep MQTT Climate capabilities stable across season transitions.
-    # The entity state itself remains season-native (heat/cool/off), while
-    # invalid opposite-season commands are rejected by the App runtime.
-    modes = ["off", "heat", "cool"]
+    if state.season.value == "heat":
+        modes = ["off", "heat"]
+    elif state.season.value == "cool":
+        modes = ["off", "cool"]
+    else:
+        modes = ["off"]
 
     return {
         "name": "Thermostat",
@@ -318,7 +331,10 @@ def room_climate_discovery_payload(
         "mode_state_topic": f"{base}/climate/hvac_mode",
         "mode_command_topic": f"{base}/climate/set/hvac_mode",
         "action_topic": f"{base}/climate/hvac_action",
-        "preset_mode_state_topic": f"{base}/climate/profile",
+        "preset_mode_state_topic": room_profile_state_topic(
+            room.room_id,
+            state.season.value,
+        ),
         "preset_mode_command_topic": f"{base}/climate/set/profile",
         "preset_modes": ["day", "night", "away"],
         "json_attributes_topic": f"{base}/climate/attributes",
@@ -465,7 +481,10 @@ def room_climate_state_topics(
         f"{base}/climate/target_temperature": _number(published_target),
         f"{base}/climate/hvac_mode": state.hvac_mode,
         f"{base}/climate/hvac_action": state.hvac_action.value,
-        f"{base}/climate/profile": published_profile,
+        room_profile_state_topic(
+            state.room_id,
+            state.season.value,
+        ): published_profile,
         f"{base}/climate/attributes": json.dumps(
             attrs,
             ensure_ascii=False,
