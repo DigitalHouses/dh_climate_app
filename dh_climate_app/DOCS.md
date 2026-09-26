@@ -61,17 +61,20 @@ Changing either target persists it in SQLite.
 
 Each configured room becomes its own MQTT Device. Assign that device to the matching Home Assistant Area.
 
-The room thermostat exposes, only while HEAT or COOL season is active:
+The room thermostat exposes:
 
 - current room temperature;
 - current room humidity when configured;
-- the target of the currently active user profile;
+- the target of the currently active user profile while HEAT or COOL is active;
 - stable HVAC modes `off / auto`;
 - HVAC action `heating / cooling / idle / off`.
 
-During interseason (`season: off`) the room thermostat is deliberately
-published unavailable. The user cannot adjust a thermostat when the house
-climate engine is not in either heating or cooling season.
+During interseason (`season: off`) the room thermostat stays available so
+Home Assistant and Apple Home continue to show the current room temperature,
+but the facade is forced to `off` and exposes no seasonal target. Target and
+HVAC commands arriving through the room thermostat are ignored until HEAT or
+COOL becomes active. Persisted profile-target Number entities remain editable
+for installer/advanced configuration.
 
 `auto` means DigitalHouses owns the seasonal HEAT / COOL / OFF decision.
 The room thermostat does not expose seasonal heat/cool switching to the user.
@@ -111,6 +114,61 @@ room × season × profile
 The hidden configuration Number entities remain available during interseason,
 so an installer can prepare future seasonal profile targets without exposing
 an inactive room thermostat to normal users.
+
+## Weather precipitation
+
+When at least one configured outdoor source is a `weather.*` entity, the App
+uses the first configured weather entity from the temperature/humidity source
+chains as the precipitation source.
+
+Current precipitation type comes from the weather entity condition:
+
+- `rainy / pouring / lightning-rainy` → `rain`;
+- `snowy` → `snow`;
+- `snowy-rainy` → `mixed`;
+- `hail` → `hail`;
+- other normal conditions → `none`.
+
+The precipitation amount is requested through Home Assistant
+`weather.get_forecasts` with `type: hourly`. The App publishes the amount
+for the current hourly forecast bucket normalized to millimetres. This is
+forecast precipitation for the current hour, not a physical rain-gauge
+measurement.
+
+The system Device exposes:
+
+- `sensor.dh_climate_app_precipitation_type`;
+- `sensor.dh_climate_app_precipitation_amount`.
+
+## Machine events
+
+The App exposes one Home Assistant MQTT Event entity:
+
+`event.dh_climate_app_event`
+
+Event payloads use schema version 2, QoS 1 and are never retained. The first
+complete runtime observation establishes a baseline and emits no event.
+Reconnect also establishes a fresh baseline, so events are not reconstructed
+for transitions that happened while Home Assistant was unavailable.
+
+Initial event types:
+
+- `season_changed`;
+- `precipitation_started`;
+- `precipitation_stopped`;
+- `precipitation_type_changed`;
+- `window_opened`;
+- `window_closed`;
+- `window_state_unknown`;
+- `window_state_restored`;
+- `problem_started`;
+- `problem_recovered`.
+
+Events contain machine data only. Human language, formatting and delivery stay
+in the local Home Assistant notification package.
+
+Routine thermostat hysteresis cycling is intentionally not an Event; retained
+room state already represents that current fact.
 
 ## Window context
 
