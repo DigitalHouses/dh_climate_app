@@ -80,14 +80,18 @@ runtime acceptance = PASS
 
 ## Release status
 
-Runtime acceptance is complete.
+Runtime acceptance and immutable publication are complete.
 
-Immutable publication is performed by the reviewed repository release marker:
+Published release:
 
 - tag: `digitalhouses_climate_app-v0.1.17`;
-- image: `ghcr.io/digitalhouses/digitalhouses_climate_app:0.1.17`.
+- release commit: `a346d46e990b1355fbbcc1c46ebc7d15431f66a8`;
+- image: `ghcr.io/digitalhouses/digitalhouses_climate_app:0.1.17`;
+- manifest digest: `sha256:641367437f7d8b1bb2796c0fee983080183cf760217a09661be80baf1b229f3d`;
+- release workflow run: `36275409307`.
 
-The published manifest digest and release workflow run are recorded after the
-release workflow completes.
+The release workflow validated the canonical tag, verified that the immutable
+destination was unused, published the multi-architecture GHCR image, and
+created the GitHub Release.
 
 No published immutable image version may be overwritten with different content.
