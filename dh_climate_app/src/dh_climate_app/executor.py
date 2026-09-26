@@ -18,6 +18,14 @@ class _Attempt:
     signature: tuple[object, ...]
     attempts: int
     next_allowed_at: float
+    verify_not_before: float | None = None
+    in_cooldown: bool = False
+
+
+@dataclass(frozen=True)
+class _DriftCandidate:
+    signature: tuple[object, ...]
+    verify_not_before: float
 
 
 @dataclass(frozen=True)
@@ -45,13 +53,17 @@ class DeviceExecutor:
         retry_seconds: float = 5.0,
         max_attempts: int = 3,
         cooldown_seconds: float = 300.0,
+        settle_seconds: float = 5.0,
     ) -> None:
         self.ha = ha
         self.climate_log = climate_log
         self.retry_seconds = float(retry_seconds)
         self.max_attempts = int(max_attempts)
         self.cooldown_seconds = float(cooldown_seconds)
+        self.settle_seconds = float(settle_seconds)
         self._attempts: dict[str, _Attempt] = {}
+        self._stable_signatures: dict[str, tuple[object, ...]] = {}
+        self._drift_candidates: dict[str, _DriftCandidate] = {}
         self._blocked_signatures: dict[str, tuple[str, str]] = {}
 
     @staticmethod
@@ -128,6 +140,42 @@ class DeviceExecutor:
             level=logging.WARNING,
         )
 
+    def observe_state_change(
+        self,
+        entity_id: str,
+        *,
+        now_monotonic: float | None = None,
+    ) -> bool:
+        """Register a HA state_changed event relevant to execution.
+
+        The event itself is never confirmation. It only starts/restarts a
+        settle window after which reconcile may verify the current HA state.
+        """
+
+        now = time.monotonic() if now_monotonic is None else now_monotonic
+        attempt = self._attempts.get(entity_id)
+        if attempt is not None:
+            attempt.verify_not_before = now + self.settle_seconds
+            return True
+
+        stable_signature = self._stable_signatures.get(entity_id)
+        if stable_signature is not None:
+            self._drift_candidates[entity_id] = _DriftCandidate(
+                signature=stable_signature,
+                verify_not_before=now + self.settle_seconds,
+            )
+            return True
+
+        return False
+
+    def reset_transient(self) -> None:
+        """Forget execution evidence across a Home Assistant disconnect."""
+
+        self._attempts.clear()
+        self._stable_signatures.clear()
+        self._drift_candidates.clear()
+        self._blocked_signatures.clear()
+
     async def reconcile(
         self,
         desired_states: list[DesiredDeviceState],
@@ -140,10 +188,11 @@ class DeviceExecutor:
         problems: list[ExecutionProblem] = []
 
         for desired in desired_states:
-            actual = actual_states.get(desired.entity_id)
+            entity_id = desired.entity_id
+            actual = actual_states.get(entity_id)
             if actual is None or actual.state in {"unknown", "unavailable"}:
                 problem = ExecutionProblem(
-                    desired.entity_id,
+                    entity_id,
                     "unavailable",
                     "Home Assistant entity is unavailable",
                     room_id=self._room_id(desired),
@@ -158,24 +207,66 @@ class DeviceExecutor:
                 self._record_block(desired, capability_problem)
                 continue
 
-            if desired.entity_id in self._blocked_signatures:
-                self._blocked_signatures.pop(desired.entity_id, None)
+            if entity_id in self._blocked_signatures:
+                self._blocked_signatures.pop(entity_id, None)
                 self._trace(desired, "UNBLOCKED")
 
+            attempt = self._attempts.get(entity_id)
+            if attempt is not None and attempt.signature != desired.signature:
+                self._attempts.pop(entity_id, None)
+                attempt = None
+
+            stable_signature = self._stable_signatures.get(entity_id)
+            if stable_signature is not None and stable_signature != desired.signature:
+                self._stable_signatures.pop(entity_id, None)
+
+            drift = self._drift_candidates.get(entity_id)
+            if drift is not None and drift.signature != desired.signature:
+                self._drift_candidates.pop(entity_id, None)
+                drift = None
+
             mismatches = self._mismatches(desired, actual)
+
             if not mismatches:
-                previous_attempt = self._attempts.pop(desired.entity_id, None)
-                if previous_attempt is not None:
-                    self._trace(
-                        desired,
-                        f"CONFIRMED | actual={self._actual_text(actual)}",
-                    )
+                self._drift_candidates.pop(entity_id, None)
+                if attempt is None:
+                    self._stable_signatures[entity_id] = desired.signature
+                    continue
+
+                if attempt.verify_not_before is None:
+                    # A service response is not confirmation. Wait for a
+                    # post-command HA state_changed event before verifying.
+                    continue
+
+                if now < attempt.verify_not_before:
+                    continue
+
+                self._attempts.pop(entity_id, None)
+                self._stable_signatures[entity_id] = desired.signature
+                self._trace(
+                    desired,
+                    f"VERIFIED_HA | actual={self._actual_text(actual)}",
+                )
                 continue
 
-            attempt = self._attempts.get(desired.entity_id)
-            if attempt is None or attempt.signature != desired.signature:
+            if drift is not None:
+                if now < drift.verify_not_before:
+                    continue
+                self._drift_candidates.pop(entity_id, None)
+                self._stable_signatures.pop(entity_id, None)
+                self._trace(
+                    desired,
+                    (
+                        f"DRIFT | desired={self._desired_text(desired)}"
+                        f" | actual={self._actual_text(actual)}"
+                        f" | mismatch={','.join(mismatches)}"
+                    ),
+                    level=logging.WARNING,
+                )
+
+            if attempt is None:
                 attempt = _Attempt(desired.signature, 0, 0.0)
-                self._attempts[desired.entity_id] = attempt
+                self._attempts[entity_id] = attempt
                 self._trace(
                     desired,
                     (
@@ -185,48 +276,37 @@ class DeviceExecutor:
                     ),
                 )
 
-            if now < attempt.next_allowed_at:
-                if attempt.attempts >= self.max_attempts:
+            if (
+                attempt.verify_not_before is not None
+                and now < attempt.verify_not_before
+            ):
+                continue
+
+            if attempt.in_cooldown:
+                if now < attempt.next_allowed_at:
                     problems.append(
                         ExecutionProblem(
-                            desired.entity_id,
+                            entity_id,
                             "no_confirmation",
                             ",".join(mismatches),
                             room_id=self._room_id(desired),
                         )
                     )
+                    continue
+                attempt.attempts = 0
+                attempt.next_allowed_at = 0.0
+                attempt.verify_not_before = None
+                attempt.in_cooldown = False
+
+            if now < attempt.next_allowed_at:
                 continue
 
             if attempt.attempts >= self.max_attempts:
-                attempt.attempts = 0
-
-            if attempt.attempts > 0:
-                self._trace(
-                    desired,
-                    f"RETRY {attempt.attempts + 1}/{self.max_attempts}"
-                    f" | mismatch={','.join(mismatches)}",
-                    level=logging.WARNING,
-                )
-
-            try:
-                commands += await self._apply(desired, actual)
-            except Exception as exc:
-                LOGGER.exception("Device command failed: %s", desired.entity_id)
-                problems.append(
-                    ExecutionProblem(
-                        desired.entity_id,
-                        "service_error",
-                        str(exc),
-                        room_id=self._room_id(desired),
-                    )
-                )
-
-            attempt.attempts += 1
-            if attempt.attempts >= self.max_attempts:
+                attempt.in_cooldown = True
                 attempt.next_allowed_at = now + self.cooldown_seconds
                 problems.append(
                     ExecutionProblem(
-                        desired.entity_id,
+                        entity_id,
                         "no_confirmation",
                         ",".join(mismatches),
                         room_id=self._room_id(desired),
@@ -238,8 +318,44 @@ class DeviceExecutor:
                     f" | no_confirmation={','.join(mismatches)}",
                     level=logging.WARNING,
                 )
-            else:
-                attempt.next_allowed_at = now + self.retry_seconds
+                continue
+
+            if attempt.attempts > 0:
+                self._trace(
+                    desired,
+                    f"RETRY {attempt.attempts + 1}/{self.max_attempts}"
+                    f" | mismatch={','.join(mismatches)}",
+                    level=logging.WARNING,
+                )
+
+            # A fresh command attempt requires fresh post-send evidence.
+            attempt.verify_not_before = None
+            self._stable_signatures.pop(entity_id, None)
+
+            try:
+                applied = await self._apply(desired, actual)
+                commands += applied
+                if applied > 0:
+                    self._trace(
+                        desired,
+                        (
+                            f"SENT | desired={self._desired_text(desired)}"
+                            f" | service_calls={applied}"
+                        ),
+                    )
+            except Exception as exc:
+                LOGGER.exception("Device command failed: %s", entity_id)
+                problems.append(
+                    ExecutionProblem(
+                        entity_id,
+                        "service_error",
+                        str(exc),
+                        room_id=self._room_id(desired),
+                    )
+                )
+
+            attempt.attempts += 1
+            attempt.next_allowed_at = now + self.retry_seconds
 
         return ReconcileSummary(commands=commands, problems=tuple(problems))
 

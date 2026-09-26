@@ -86,6 +86,7 @@ class ClimateRuntime:
         self._last_reconcile = ReconcileSummary(commands=0, problems=())
         self._last_problems: tuple[Problem, ...] = ()
         self._last_room_log_signatures: dict[str, tuple[object, ...]] = {}
+        self._device_recheck_tasks: dict[str, asyncio.Task[None]] = {}
 
         loop = asyncio.get_running_loop()
         self.mqtt = MqttBridge(
@@ -143,6 +144,7 @@ class ClimateRuntime:
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
+            await self._cancel_device_rechecks()
             self.telemetry_runner.stop()
             await self.climate_log.close()
             self.facade.stop()
@@ -157,15 +159,55 @@ class ClimateRuntime:
     async def _on_state(self, state: HaState) -> None:
         if not self.cache.apply(state):
             return
+
+        if self.executor.observe_state_change(state.entity_id):
+            self._schedule_device_recheck(state.entity_id)
+
         await self._recalculate(
             observed_at=state.last_updated,
             record_outdoor_sample=True,
         )
 
+    def _schedule_device_recheck(self, entity_id: str) -> None:
+        previous = self._device_recheck_tasks.get(entity_id)
+        if previous is not None:
+            previous.cancel()
+
+        task = asyncio.create_task(
+            self._delayed_device_recheck(entity_id),
+            name=f"device-verify:{entity_id}",
+        )
+        self._device_recheck_tasks[entity_id] = task
+
+    async def _delayed_device_recheck(self, entity_id: str) -> None:
+        current = asyncio.current_task()
+        try:
+            await asyncio.sleep(self.executor.settle_seconds)
+            if self._ha_connected:
+                await self._recalculate(
+                    observed_at=datetime.now(timezone.utc),
+                    record_outdoor_sample=False,
+                )
+        except asyncio.CancelledError:
+            raise
+        finally:
+            if self._device_recheck_tasks.get(entity_id) is current:
+                self._device_recheck_tasks.pop(entity_id, None)
+
+    async def _cancel_device_rechecks(self) -> None:
+        tasks = list(self._device_recheck_tasks.values())
+        self._device_recheck_tasks.clear()
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
     async def _on_connection(self, connected: bool) -> None:
         self._ha_connected = connected
         if not connected:
             self.cache.clear()
+            self.executor.reset_transient()
+            await self._cancel_device_rechecks()
             self.events.reset()
             self._weather_source_last_updated = None
             self._weather_forecast_fetched_at = None
