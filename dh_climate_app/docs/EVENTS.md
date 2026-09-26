@@ -179,3 +179,9 @@ event.dh_climate_app_event
 ```
 
 The public App does not depend on any local notification service.
+
+## Logging is separate from Events
+
+Detailed diagnostic logging is not part of the Event contract. The App always writes its own Python log and may mirror selected control traces to the local `script.write2climatelog` service.
+
+Mirror failure is isolated from climate control and from the Problem/Event layer. Normal FAST/SLOW commands and thermostat hysteresis remain non-events. Actuator failures use the existing `problem_started` / `problem_recovered` event types; when the actuator belongs to a room, those events include both `room_id` and `entity_id`.
