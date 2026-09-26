@@ -138,6 +138,19 @@ class HomeAssistantClient:
             dict(data),
         )
 
+    async def call_service_response(
+        self,
+        domain: str,
+        service: str,
+        data: Mapping[str, Any],
+    ) -> Any:
+        return await asyncio.to_thread(
+            self._request_json,
+            "POST",
+            f"/services/{domain}/{service}?return_response",
+            dict(data),
+        )
+
     async def run_forever(
         self,
         *,
