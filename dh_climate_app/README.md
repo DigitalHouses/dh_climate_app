@@ -34,6 +34,7 @@ SQLite under `/data/dh_climate.db` stores only durable installation state. It is
 ## Implemented behavior
 
 - prioritized outdoor temperature and humidity fallback chains;
+- dedicated current outdoor temperature and humidity sensors for UI;
 - weather-condition precipitation typing plus current-hour forecast amount in mm;
 - one schema-v2 MQTT Event stream for weather, season, window and Problem transitions;
 - time-weighted rolling 24-hour outdoor average;
@@ -78,7 +79,7 @@ See [docs/CONFIG_EXAMPLE.yaml](docs/CONFIG_EXAMPLE.yaml) and [DOCS.md](DOCS.md).
 
 ## Release status
 
-Version `0.1.8` is still an **experimental pre-release implementation**. Unit/CI and container-build validation are automated. The remaining release gate is end-to-end testing on a real Home Assistant OS installation with real MQTT discovery and physical actuator entities.
+Version `0.1.9` is still an **experimental pre-release implementation**. Unit/CI and container-build validation are automated. The remaining release gate is end-to-end testing on a real Home Assistant OS installation with real MQTT discovery and physical actuator entities.
 
 Canonical release identity:
 
