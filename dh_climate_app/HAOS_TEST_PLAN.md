@@ -4,6 +4,8 @@ Status: release gate for the first experimental `0.1.0` image.
 
 The unit test suite proves deterministic business rules. This plan proves the boundaries that only a real Home Assistant OS installation can verify: Supervisor configuration, MQTT Discovery, entity UI behavior, service execution, persistence, backup and restore.
 
+For Experimental source-build installation/update problems, use [docs/EXPERIMENTAL_UPDATE_RUNBOOK.md](docs/EXPERIMENTAL_UPDATE_RUNBOOK.md). In particular, if HAOS can fetch the new GitHub `main` version directly but Supervisor Store still reports the previous `version_latest`, treat it as stale Supervisor Store state and restart Supervisor before doing broader diagnostics.
+
 ## 1. Installation and startup
 
 Acceptance:
