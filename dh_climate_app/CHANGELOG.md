@@ -1,10 +1,11 @@
 # Changelog
 
-## 0.1.18 — development
+## 0.1.18 — 2026-09-27
 
 - Restored season-specific room Climate capabilities: HEAT exposes only `off / heat`, COOL exposes only `off / cool`, and interseason exposes only `off`.
 - Preserved native `day / night / away` presets across those MQTT Discovery updates by using season-scoped retained preset-state topics and publishing the authoritative preset before the Discovery payload.
 - Removed the user-visible opposite-season HVAC mode from the room thermostat while retaining runtime rejection of invalid opposite-season commands.
+- Passed bundled live HAOS acceptance on 2026-09-27, including exact seasonal `hvac_modes`, native preset preservation across HEAT → COOL → OFF, target-range safety, bounded no-confirmation retry/cooldown, SLOW, window context, cold-weather reversible protection, humidity safe shutdown, App-only backup/restore, and final clean baseline.
 
 ## 0.1.17 — 2026-09-27
 
