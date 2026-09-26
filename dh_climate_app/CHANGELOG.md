@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.13 — development
+
+- Serialized the best-effort `script.write2climatelog` mirror through one asynchronous queue so `climate.log` preserves decision order.
+- The authoritative App log remains immediate and climate control remains non-blocking.
+- Added a bounded mirror queue to prevent an unavailable local log script from creating unbounded memory growth.
+
 ## 0.1.12 — development
 
 - Fixed season range updates from the Home Assistant `heat_cool` thermostat: paired lower/upper MQTT commands are now coalesced and validated atomically.
