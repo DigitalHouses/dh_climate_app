@@ -33,6 +33,13 @@ RUNTIME_TICK_SECONDS = 10.0
 WEATHER_FORECAST_REFRESH_SECONDS = 15 * 60
 SEASON_RANGE_DEBOUNCE_SECONDS = 0.1
 
+
+def _temperature_text(value: float | None) -> str:
+    if value is None:
+        return "unavailable"
+    return f"{float(value):.1f} °C"
+
+
 ROOM_TARGET_COMMANDS = {
     "heat_day": (Season.HEAT, Profile.DAY),
     "heat_night": (Season.HEAT, Profile.NIGHT),
@@ -333,8 +340,8 @@ class ClimateRuntime:
                 self.climate_log.write2climate_log(
                     "OUTDOOR",
                     (
-                        f"temperature={current_temperature}"
-                        f" source={outdoor_state.temperature_source or 'none'}"
+                        f"temperature={_temperature_text(current_temperature)}"
+                        f" | source={outdoor_state.temperature_source or 'none'}"
                     ),
                 )
             else:
@@ -342,8 +349,9 @@ class ClimateRuntime:
                     self.climate_log.write2climate_log(
                         "OUTDOOR",
                         (
-                            f"temperature {previous_temperature}"
-                            f" -> {current_temperature} °C"
+                            f"temperature "
+                            f"{_temperature_text(previous_temperature)}"
+                            f" -> {_temperature_text(current_temperature)}"
                             f" | source={outdoor_state.temperature_source or 'none'}"
                         ),
                     )
@@ -358,7 +366,8 @@ class ClimateRuntime:
                             f"source "
                             f"{previous_outdoor.temperature_source or 'none'}"
                             f" -> {outdoor_state.temperature_source or 'none'}"
-                            f" | temperature={current_temperature} °C"
+                            f" | temperature="
+                            f"{_temperature_text(current_temperature)}"
                         ),
                     )
 
