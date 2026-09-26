@@ -199,15 +199,12 @@ class RoomEngine:
         if not climate_enabled:
             hvac_mode = "off"
             hvac_action = HvacAction.OFF
-        elif season is Season.HEAT:
-            hvac_mode = "heat"
-            hvac_action = control_action
-        elif season is Season.COOL:
-            hvac_mode = "cool"
-            hvac_action = control_action
         else:
-            hvac_mode = "off"
-            hvac_action = HvacAction.OFF
+            hvac_mode = "auto"
+            if season in {Season.HEAT, Season.COOL}:
+                hvac_action = control_action
+            else:
+                hvac_action = HvacAction.IDLE
 
         return RoomState(
             room_id=room.room_id,
