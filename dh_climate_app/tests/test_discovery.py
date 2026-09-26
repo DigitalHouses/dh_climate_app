@@ -47,6 +47,10 @@ class DiscoveryTests(unittest.TestCase):
         event = diagnostics["event"][1]
         self.assertEqual("event", event["default_entity_id"].split(".")[0])
         self.assertEqual(1, event["qos"])
+        self.assertIn(
+            "outdoor_temperature_source_changed",
+            event["event_types"],
+        )
         self.assertIn("precipitation_type_changed", event["event_types"])
         self.assertIn("problem_recovered", event["event_types"])
         delete = diagnostics["delete_telemetry"][1]

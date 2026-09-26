@@ -58,6 +58,24 @@ state separately.
 
 ## Event catalog
 
+### outdoor_temperature_source_changed
+
+Emitted when the active source in the ordered outdoor temperature priority
+chain changes.
+
+Fields:
+
+```text
+previous_source
+current_source
+previous_temperature
+current_temperature
+```
+
+The first complete observation after startup/reconnect establishes the baseline
+and does not emit this Event. A normal temperature-value change from the same
+source is logged but is not emitted as a machine Event.
+
 ### season_changed
 
 Emitted when global season changes between `heat`, `cool` and `off`.

@@ -11,6 +11,7 @@ from .weather import WeatherState
 
 EVENT_SCHEMA_VERSION = 2
 EVENT_TYPES = (
+    "outdoor_temperature_source_changed",
     "season_changed",
     "precipitation_started",
     "precipitation_stopped",
@@ -76,6 +77,8 @@ class ClimateEventEngine:
     def __init__(self) -> None:
         self._initialized = False
         self._season: str | None = None
+        self._temperature_source: str | None = None
+        self._temperature_value: float | None = None
         self._weather: WeatherState | None = None
         self._windows: dict[str, str] = {}
         self._problems: dict[tuple[object, ...], Problem] = {}
@@ -83,6 +86,8 @@ class ClimateEventEngine:
     def reset(self) -> None:
         self._initialized = False
         self._season = None
+        self._temperature_source = None
+        self._temperature_value = None
         self._weather = None
         self._windows = {}
         self._problems = {}
@@ -109,12 +114,33 @@ class ClimateEventEngine:
         if not self._initialized:
             self._initialized = True
             self._season = outdoor.season.value
+            self._temperature_source = outdoor.temperature_source
+            self._temperature_value = outdoor.current_temperature
             self._weather = weather
             self._windows = current_windows
             self._problems = current_problems
             return ()
 
         events: list[dict[str, object]] = []
+
+        if outdoor.temperature_source != self._temperature_source:
+            payload = _base(
+                "outdoor_temperature_source_changed",
+                observed_at,
+            )
+            payload.update(
+                {
+                    "previous_source": self._temperature_source,
+                    "current_source": outdoor.temperature_source,
+                    "previous_temperature": _temperature(
+                        self._temperature_value
+                    ),
+                    "current_temperature": _temperature(
+                        outdoor.current_temperature
+                    ),
+                }
+            )
+            events.append(payload)
 
         current_season = outdoor.season.value
         if self._season is not None and current_season != self._season:
@@ -216,6 +242,8 @@ class ClimateEventEngine:
             )
 
         self._season = current_season
+        self._temperature_source = outdoor.temperature_source
+        self._temperature_value = outdoor.current_temperature
         if weather is not None and weather.precipitation_type != "unknown":
             self._weather = weather
         self._windows = current_windows

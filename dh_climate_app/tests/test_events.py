@@ -14,14 +14,19 @@ from dh_climate_app.weather import WeatherState
 NOW = datetime(2026, 9, 26, 11, 0, tzinfo=timezone.utc)
 
 
-def outdoor(season: Season) -> OutdoorState:
+def outdoor(
+    season: Season,
+    *,
+    source: str | None = "weather.home",
+    temperature: float | None = 10.0,
+) -> OutdoorState:
     return OutdoorState(
         observed_at=NOW,
-        current_temperature=10.0,
+        current_temperature=temperature,
         current_humidity=80.0,
         avg_24h_temperature=10.0,
         avg_24h_humidity=75.0,
-        temperature_source="weather.home",
+        temperature_source=source,
         humidity_source="weather.home",
         heat_threshold=12.0,
         cool_threshold=20.0,
@@ -69,6 +74,58 @@ class ClimateEventTests(unittest.TestCase):
         engine = ClimateEventEngine()
         events = engine.observe(
             outdoor=outdoor(Season.HEAT),
+            weather=weather("none"),
+            rooms={"livingroom": room()},
+            problems=(),
+            observed_at=NOW,
+        )
+        self.assertEqual((), events)
+
+    def test_outdoor_temperature_source_change_emits_transition(self) -> None:
+        engine = ClimateEventEngine()
+        engine.observe(
+            outdoor=outdoor(
+                Season.HEAT,
+                source="sensor.primary",
+                temperature=18.4,
+            ),
+            weather=weather("none"),
+            rooms={"livingroom": room()},
+            problems=(),
+            observed_at=NOW,
+        )
+
+        events = engine.observe(
+            outdoor=outdoor(
+                Season.HEAT,
+                source="weather.backup",
+                temperature=17.1,
+            ),
+            weather=weather("none"),
+            rooms={"livingroom": room()},
+            problems=(),
+            observed_at=NOW,
+        )
+
+        event = next(
+            item
+            for item in events
+            if item["event_type"] == "outdoor_temperature_source_changed"
+        )
+        self.assertEqual("sensor.primary", event["previous_source"])
+        self.assertEqual("weather.backup", event["current_source"])
+        self.assertEqual(18.4, event["previous_temperature"])
+        self.assertEqual(17.1, event["current_temperature"])
+        self.assertEqual(2, event["schema_version"])
+
+    def test_first_outdoor_source_is_baseline_not_transition(self) -> None:
+        engine = ClimateEventEngine()
+        events = engine.observe(
+            outdoor=outdoor(
+                Season.HEAT,
+                source="sensor.primary",
+                temperature=18.4,
+            ),
             weather=weather("none"),
             rooms={"livingroom": room()},
             problems=(),

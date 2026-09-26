@@ -16,10 +16,12 @@ cool_threshold_default: 20.0
 # AC/heat-pump devices for the legacy cold-weather heating protection.
 ac_min_outdoor_temperature: -10.0
 
-# First currently valid entity wins. sensor.* uses its numeric state.
-# weather.* uses the entity's current temperature attribute.
+# Ordered priority chain: first currently valid entity wins.
+# sensor.* uses its numeric state; weather.* uses the current temperature
+# attribute. Source changes are logged and emitted as a machine Event.
 outdoor_temperature_sources: >-
   sensor.outdoor_temperature,
+  weather.primary_provider,
   weather.forecast_home_assistant
 
 # Humidity priority is independent from temperature priority.

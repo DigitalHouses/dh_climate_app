@@ -36,9 +36,14 @@ See [docs/CONFIG_EXAMPLE.yaml](docs/CONFIG_EXAMPLE.yaml) for a complete example.
 
 `outdoor_temperature_sources` and `outdoor_humidity_sources` are comma-separated ordered entity lists. Temperature and humidity have independent priority chains.
 
-For each measurement, the App uses the first currently valid configured entity. If it becomes unavailable, the next entity is selected.
+For each measurement, the App uses the first currently valid configured entity. If it becomes unavailable, the next entity is selected. When a preferred source becomes valid again, it automatically becomes active again.
 
-A normal `sensor.*` source is read from its numeric state. A `weather.*` source is supported directly: the App reads its current `temperature` attribute for outdoor temperature and its current `humidity` attribute for outdoor humidity. This allows entities such as `weather.forecast_home_assistant` to be used as primary or fallback sources without template sensors.
+The temperature chain may freely mix `sensor.*` and `weather.*` entities in the declared priority order. A normal `sensor.*` source is read from its numeric state. A `weather.*` source is supported directly: the App reads its current `temperature` attribute for outdoor temperature and its current `humidity` attribute for outdoor humidity. This allows entities such as `weather.forecast_home_assistant` to be used as primary or fallback sources without template sensors.
+
+Every public one-decimal outdoor temperature change is written to `climate.log`
+with the active source. Active-source transitions are written as a separate log
+entry and emitted as `outdoor_temperature_source_changed` on
+`event.dh_climate_app_event`.
 
 The App maintains a time-weighted rolling 24-hour outdoor average. Global season is:
 
