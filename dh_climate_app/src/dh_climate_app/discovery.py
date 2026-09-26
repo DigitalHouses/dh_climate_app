@@ -192,6 +192,23 @@ def outdoor_discovery_payloads(
                 "origin": origin,
             },
         ),
+        "outdoor_temperature_avg24": (
+            f"{DISCOVERY_PREFIX}/sensor/dh_climate_app_outdoor_temperature_avg24/config",
+            {
+                "name": "Outdoor temperature avg24",
+                "unique_id": "dh_climate_app_outdoor_temperature_avg24",
+                "default_entity_id": "sensor.dh_climate_app_outdoor_temperature_avg24",
+                "state_topic": f"{OUTDOOR_BASE}/temperature_avg24",
+                "json_attributes_topic": OUTDOOR_ATTRIBUTES_TOPIC,
+                "device_class": "temperature",
+                "unit_of_measurement": "°C",
+                "state_class": "measurement",
+                "availability_topic": SYSTEM_AVAILABILITY_TOPIC,
+                "icon": "mdi:thermometer-lines",
+                "device": device,
+                "origin": origin,
+            },
+        ),
         "outdoor_humidity": (
             f"{DISCOVERY_PREFIX}/sensor/dh_climate_app_outdoor_humidity/config",
             {
@@ -526,6 +543,7 @@ def outdoor_state_topics(state: OutdoorState) -> dict[str, str]:
     }
     return {
         f"{OUTDOOR_BASE}/temperature": _number(state.current_temperature),
+        f"{OUTDOOR_BASE}/temperature_avg24": _number(state.avg_24h_temperature),
         f"{OUTDOOR_BASE}/humidity": _number(state.current_humidity),
         OUTDOOR_ATTRIBUTES_TOPIC: json.dumps(
             attrs,
