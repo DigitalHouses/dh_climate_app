@@ -97,6 +97,21 @@ class ConfigTests(unittest.TestCase):
             config.outdoor.temperature_sources,
         )
 
+    def test_outdoor_temperature_sources_accept_mixed_priority_chain(self) -> None:
+        raw = options()
+        raw["outdoor_temperature_sources"] = (
+            "weather.primary, sensor.backup, weather.secondary"
+        )
+        config = parse_options(raw)
+        self.assertEqual(
+            (
+                "weather.primary",
+                "sensor.backup",
+                "weather.secondary",
+            ),
+            config.outdoor.temperature_sources,
+        )
+
     def test_fast_climate_can_be_heat_and_cool(self) -> None:
         raw = options()
         raw["rooms"][0]["fast_heat"] = "climate.heatpump"
