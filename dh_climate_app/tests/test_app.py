@@ -36,7 +36,7 @@ class RoomTargetCommandTests(unittest.IsolatedAsyncioTestCase):
                 target_temperature=22.0,
                 climate_control_enabled=True,
                 control_action=HvacAction.IDLE,
-                hvac_mode="heat",
+                hvac_mode="auto",
                 hvac_action=HvacAction.IDLE,
                 control_profile=Profile.DAY,
                 control_target_temperature=22.0,
