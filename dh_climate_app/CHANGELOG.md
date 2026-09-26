@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.15 — development
+## 0.1.15 — 2026-09-27
 
 - Fixed humidifier shutdown safety: inactive `humidifier.*` actuators no longer carry a target-humidity command, so an out-of-range target cannot block `turn_off`.
 - Added cross-module humidity safety coverage for active target application, independent humidity disable, and inactive-device shutdown.
