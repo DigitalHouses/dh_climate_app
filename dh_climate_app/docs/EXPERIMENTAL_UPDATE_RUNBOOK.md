@@ -71,17 +71,19 @@ If HAOS sees the expected `main` commit and expected `version:`, GitHub is prove
 
 Do not continue with Store log analysis first.
 
+Run **only** the restart command:
+
+```bash
+ha supervisor restart
+```
+
+A Supervisor restart may terminate the VS Code add-on terminal/Ingress session.
+This is expected. Do not put post-restart commands in the same shell block.
+
+After Supervisor is back, reopen `HAOS → VS Code → Terminal` and continue:
+
 ```bash
 APP="8d59ce70_dh_climate_app"
-
-ha supervisor restart || true
-
-for i in $(seq 1 60); do
-    if ha supervisor info >/dev/null 2>&1; then
-        break
-    fi
-    sleep 1
-done
 
 ha store repair 8d59ce70
 ha store reload
@@ -124,6 +126,7 @@ repair + reload once
                                    |
                                    v
                          restart Supervisor
+                         reopen Terminal
                          repair + reload
                          update App
 ```
