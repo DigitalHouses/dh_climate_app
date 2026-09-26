@@ -115,6 +115,17 @@ The hidden configuration Number entities remain available during interseason,
 so an installer can prepare future seasonal profile targets without exposing
 an inactive room thermostat to normal users.
 
+## Outdoor UI sensors
+
+The system Device exposes dedicated current outdoor measurements for dashboards:
+
+- `sensor.dh_climate_app_outdoor_temperature`;
+- `sensor.dh_climate_app_outdoor_humidity`.
+
+These sensors publish the current value from the same prioritized/fallback
+source selection used by Climate Core. They do not substitute the rolling
+24-hour average. Source identity and avg24 values are available as attributes.
+
 ## Weather precipitation
 
 When at least one configured outdoor source is a `weather.*` entity, the App
