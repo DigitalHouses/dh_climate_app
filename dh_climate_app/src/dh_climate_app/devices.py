@@ -171,7 +171,11 @@ def compile_room_devices(
                         entity_id=entity_id,
                         domain=domain,
                         power=humidity_state.active,
-                        target_humidity=humidity_state.target_humidity,
+                        target_humidity=(
+                            humidity_state.target_humidity
+                            if humidity_state.active
+                            else None
+                        ),
                         source=f"room:{room.room_id}:humidity",
                     )
                 )
