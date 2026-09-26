@@ -5,9 +5,11 @@ import json
 from typing import Any
 
 from .config import RoomConfig
+from .events import EVENT_TYPES
 from .humidity import HumidityState
 from .outdoor import OutdoorState
 from .rooms import RoomState
+from .weather import WeatherState
 
 
 DISCOVERY_PREFIX = "homeassistant"
@@ -19,6 +21,9 @@ SYSTEM_STATE_TOPIC = f"{BASE_TOPIC}/state"
 SYSTEM_AVAILABILITY_TOPIC = f"{BASE_TOPIC}/availability"
 SYSTEM_PROBLEM_TOPIC = f"{BASE_TOPIC}/problem"
 SYSTEM_PROBLEM_ATTRIBUTES_TOPIC = f"{BASE_TOPIC}/problem_attributes"
+SYSTEM_EVENT_TOPIC = f"{BASE_TOPIC}/event"
+WEATHER_BASE = f"{BASE_TOPIC}/weather"
+WEATHER_ATTRIBUTES_TOPIC = f"{WEATHER_BASE}/precipitation/attributes"
 
 SYSTEM_DEVICE_ID = "dh_climate_app"
 SEASON_OBJECT_ID = "dh_climate_app_season"
@@ -129,6 +134,21 @@ def diagnostic_discovery_payloads(app_version: str) -> dict[str, tuple[str, dict
                 "origin": origin,
             },
         ),
+        "event": (
+            f"{DISCOVERY_PREFIX}/event/dh_climate_app_event/config",
+            {
+                "name": "Events",
+                "unique_id": "dh_climate_app_event",
+                "default_entity_id": "event.dh_climate_app_event",
+                "state_topic": SYSTEM_EVENT_TOPIC,
+                "event_types": list(EVENT_TYPES),
+                "qos": 1,
+                "availability_topic": SYSTEM_AVAILABILITY_TOPIC,
+                "icon": "mdi:home-thermometer-outline",
+                "device": device,
+                "origin": origin,
+            },
+        ),
         "delete_telemetry": (
             f"{DISCOVERY_PREFIX}/button/dh_climate_app_delete_telemetry/config",
             {
@@ -140,6 +160,45 @@ def diagnostic_discovery_payloads(app_version: str) -> dict[str, tuple[str, dict
                 "entity_category": "config",
                 "icon": "mdi:delete-outline",
                 "availability_topic": SYSTEM_AVAILABILITY_TOPIC,
+                "device": device,
+                "origin": origin,
+            },
+        ),
+    }
+
+
+def weather_discovery_payloads(
+    app_version: str,
+) -> dict[str, tuple[str, dict[str, Any]]]:
+    device = system_device(app_version)
+    origin = _origin(app_version)
+    return {
+        "precipitation_type": (
+            f"{DISCOVERY_PREFIX}/sensor/dh_climate_app_precipitation_type/config",
+            {
+                "name": "Precipitation type",
+                "unique_id": "dh_climate_app_precipitation_type",
+                "default_entity_id": "sensor.dh_climate_app_precipitation_type",
+                "state_topic": f"{WEATHER_BASE}/precipitation/type",
+                "json_attributes_topic": WEATHER_ATTRIBUTES_TOPIC,
+                "availability_topic": SYSTEM_AVAILABILITY_TOPIC,
+                "icon": "mdi:weather-rainy",
+                "device": device,
+                "origin": origin,
+            },
+        ),
+        "precipitation_amount": (
+            f"{DISCOVERY_PREFIX}/sensor/dh_climate_app_precipitation_amount/config",
+            {
+                "name": "Precipitation current hour",
+                "unique_id": "dh_climate_app_precipitation_amount",
+                "default_entity_id": "sensor.dh_climate_app_precipitation_amount",
+                "state_topic": f"{WEATHER_BASE}/precipitation/mm",
+                "json_attributes_topic": WEATHER_ATTRIBUTES_TOPIC,
+                "device_class": "precipitation",
+                "unit_of_measurement": "mm",
+                "availability_topic": SYSTEM_AVAILABILITY_TOPIC,
+                "icon": "mdi:weather-pouring",
                 "device": device,
                 "origin": origin,
             },
@@ -375,6 +434,35 @@ def room_humidity_state_topics(state: HumidityState) -> dict[str, str]:
         f"{base}/humidity/action": state.action,
         f"{base}/humidity/current": _number(state.current_humidity),
         f"{base}/humidity/target": _number(state.target_humidity),
+    }
+
+
+def weather_state_topics(state: WeatherState) -> dict[str, str]:
+    attrs = {
+        "condition": state.condition,
+        "precipitation_type": state.precipitation_type,
+        "precipitation_mm": state.precipitation_mm,
+        "amount_semantics": "hourly_forecast",
+        "forecast_at": (
+            state.forecast_at.isoformat()
+            if state.forecast_at is not None
+            else None
+        ),
+        "source_entity": state.source_entity,
+        "observed_at": state.observed_at.isoformat(),
+    }
+    return {
+        f"{WEATHER_BASE}/precipitation/type": state.precipitation_type,
+        f"{WEATHER_BASE}/precipitation/mm": _number(
+            state.precipitation_mm,
+            precision=3,
+        ),
+        WEATHER_ATTRIBUTES_TOPIC: json.dumps(
+            attrs,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
     }
 
 
