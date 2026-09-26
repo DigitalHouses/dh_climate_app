@@ -61,13 +61,17 @@ Changing either target persists it in SQLite.
 
 Each configured room becomes its own MQTT Device. Assign that device to the matching Home Assistant Area.
 
-The room thermostat exposes:
+The room thermostat exposes, only while HEAT or COOL season is active:
 
 - current room temperature;
 - current room humidity when configured;
 - the target of the currently active user profile;
 - stable HVAC modes `off / auto`;
 - HVAC action `heating / cooling / idle / off`.
+
+During interseason (`season: off`) the room thermostat is deliberately
+published unavailable. The user cannot adjust a thermostat when the house
+climate engine is not in either heating or cooling season.
 
 `auto` means DigitalHouses owns the seasonal HEAT / COOL / OFF decision.
 The room thermostat does not expose seasonal heat/cool switching to the user.
@@ -104,7 +108,9 @@ Target identity is:
 room × season × profile
 ```
 
-Selecting another profile through the thermostat is a short facade-only editing overlay, matching the previous DH Climate behavior. It resets after inactivity.
+The hidden configuration Number entities remain available during interseason,
+so an installer can prepare future seasonal profile targets without exposing
+an inactive room thermostat to normal users.
 
 ## Window context
 
