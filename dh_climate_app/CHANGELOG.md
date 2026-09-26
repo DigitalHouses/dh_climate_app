@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.19 — development
+
+- Added a dedicated `sensor.dh_climate_app_outdoor_temperature_avg24` entity for the App's existing time-weighted 24-hour outdoor temperature average.
+- The sensor reuses the same persisted Climate Core rolling average, publishes one-decimal °C values, and does not introduce a second calculation path.
+
 ## 0.1.18 — 2026-09-27
 
 - Restored season-specific room Climate capabilities: HEAT exposes only `off / heat`, COOL exposes only `off / cool`, and interseason exposes only `off`.
