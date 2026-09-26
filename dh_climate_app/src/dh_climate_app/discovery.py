@@ -246,7 +246,10 @@ def room_target_discovery_payload(
         "mode": "box",
         "entity_category": "config",
         "visible_by_default": False,
-        "availability_topic": SYSTEM_AVAILABILITY_TOPIC,
+        "availability": [
+            {"topic": SYSTEM_AVAILABILITY_TOPIC},
+        ],
+        "availability_mode": "all",
         "retain": True,
         "device": room_device(room, app_version),
         "origin": _origin(app_version),
