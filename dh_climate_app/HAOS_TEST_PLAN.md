@@ -66,9 +66,10 @@ Acceptance:
 - no redundant temperature/humidity sensor entities are created merely to duplicate thermostat values;
 - multiple configured room temperature sensors are averaged;
 - unavailable room temperature makes the room climate facade unavailable;
-- room climate capabilities follow the global season: HEAT -> `off/heat`,
-  COOL -> `off/cool`, OFF -> `off`;
-- an enabled room publishes `heat` in HEAT season and `cool` in COOL season;
+- room climate capabilities remain stable as `off/heat/cool` across all
+  seasons so MQTT Discovery does not rebuild the entity on season transitions;
+- an enabled room publishes state `heat` in HEAT season and state `cool`
+  in COOL season; interseason publishes state `off`;
 - HVAC action independently exposes the current room action:
   `heating / cooling / idle / off`;
 - OFF season keeps the climate entity available when room temperature is valid,
