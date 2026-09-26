@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.7 — development
+
+- Fixed migration of profile target Number availability after the 0.1.6 interseason change. Existing MQTT Discovery entities now explicitly replace the old room-dependent availability list with system-only availability, so target settings remain editable while room thermostats are unavailable between seasons.
+
 ## 0.1.6 — development
 
 - Room thermostats are now deliberately unavailable while global season is `OFF`, preventing users from changing an inactive thermostat during interseason.
