@@ -284,7 +284,7 @@ Climate diagnostics use two independent channels:
 - the App's own Python log is authoritative and is available through Home Assistant App logs;
 - important climate-control transitions are mirrored best-effort to the local Home Assistant service `script.write2climatelog`.
 
-The mirror is asynchronous. Failure or absence of `script.write2climatelog` never delays control, never triggers retry pressure and never creates a Climate Problem.
+The mirror is asynchronous and serialized through one bounded FIFO queue, so `climate.log` preserves the same decision order as the App log. Failure or absence of `script.write2climatelog` never delays control, never triggers retry pressure and never creates a Climate Problem.
 
 FAST/SLOW actuator traces include desired versus actual state, service calls, bounded retries, cooldown entry and command confirmation. Stable `desired == actual` reconciles are deliberately silent, so the 10-second runtime tick does not flood `climate.log`.
 
