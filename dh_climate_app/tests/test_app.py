@@ -59,6 +59,35 @@ class RoomTargetCommandTests(unittest.IsolatedAsyncioTestCase):
             runtime.store.calls,
         )
 
+    async def test_interseason_thermostat_commands_do_not_change_targets(self) -> None:
+        runtime = self.runtime()
+        runtime._last_room_states["livingroom"] = RoomState(
+            room_id="livingroom",
+            name="Living Room",
+            current_temperature=26.2,
+            current_humidity=None,
+            season=Season.OFF,
+            effective_profile=Profile.DAY,
+            target_temperature=None,
+            climate_control_enabled=True,
+            control_action=HvacAction.OFF,
+            hvac_mode="off",
+            hvac_action=HvacAction.OFF,
+        )
+
+        await runtime._handle_room_command(
+            "livingroom",
+            "target_temperature",
+            "23.5",
+        )
+        await runtime._handle_room_command(
+            "livingroom",
+            "hvac_mode",
+            "auto",
+        )
+
+        self.assertEqual([], runtime.store.calls)
+
     async def test_profile_setting_can_edit_inactive_night_target(self) -> None:
         runtime = self.runtime()
 
