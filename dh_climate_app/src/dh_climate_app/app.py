@@ -316,6 +316,52 @@ class ClimateRuntime:
             )
             humidity_states = self.humidity.evaluate_all(values)
 
+            previous_outdoor = self._last_outdoor_state
+            current_temperature = (
+                None
+                if outdoor_state.current_temperature is None
+                else round(float(outdoor_state.current_temperature), 1)
+            )
+            previous_temperature = (
+                None
+                if previous_outdoor is None
+                or previous_outdoor.current_temperature is None
+                else round(float(previous_outdoor.current_temperature), 1)
+            )
+
+            if previous_outdoor is None:
+                self.climate_log.write2climate_log(
+                    "OUTDOOR",
+                    (
+                        f"temperature={current_temperature}"
+                        f" source={outdoor_state.temperature_source or 'none'}"
+                    ),
+                )
+            else:
+                if current_temperature != previous_temperature:
+                    self.climate_log.write2climate_log(
+                        "OUTDOOR",
+                        (
+                            f"temperature {previous_temperature}"
+                            f" -> {current_temperature} °C"
+                            f" | source={outdoor_state.temperature_source or 'none'}"
+                        ),
+                    )
+
+                if (
+                    outdoor_state.temperature_source
+                    != previous_outdoor.temperature_source
+                ):
+                    self.climate_log.write2climate_log(
+                        "OUTDOOR",
+                        (
+                            f"source "
+                            f"{previous_outdoor.temperature_source or 'none'}"
+                            f" -> {outdoor_state.temperature_source or 'none'}"
+                            f" | temperature={current_temperature} °C"
+                        ),
+                    )
+
             for room_id, room_state in room_states.items():
                 signature = (
                     room_state.season.value,
