@@ -2,7 +2,7 @@
 set -Ee -o pipefail
 
 APP="8d59ce70_dh_climate_app"
-EXPECTED_VERSION="0.1.15"
+EXPECTED_VERSION="0.1.16"
 CORE="http://supervisor/core"
 SUPERVISOR="http://supervisor"
 TOKEN="${SUPERVISOR_TOKEN:-}"
@@ -269,6 +269,16 @@ set_number() {
   local entity="$1"
   local value="$2"
   ha_service     "number"     "set_value"     "$(jq -cn --arg entity "$entity" --argjson value "$value"       '{entity_id:$entity,value:$value}')"
+}
+
+set_climate_preset() {
+  local entity="$1"
+  local preset="$2"
+  ha_service \
+    "climate" \
+    "set_preset_mode" \
+    "$(jq -cn --arg entity "$entity" --arg preset "$preset" \
+      '{entity_id:$entity,preset_mode:$preset}')"
 }
 
 set_humidifier_power() {
@@ -542,6 +552,8 @@ TEST_OPTIONS_FILE="${WORKDIR}/test_options.json"
 jq '
   .outdoor_temperature_sources = "sensor.dh_climate_accept_outdoor" |
   .outdoor_humidity_sources = "sensor.dh_climate_accept_humidity" |
+  .night_mode = "" |
+  .we_at_home = "" |
   .ac_min_outdoor_temperature = -10 |
   .rooms |= map(
     if .id == "livingroom" then
@@ -575,10 +587,55 @@ mqtt_pub "dh_climate_accept/window/state" "OFF" true
 mqtt_pub "dh_climate_accept/stubborn/mode/state" "heat" true
 mqtt_pub "dh_climate_accept/stubborn/temp/state" "23.0" true
 
+say "5B. ROOM CLIMATE · NATIVE HVAC / ACTION / PRESET"
+
+set_input_number "$ROOM_TEMP_HELPER" 20
+force_heat
+wait_state "$ROOM_CLIMATE" "heat" 30
+wait_attr "$ROOM_CLIMATE" "hvac_action" "heating" 30
+wait_attr "$ROOM_CLIMATE" "preset_mode" "day" 30
+state_json "$ROOM_CLIMATE" | jq -e '
+  (.attributes.hvac_modes == ["off","heat"]) and
+  ((.attributes.preset_modes | index("day")) != null) and
+  ((.attributes.preset_modes | index("night")) != null) and
+  ((.attributes.preset_modes | index("away")) != null) and
+  ((.attributes.preset_modes | index("none")) != null)
+' >/dev/null || fail "room climate HEAT/preset capability contract mismatch"
+echo "PASS room climate HEAT + heating + day preset"
+
+set_climate_preset "$ROOM_CLIMATE" "night"
+wait_attr "$ROOM_CLIMATE" "preset_mode" "night" 20
+wait_numeric_attr "$ROOM_CLIMATE" "temperature" 20 20
+echo "PASS native night preset exposes night target"
+
+set_climate_preset "$ROOM_CLIMATE" "none"
+wait_attr "$ROOM_CLIMATE" "preset_mode" "day" 20
+wait_numeric_attr "$ROOM_CLIMATE" "temperature" 23 20
+echo "PASS preset none returns to automatic effective profile"
+
+set_input_number "$ROOM_TEMP_HELPER" 30
+force_cool
+wait_state "$ROOM_CLIMATE" "cool" 30
+wait_attr "$ROOM_CLIMATE" "hvac_action" "cooling" 30
+wait_attr "$ROOM_CLIMATE" "preset_mode" "day" 30
+state_json "$ROOM_CLIMATE" | jq -e '
+  .attributes.hvac_modes == ["off","cool"]
+' >/dev/null || fail "room climate COOL capability contract mismatch"
+echo "PASS room climate COOL + cooling"
+
+force_off
+wait_state "$ROOM_CLIMATE" "off" 30
+wait_attr "$ROOM_CLIMATE" "hvac_action" "off" 30
+state_json "$ROOM_CLIMATE" | jq -e '
+  .attributes.hvac_modes == ["off"]
+' >/dev/null || fail "room climate OFF capability contract mismatch"
+echo "PASS room climate interseason OFF"
+
 say "6. TARGET_OUT_OF_RANGE · LIVE"
 
 set_input_number "$ROOM_TEMP_HELPER" 20
 force_heat
+wait_state "$ROOM_CLIMATE" "heat" 30
 wait_attr "$ROOM_CLIMATE" "control_action" "heating" 30
 
 wait_problem "device_target_out_of_range" "$NARROW" 30
@@ -785,6 +842,7 @@ echo
 echo "============================================================"
 echo "DH CLIMATE 0.1.15 · BUNDLED LIVE ACCEPTANCE = PASS"
 echo "============================================================"
+echo "PASS room climate native heat/cool + action + presets"
 echo "PASS device_target_out_of_range"
 echo "PASS no_confirmation -> RETRY -> COOLDOWN -> recovery"
 echo "PASS SLOW floor execution"
