@@ -160,6 +160,23 @@ wait_number() {
   fail "$entity=$actual expected≈$expected"
 }
 
+wait_numeric_attr() {
+  local entity="$1"
+  local attr="$2"
+  local expected="$3"
+  local seconds="${4:-30}"
+  local i actual
+  for i in $(seq 1 "$seconds"); do
+    actual="$(attr_value "$entity" "$attr" 2>/dev/null || true)"
+    if awk -v a="$actual" -v b="$expected" 'BEGIN{exit !((a-b<0?b-a:a-b)<0.051)}'; then
+      return 0
+    fi
+    sleep 1
+  done
+  actual="$(attr_value "$entity" "$attr" 2>/dev/null || true)"
+  fail "$entity.$attr=$actual expected≈$expected"
+}
+
 problem_has() {
   local code="$1"
   local entity="${2:-}"
@@ -558,7 +575,7 @@ ha apps logs "$APP" | tail -n 300 |   grep -F "$NARROW" | tail -n 30 || true
 relax_narrow_range
 wait_no_problem "device_target_out_of_range" "$NARROW" 30
 wait_state "$NARROW" "heat" 30
-wait_number "$NARROW" 23 30
+wait_numeric_attr "$NARROW" "temperature" 23 30
 echo "PASS target_out_of_range recovered"
 
 say "7. NO_CONFIRMATION -> RETRY -> COOLDOWN -> RECOVERY"
@@ -593,7 +610,7 @@ set_input_number "$ROOM_TEMP_HELPER" 30
 wait_number "$ROOM_TEMP_HELPER" 30 10
 wait_attr "$ROOM_CLIMATE" "control_action" "idle" 30
 wait_state "$SLOW" "heat" 30
-wait_number "$SLOW" 27 30
+wait_numeric_attr "$SLOW" "temperature" 27 30
 
 echo "PASS SLOW remains heat at target 27 while room demand is idle"
 
