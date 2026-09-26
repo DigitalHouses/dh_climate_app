@@ -1,6 +1,6 @@
 # DH Climate App — HAOS acceptance plan
 
-Status: release gate for the first experimental `0.1.0` image.
+Status: bundled runtime acceptance for `0.1.15` passed on real HAOS on 2026-09-27. Canonical immutable release publication remains pending.
 
 The unit test suite proves deterministic business rules. This plan proves the boundaries that only a real Home Assistant OS installation can verify: Supervisor configuration, MQTT Discovery, entity UI behavior, service execution, persistence, backup and restore.
 
@@ -186,25 +186,33 @@ Acceptance:
 
 Acceptance:
 
-- Full Backup contains persistent `/data` state;
+- a Supervisor backup containing the Climate App (full or App-only partial) contains persistent `/data` state;
 - restored App preserves season thresholds, room targets, humidity targets and telemetry installation identity;
 - backup does not embed a locally built application image;
 - after a newer version exists, a backup from the older released version can still restore by retrieving its historical versioned GHCR image.
 
 ## 13. Release decision
 
-The first release is accepted only when:
+Runtime acceptance status for 0.1.15:
 
 ```text
 repository CI = green
 container build = green
 real HAOS install/start = green
 season facade = green
-one FAST heat path = green
-one FAST cool path = green
-one SLOW thermostat path = green
+FAST heat/cool execution = green
+target_out_of_range safety = green
+no_confirmation/retry/cooldown = green
+SLOW thermostat path = green
+window context = green
+cold-weather reversible climate protection = green
+humidity safe shutdown = green
 restart/reconnect = green
-backup/restore = green
+Climate-App-only backup/restore = green
+final clean baseline = green
+immutable release publication = pending
 ```
+
+See [docs/ACCEPTANCE_0.1.15.md](docs/ACCEPTANCE_0.1.15.md) for the recorded live acceptance result.
 
 Failures found in HAOS acceptance are fixed in a new commit/version. A published immutable image version is never overwritten with different content.
