@@ -206,7 +206,7 @@ class ClimateRuntime:
             ).total_seconds() >= WEATHER_FORECAST_REFRESH_SECONDS
         )
         needs_forecast = (
-            self._weather_forecast_response is None
+            self._weather_forecast_fetched_at is None
             or self._weather_source_last_updated != source_state.last_updated
             or forecast_expired
         )
