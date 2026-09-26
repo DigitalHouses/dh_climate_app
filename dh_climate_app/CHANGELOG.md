@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.15 — development
+
+- Fixed humidifier shutdown safety: inactive `humidifier.*` actuators no longer carry a target-humidity command, so an out-of-range target cannot block `turn_off`.
+- Added cross-module humidity safety coverage for active target application, independent humidity disable, and inactive-device shutdown.
+- Added cold `/data` durability coverage for season thresholds, room targets/control state, humidity targets/control state, hysteresis continuity, and telemetry installation identity.
+- Added bundled actuator/safety acceptance coverage for SLOW floor behavior, window inhibition, cold-weather reversible climate protection, target range blocking, and retry/cooldown recovery.
 ## 0.1.14 — development
 
 - Separated Home Assistant service-call success from device-state verification: successful calls now log `SENT`, never `CONFIRMED`.
