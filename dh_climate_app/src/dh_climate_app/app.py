@@ -333,6 +333,10 @@ class ClimateRuntime:
             raise ValueError(f"room state is not available: {room_id}")
 
         if command == "hvac_mode":
+            # The room climate facade is read-only during interseason. Ignore
+            # commands from HA/HomeKit until a real HEAT/COOL season is active.
+            if state.season is Season.OFF:
+                return
             mode = payload.strip().lower()
             if mode == "off":
                 self.store.set_climate_control_enabled(room_id, False)
