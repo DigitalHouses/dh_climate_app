@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.5 — development
+
+- Reworked room climate facade for Apple Home/HomeKit: stable `off / auto` HVAC modes, no fan or preset semantics, and the thermostat target always edits the currently active `day / night / away` profile.
+- Separated the user-facing scheduled target from the internal HEAT antifreeze control target, so turning a room Off does not expose the antifreeze setpoint as the normal thermostat target.
+- Replaced the temporary Profile select with hidden-by-default configuration Number entities for Heat/Cool Day/Night/Away targets and Heat antifreeze target; the old retained select Discovery entry is removed automatically on upgrade.
+
 ## 0.1.4 — development
 
 - Removed room profiles from MQTT Climate presets entirely. Each room now exposes a separate `select` Profile entity with exactly `day / night / away`, so the thermostat remains a plain native climate entity and Home Assistant no longer injects the reserved `none` preset into its UI.
