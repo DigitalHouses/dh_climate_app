@@ -11,6 +11,7 @@ import signal
 from .config import AppConfig, configured_entity_ids, parse_options
 from .core import Profile, Season
 from .devices import compile_room_devices
+from .events import ClimateEventEngine
 from .executor import DeviceExecutor, ReconcileSummary
 from .ha_client import HaState, HomeAssistantClient, StateCache
 from .humidity import HumidityEngine, HumidityState
@@ -20,6 +21,7 @@ from .persistence import StateStore
 from .problems import Problem, collect_problems
 from .rooms import RoomEngine, RoomState
 from .telemetry import TelemetryClient, TelemetryRunner
+from .weather import WeatherState, build_weather_state, select_weather_source
 
 
 LOGGER = logging.getLogger(__name__)
@@ -62,6 +64,11 @@ class ClimateRuntime:
         )
         self.rooms = RoomEngine(config=config, store=self.store)
         self.humidity = HumidityEngine(config=config, store=self.store)
+        self.events = ClimateEventEngine()
+        self.weather_source = select_weather_source(
+            config.outdoor.temperature_sources,
+            config.outdoor.humidity_sources,
+        )
 
         self.command_queue: asyncio.Queue[MqttCommand] = asyncio.Queue()
         self._calculation_lock = asyncio.Lock()
@@ -69,6 +76,9 @@ class ClimateRuntime:
         self._last_outdoor_state: OutdoorState | None = None
         self._last_room_states: dict[str, RoomState] = {}
         self._last_humidity_states: dict[str, HumidityState] = {}
+        self._last_weather_state: WeatherState | None = None
+        self._weather_forecast_response: object | None = None
+        self._weather_source_last_updated: datetime | None = None
         self._last_reconcile = ReconcileSummary(commands=0, problems=())
         self._last_problems: tuple[Problem, ...] = ()
 
@@ -86,6 +96,7 @@ class ClimateRuntime:
             started_at=self.started_at,
             rooms=config.rooms,
             command_queue=self.command_queue,
+            weather_enabled=self.weather_source is not None,
         )
         self.ha = HomeAssistantClient(
             token=os.environ["SUPERVISOR_TOKEN"],
@@ -145,6 +156,9 @@ class ClimateRuntime:
         self._ha_connected = connected
         if not connected:
             self.cache.clear()
+            self.events.reset()
+            self._weather_source_last_updated = None
+            self._weather_forecast_response = None
             self.facade.set_season_available(False)
             self.facade.set_rooms_available(False)
             return
@@ -152,6 +166,53 @@ class ClimateRuntime:
         await self._recalculate(
             observed_at=datetime.now(timezone.utc),
             record_outdoor_sample=False,
+        )
+
+    async def _evaluate_weather(
+        self,
+        snapshot: dict[str, HaState],
+        *,
+        observed_at: datetime,
+    ) -> WeatherState | None:
+        if self.weather_source is None:
+            return None
+
+        source_state = snapshot.get(self.weather_source)
+        if source_state is None:
+            return None
+
+        needs_forecast = (
+            self._weather_forecast_response is None
+            or self._weather_source_last_updated != source_state.last_updated
+        )
+        if needs_forecast and source_state.state not in {"unknown", "unavailable"}:
+            try:
+                self._weather_forecast_response = await self.ha.call_service_response(
+                    "weather",
+                    "get_forecasts",
+                    {
+                        "entity_id": self.weather_source,
+                        "type": "hourly",
+                    },
+                )
+            except Exception:
+                LOGGER.warning(
+                    "Hourly weather forecast unavailable for %s",
+                    self.weather_source,
+                    exc_info=True,
+                )
+                self._weather_forecast_response = None
+            self._weather_source_last_updated = source_state.last_updated
+
+        return build_weather_state(
+            source_entity=self.weather_source,
+            ha_state=source_state,
+            hourly_forecast_response=(
+                self._weather_forecast_response
+                if isinstance(self._weather_forecast_response, dict)
+                else None
+            ),
+            observed_at=observed_at,
         )
 
     async def _recalculate(
@@ -168,6 +229,10 @@ class ClimateRuntime:
                 observed_at=observed_at,
                 record_sample=record_outdoor_sample,
             )
+            weather_state = await self._evaluate_weather(
+                snapshot,
+                observed_at=observed_at,
+            )
             room_states = self.rooms.evaluate_all(
                 values,
                 season=outdoor_state.season,
@@ -177,8 +242,11 @@ class ClimateRuntime:
             self._last_outdoor_state = outdoor_state
             self._last_room_states = room_states
             self._last_humidity_states = humidity_states
+            self._last_weather_state = weather_state
 
             self.facade.publish_season(outdoor_state)
+            if weather_state is not None:
+                self.facade.publish_weather(weather_state)
 
             for room_id, room_state in room_states.items():
                 profile_targets = {
@@ -217,6 +285,15 @@ class ClimateRuntime:
                 execution=self._last_reconcile.problems,
             )
             self.facade.publish_problems(self._last_problems)
+
+            for event in self.events.observe(
+                outdoor=outdoor_state,
+                weather=weather_state,
+                rooms=room_states,
+                problems=self._last_problems,
+                observed_at=observed_at,
+            ):
+                self.facade.publish_event(event)
 
             return outdoor_state
 
