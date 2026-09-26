@@ -6,6 +6,7 @@
 - Added cross-module humidity safety coverage for active target application, independent humidity disable, and inactive-device shutdown.
 - Added cold `/data` durability coverage for season thresholds, room targets/control state, humidity targets/control state, hysteresis continuity, and telemetry installation identity.
 - Added bundled actuator/safety acceptance coverage for SLOW floor behavior, window inhibition, cold-weather reversible climate protection, target range blocking, and retry/cooldown recovery.
+- Passed bundled live HAOS runtime acceptance on 2026-09-27, including target range blocking, bounded no-confirmation retry/cooldown recovery, SLOW, window context, cold-weather protection, humidity safe shutdown, and Climate-App-only Supervisor backup/restore.
 ## 0.1.14 — development
 
 - Separated Home Assistant service-call success from device-state verification: successful calls now log `SENT`, never `CONFIRMED`.
