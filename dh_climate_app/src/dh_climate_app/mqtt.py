@@ -14,6 +14,7 @@ from .discovery import (
     SYSTEM_AVAILABILITY_TOPIC,
     SYSTEM_PROBLEM_ATTRIBUTES_TOPIC,
     SYSTEM_PROBLEM_TOPIC,
+    SYSTEM_EVENT_TOPIC,
     diagnostic_discovery_payloads,
     room_climate_discovery_payload,
     room_climate_discovery_topic,
@@ -31,10 +32,13 @@ from .discovery import (
     season_discovery_topic,
     season_state_topics,
     system_state_payload,
+    weather_discovery_payloads,
+    weather_state_topics,
 )
 from .humidity import HumidityState
 from .outdoor import OutdoorState
 from .rooms import RoomState
+from .weather import WeatherState
 
 
 LOGGER = logging.getLogger(__name__)
@@ -186,12 +190,14 @@ class ClimateMqttFacade:
         started_at,
         rooms: Iterable[RoomConfig],
         command_queue: asyncio.Queue[MqttCommand],
+        weather_enabled: bool = False,
     ) -> None:
         self.bridge = bridge
         self.app_version = app_version
         self.started_at = started_at
         self.rooms = {room.room_id: room for room in rooms}
         self.command_queue = command_queue
+        self.weather_enabled = bool(weather_enabled)
         self.bridge.set_message_handler(self._on_message)
 
     def start(self) -> None:
@@ -244,6 +250,25 @@ class ClimateMqttFacade:
                 retain=True,
                 force=True,
             )
+
+        for _, (topic, payload) in weather_discovery_payloads(
+            self.app_version
+        ).items():
+            self.bridge.publish(
+                topic,
+                (
+                    json.dumps(
+                        payload,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    )
+                    if self.weather_enabled
+                    else ""
+                ),
+                retain=True,
+                force=True,
+            )
         self.bridge.publish(
             "DigitalHouses/Global/dh_climate_app/state",
             system_state_payload(
@@ -259,6 +284,25 @@ class ClimateMqttFacade:
         for topic, payload in season_state_topics(state).items():
             count += int(self.bridge.publish(topic, payload, retain=True))
         return count
+
+    def publish_weather(self, state: WeatherState) -> int:
+        count = 0
+        for topic, payload in weather_state_topics(state).items():
+            count += int(self.bridge.publish(topic, payload, retain=True))
+        return count
+
+    def publish_event(self, payload: dict[str, object]) -> bool:
+        return self.bridge.publish(
+            SYSTEM_EVENT_TOPIC,
+            json.dumps(
+                payload,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+            retain=False,
+            force=True,
+        )
 
     def publish_room(
         self,
