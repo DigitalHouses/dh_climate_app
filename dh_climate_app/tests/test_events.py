@@ -198,6 +198,37 @@ class ClimateEventTests(unittest.TestCase):
             {event["event_type"] for event in recovered},
         )
 
+    def test_device_problem_event_keeps_room_context(self) -> None:
+        engine = ClimateEventEngine()
+        engine.observe(
+            outdoor=outdoor(Season.HEAT),
+            weather=weather("none"),
+            rooms={"livingroom": room()},
+            problems=(),
+            observed_at=NOW,
+        )
+        problem = Problem(
+            code="device_unavailable",
+            scope="device",
+            room_id="livingroom",
+            entity_id="climate.fast",
+            details="Home Assistant entity is unavailable",
+        )
+
+        events = engine.observe(
+            outdoor=outdoor(Season.HEAT),
+            weather=weather("none"),
+            rooms={"livingroom": room()},
+            problems=(problem,),
+            observed_at=NOW,
+        )
+
+        event = events[0]
+        self.assertEqual("problem_started", event["event_type"])
+        self.assertEqual("device_unavailable", event["problem_id"])
+        self.assertEqual("livingroom", event["room_id"])
+        self.assertEqual("climate.fast", event["entity_id"])
+
 
 if __name__ == "__main__":
     unittest.main()
