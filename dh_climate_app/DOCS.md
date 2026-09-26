@@ -65,21 +65,36 @@ The room thermostat exposes:
 
 - current room temperature;
 - current room humidity when configured;
-- room target;
-- current season-constrained HVAC mode;
-- HVAC action.
+- the target of the currently active user profile;
+- stable HVAC modes `off / auto`;
+- HVAC action `heating / cooling / idle / off`.
 
-Each room also exposes a separate `select` entity named **Profile** with
-exactly `day / night / away`.
+`auto` means DigitalHouses owns the seasonal HEAT / COOL / OFF decision.
+The room thermostat does not expose seasonal heat/cool switching to the user.
+This gives HomeKit/Apple Home a stable native Thermostat capability contract.
 
-Profiles are deliberately not published as either `fan_mode` or
-`climate.preset_mode`. This keeps the room `climate` entity a plain native
-thermostat for HomeKit/Apple Home and other thermostat consumers, and avoids
-Home Assistant's reserved MQTT preset value `none`.
+Changing the thermostat target always changes the target that is active for
+the user at that moment: `day`, `night`, or `away`. It never edits an
+inactive profile behind the user's back.
 
-`antifreeze` is an internal protection profile. In HEAT season, switching a
-room thermostat off keeps the antifreeze target active internally; it is not
-published as a user-selectable profile.
+Profile presets are deliberately not published as either `fan_mode` or
+`climate.preset_mode`.
+
+Each room exposes separate hidden-by-default configuration `number` entities
+for the persisted profile targets:
+
+- Heat day / night / away;
+- Heat antifreeze;
+- Cool day / night / away.
+
+These settings allow an installer or advanced Home Assistant user to prepare,
+for example, the Night target during daytime without changing what the active
+thermostat is currently controlling.
+
+`antifreeze` remains an internal HEAT protection profile. When a room
+thermostat is Off, the user-facing thermostat keeps its scheduled
+`day / night / away` target while the internal control loop may still use the
+antifreeze target.
 
 Multiple room temperature or humidity sensors are averaged from their latest available values.
 
