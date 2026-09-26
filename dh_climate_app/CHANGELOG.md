@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3 — development
+
+- Treat Home Assistant's reserved MQTT climate preset `none` as a reset of the temporary room profile overlay, returning to the automatically selected `day / night / away` profile.
+
 ## 0.1.2 — development
 
 - Replaced room thermostat `fan_modes` with native climate `preset_modes` (`day / night / away`) so Apple Home and other thermostat consumers keep native thermostat semantics; `antifreeze` remains internal protection.
