@@ -66,6 +66,13 @@ class ClimateEventEngine:
         self._windows: dict[str, str] = {}
         self._problems: dict[tuple[object, ...], Problem] = {}
 
+    def reset(self) -> None:
+        self._initialized = False
+        self._season = None
+        self._weather = None
+        self._windows = {}
+        self._problems = {}
+
     def observe(
         self,
         *,
