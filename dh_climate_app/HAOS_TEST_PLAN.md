@@ -102,7 +102,11 @@ Acceptance:
 - FAST climate receives the correct HVAC mode and room air target;
 - an already-correct physical state produces no duplicate service call;
 - unsupported HVAC mode or out-of-range target is not blindly sent;
-- unavailable physical entity produces a Problem diagnostic instead of a tight retry loop.
+- unavailable physical entity produces a Problem diagnostic instead of a tight retry loop;
+- App log shows FAST desired/actual, CALL, retry/cooldown and confirmation transitions;
+- local `climate.log` receives the same selected traces through `script.write2climatelog`;
+- repeated already-correct reconciles do not create log spam;
+- failure of the local climate-log mirror does not change actuator control or Problem state.
 
 ## 6. SLOW floor execution
 

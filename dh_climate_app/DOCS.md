@@ -277,6 +277,19 @@ It does not send a command when state already matches. Repeated mismatches are r
 
 Before sending climate commands, the App checks reported supported HVAC modes and target limits where Home Assistant exposes them.
 
+### Climate diagnostic logging
+
+Climate diagnostics use two independent channels:
+
+- the App's own Python log is authoritative and is available through Home Assistant App logs;
+- important climate-control transitions are mirrored best-effort to the local Home Assistant service `script.write2climatelog`.
+
+The mirror is asynchronous. Failure or absence of `script.write2climatelog` never delays control, never triggers retry pressure and never creates a Climate Problem.
+
+FAST/SLOW actuator traces include desired versus actual state, service calls, bounded retries, cooldown entry and command confirmation. Stable `desired == actual` reconciles are deliberately silent, so the 10-second runtime tick does not flood `climate.log`.
+
+Room control state is logged only when its control signature changes (season/profile/enabled state/control action/internal control target/window state). The internal control target is therefore visible during FAST debugging without logging every unchanged tick.
+
 On Home Assistant disconnect, cached facts are invalidated and App control is suspended until a fresh snapshot is obtained.
 
 ## Persistence

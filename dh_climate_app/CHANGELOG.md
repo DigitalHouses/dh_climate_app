@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.11 — development
+
+- Added dual-channel Climate diagnostic logging: authoritative App log plus asynchronous best-effort mirroring to local `script.write2climatelog`.
+- Added transition-based room control logging and FAST/SLOW execution traces for desired/actual state, service calls, bounded retries, cooldown and confirmation without per-tick already-correct spam.
+- Climate-log mirror failures are isolated from climate control, retries and Problem state.
+- Actuator Problems now preserve `room_id` where applicable, so existing `problem_started` / `problem_recovered` events have enough room context for future local notifications.
+
 ## 0.1.10 — development
 
 - Standardized every public App temperature value to one decimal place.
