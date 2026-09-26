@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.9 — development
+
+- Added dedicated UI sensors for current outdoor temperature and humidity.
+- Outdoor UI sensors use the same prioritized/fallback sources as Climate Core and never replace current values with avg24 values.
+- Added source and avg24 context as sensor attributes.
+
 ## 0.1.8 — development
 
 - Changed interseason room climate behavior from unavailable to readable-Off: current room temperature remains visible, no seasonal target is exposed, and room thermostat commands are ignored while season is OFF.
