@@ -159,13 +159,15 @@ Initial event types:
 - `precipitation_type_changed`;
 - `window_opened`;
 - `window_closed`;
-- `window_state_unknown`;
-- `window_state_restored`;
 - `problem_started`;
 - `problem_recovered`.
 
 Events contain machine data only. Human language, formatting and delivery stay
 in the local Home Assistant notification package.
+
+Unknown/restored window truth is represented by `problem_started` /
+`problem_recovered` with problem code `room_window_state_unknown`, avoiding
+duplicate machine events for the same transition.
 
 Routine thermostat hysteresis cycling is intentionally not an Event; retained
 room state already represents that current fact.
