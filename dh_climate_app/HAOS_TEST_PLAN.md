@@ -1,6 +1,6 @@
 # DH Climate App — HAOS acceptance plan
 
-Status: bundled runtime acceptance for `0.1.17` passed on real HAOS on 2026-09-27. Canonical immutable release publication is complete.
+Status: bundled runtime acceptance for `0.1.18` passed on real HAOS on 2026-09-27. Canonical immutable release publication is the remaining gate.
 
 The unit test suite proves deterministic business rules. This plan proves the boundaries that only a real Home Assistant OS installation can verify: Supervisor configuration, MQTT Discovery, entity UI behavior, service execution, persistence, backup and restore.
 
@@ -200,14 +200,15 @@ Acceptance:
 
 ## 13. Release decision
 
-Runtime acceptance status for 0.1.17:
+Runtime acceptance status for 0.1.18:
 
 ```text
 repository CI = green
 container build = green
 real HAOS update/start = green
-season facade = green
-room native heat/cool/off semantics = green
+HEAT modes off/heat only = green
+COOL modes off/cool only = green
+OFF modes off only = green
 room day/night/away presets = green
 preset reset to automatic profile = green
 FAST heat/cool execution = green
@@ -220,11 +221,11 @@ humidity safe shutdown = green
 restart/reconnect = green
 Climate-App-only backup/restore = green
 final clean baseline = green
-immutable release publication = green
+immutable release publication = pending
 ```
 
-See [docs/ACCEPTANCE_0.1.17.md](docs/ACCEPTANCE_0.1.17.md) for the recorded live acceptance result.
+See [docs/ACCEPTANCE_0.1.18.md](docs/ACCEPTANCE_0.1.18.md) for the recorded live acceptance result.
 
-Published artifact: `digitalhouses_climate_app-v0.1.17` / `ghcr.io/digitalhouses/digitalhouses_climate_app:0.1.17` / `sha256:641367437f7d8b1bb2796c0fee983080183cf760217a09661be80baf1b229f3d`.
+Release target: `digitalhouses_climate_app-v0.1.18` / `ghcr.io/digitalhouses/digitalhouses_climate_app:0.1.18`.
 
 Failures found in HAOS acceptance are fixed in a new commit/version. A published immutable image version is never overwritten with different content.
