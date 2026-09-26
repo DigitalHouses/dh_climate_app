@@ -145,7 +145,7 @@ def compile_room_devices(
                         domain=domain,
                         hvac_mode=mode,
                         target_temperature=(
-                            state.target_temperature if active else None
+                            state.control_target_temperature if active else None
                         ),
                         source=f"room:{room.room_id}:fast",
                     )
