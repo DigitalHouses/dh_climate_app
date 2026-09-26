@@ -161,8 +161,25 @@ def room_climate_discovery_topic(room_id: str) -> str:
 
 
 def room_profile_discovery_topic(room_id: str) -> str:
+    """Legacy 0.1.4 select topic kept only for retained-discovery cleanup."""
     object_id = f"dh_climate_app_{room_id}_profile"
     return f"{DISCOVERY_PREFIX}/select/{object_id}/config"
+
+
+ROOM_TARGET_KEYS = (
+    ("heat_day", "Heat day target"),
+    ("heat_night", "Heat night target"),
+    ("heat_away", "Heat away target"),
+    ("heat_antifreeze", "Heat antifreeze target"),
+    ("cool_day", "Cool day target"),
+    ("cool_night", "Cool night target"),
+    ("cool_away", "Cool away target"),
+)
+
+
+def room_target_discovery_topic(room_id: str, target_key: str) -> str:
+    object_id = f"dh_climate_app_{room_id}_{target_key}"
+    return f"{DISCOVERY_PREFIX}/number/{object_id}/config"
 
 
 def room_humidity_discovery_topic(room_id: str) -> str:
@@ -210,18 +227,28 @@ def room_climate_discovery_payload(
     }
 
 
-def room_profile_discovery_payload(
+def room_target_discovery_payload(
     room: RoomConfig,
     app_version: str,
+    *,
+    target_key: str,
+    name: str,
 ) -> dict[str, Any]:
     base = room_base(room.room_id)
     return {
-        "name": "Profile",
-        "unique_id": f"dh_climate_app_{room.room_id}_profile",
-        "default_entity_id": f"select.dh_climate_app_{room.room_id}_profile",
-        "state_topic": f"{base}/climate/profile",
-        "command_topic": f"{base}/climate/set/profile",
-        "options": ["day", "night", "away"],
+        "name": name,
+        "unique_id": f"dh_climate_app_{room.room_id}_{target_key}",
+        "default_entity_id": f"number.dh_climate_app_{room.room_id}_{target_key}",
+        "state_topic": f"{base}/targets/{target_key}",
+        "command_topic": f"{base}/targets/set/{target_key}",
+        "device_class": "temperature",
+        "unit_of_measurement": "°C",
+        "min": 5.0,
+        "max": 35.0,
+        "step": 0.5,
+        "mode": "box",
+        "entity_category": "config",
+        "visible_by_default": False,
         "availability": [
             {"topic": SYSTEM_AVAILABILITY_TOPIC},
             {"topic": f"{base}/climate/availability"},
@@ -308,17 +335,11 @@ def season_state_topics(state: OutdoorState) -> dict[str, str]:
     }
 
 
-def room_climate_state_topics(
-    state: RoomState,
-    *,
-    published_profile: str,
-    published_target: float | None,
-) -> dict[str, str]:
+def room_climate_state_topics(state: RoomState) -> dict[str, str]:
     base = room_base(state.room_id)
     attrs = {
         "season": state.season.value,
         "effective_profile": state.effective_profile.value,
-        "published_profile": published_profile,
         "climate_control_enabled": state.climate_control_enabled,
         "control_action": state.control_action.value,
         "window_state": state.window_state,
@@ -327,16 +348,26 @@ def room_climate_state_topics(
         f"{base}/climate/availability": "online" if state.available else "offline",
         f"{base}/climate/current_temperature": _number(state.current_temperature),
         f"{base}/climate/current_humidity": _number(state.current_humidity),
-        f"{base}/climate/target_temperature": _number(published_target),
+        f"{base}/climate/target_temperature": _number(state.target_temperature),
         f"{base}/climate/hvac_mode": state.hvac_mode,
         f"{base}/climate/hvac_action": state.hvac_action.value,
-        f"{base}/climate/profile": published_profile,
         f"{base}/climate/attributes": json.dumps(
             attrs,
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),
         ),
+    }
+
+
+def room_target_state_topics(
+    room_id: str,
+    targets: dict[str, float | None],
+) -> dict[str, str]:
+    base = room_base(room_id)
+    return {
+        f"{base}/targets/{target_key}": _number(targets.get(target_key))
+        for target_key, _ in ROOM_TARGET_KEYS
     }
 
 
