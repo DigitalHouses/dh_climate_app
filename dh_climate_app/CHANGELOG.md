@@ -2,10 +2,9 @@
 
 ## 0.1.16 — development
 
-- Fixed MQTT Climate preset rehydration after season-driven Discovery changes so Home Assistant does not remain on its internal `none` preset after HEAT/COOL capability rebuilds.
+- Kept room MQTT Climate capabilities stable as `off / heat / cool` across season transitions while the actual entity state remains season-native (`heat / cool / off`). This avoids Home Assistant rebuilding the Climate entity and resetting native preset state to `none`.
 - Hardened the HAOS acceptance harness to wait for numeric room-target and season baseline values after App update before creating the baseline backup.
-
-- Restored season-native room thermostat HVAC modes: HEAT season publishes `heat`, COOL season publishes `cool`, and interseason publishes `off`.
+- Restored season-native room thermostat HVAC state: HEAT season publishes `heat`, COOL season publishes `cool`, and interseason publishes `off`.
 - Restored native Climate presets for `day / night / away` instead of misusing fan-speed semantics; Home Assistant's reserved `none` command clears the temporary profile-edit overlay.
 - Restored the short-lived profile-edit overlay so an inactive profile target can be selected and edited from the room thermostat without changing the automatic day/night/away control source.
 - Room `hvac_action` continues to expose the actual current action (`heating / cooling / idle / off`) independently from HVAC mode.
