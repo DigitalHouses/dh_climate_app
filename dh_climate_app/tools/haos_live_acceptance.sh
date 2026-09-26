@@ -2,7 +2,7 @@
 set -Ee -o pipefail
 
 APP="8d59ce70_dh_climate_app"
-EXPECTED_VERSION="0.1.19"
+EXPECTED_VERSION="0.1.20"
 CORE="http://supervisor/core"
 SUPERVISOR="http://supervisor"
 TOKEN="${SUPERVISOR_TOKEN:-}"
@@ -12,6 +12,8 @@ DISCOVERY="homeassistant"
 ROOM_ID="livingroom"
 
 OUTDOOR_SENSOR="sensor.dh_climate_accept_outdoor"
+OUTDOOR_BACKUP_SENSOR="sensor.dh_climate_accept_outdoor_backup"
+APP_OUTDOOR_SENSOR="sensor.dh_climate_app_outdoor_temperature"
 HUMIDITY_SENSOR="sensor.dh_climate_accept_humidity"
 WINDOW_SENSOR="binary_sensor.dh_climate_accept_window"
 REVERSIBLE="climate.dh_climate_accept_reversible"
@@ -347,6 +349,9 @@ publish_fixture_discovery() {
   payload='{"name":"DH Climate Accept Outdoor","unique_id":"dh_climate_accept_outdoor","default_entity_id":"sensor.dh_climate_accept_outdoor","device_class":"temperature","unit_of_measurement":"°C","state_topic":"dh_climate_accept/outdoor/state"}'
   mqtt_pub "${DISCOVERY}/sensor/dh_climate_accept_outdoor/config" "$payload" true
 
+  payload='{"name":"DH Climate Accept Outdoor Backup","unique_id":"dh_climate_accept_outdoor_backup","default_entity_id":"sensor.dh_climate_accept_outdoor_backup","device_class":"temperature","unit_of_measurement":"°C","state_topic":"dh_climate_accept/outdoor_backup/state"}'
+  mqtt_pub "${DISCOVERY}/sensor/dh_climate_accept_outdoor_backup/config" "$payload" true
+
   payload='{"name":"DH Climate Accept Humidity","unique_id":"dh_climate_accept_humidity","default_entity_id":"sensor.dh_climate_accept_humidity","device_class":"humidity","unit_of_measurement":"%","state_topic":"dh_climate_accept/humidity/state"}'
   mqtt_pub "${DISCOVERY}/sensor/dh_climate_accept_humidity/config" "$payload" true
 
@@ -369,6 +374,7 @@ publish_fixture_discovery() {
   mqtt_pub "${DISCOVERY}/humidifier/dh_climate_accept_humidifier/config" "$payload" true
 
   mqtt_pub "dh_climate_accept/outdoor/state" "5.0" true
+  mqtt_pub "dh_climate_accept/outdoor_backup/state" "6.0" true
   mqtt_pub "dh_climate_accept/humidity/state" "40.0" true
   mqtt_pub "dh_climate_accept/window/state" "OFF" true
   mqtt_pub "dh_climate_accept/stubborn/mode/state" "heat" true
@@ -379,6 +385,7 @@ publish_fixture_discovery() {
   FIXTURES_CREATED=1
 
   wait_entity "$OUTDOOR_SENSOR" 30
+  wait_entity "$OUTDOOR_BACKUP_SENSOR" 30
   wait_entity "$HUMIDITY_SENSOR" 30
   wait_entity "$WINDOW_SENSOR" 30
   wait_entity "$REVERSIBLE" 30
@@ -404,7 +411,7 @@ restrict_humidifier_range() {
 
 clear_fixture_topics() {
   local topic
-  for topic in     "${DISCOVERY}/sensor/dh_climate_accept_outdoor/config"     "${DISCOVERY}/sensor/dh_climate_accept_humidity/config"     "${DISCOVERY}/binary_sensor/dh_climate_accept_window/config"     "${DISCOVERY}/climate/dh_climate_accept_reversible/config"     "${DISCOVERY}/climate/dh_climate_accept_narrow/config"     "${DISCOVERY}/climate/dh_climate_accept_stubborn/config"     "${DISCOVERY}/climate/dh_climate_accept_slow/config"     "${DISCOVERY}/humidifier/dh_climate_accept_humidifier/config"     "dh_climate_accept/outdoor/state"     "dh_climate_accept/humidity/state"     "dh_climate_accept/window/state"     "dh_climate_accept/stubborn/mode/state"     "dh_climate_accept/stubborn/temp/state"     "dh_climate_accept/humidifier/power/state"     "dh_climate_accept/humidifier/target/state"
+  for topic in     "${DISCOVERY}/sensor/dh_climate_accept_outdoor/config"     "${DISCOVERY}/sensor/dh_climate_accept_outdoor_backup/config"     "${DISCOVERY}/sensor/dh_climate_accept_humidity/config"     "${DISCOVERY}/binary_sensor/dh_climate_accept_window/config"     "${DISCOVERY}/climate/dh_climate_accept_reversible/config"     "${DISCOVERY}/climate/dh_climate_accept_narrow/config"     "${DISCOVERY}/climate/dh_climate_accept_stubborn/config"     "${DISCOVERY}/climate/dh_climate_accept_slow/config"     "${DISCOVERY}/humidifier/dh_climate_accept_humidifier/config"     "dh_climate_accept/outdoor/state"     "dh_climate_accept/outdoor_backup/state"     "dh_climate_accept/humidity/state"     "dh_climate_accept/window/state"     "dh_climate_accept/stubborn/mode/state"     "dh_climate_accept/stubborn/temp/state"     "dh_climate_accept/humidifier/power/state"     "dh_climate_accept/humidifier/target/state"
   do
     mqtt_pub "$topic" "" true >/dev/null 2>&1 || true
   done
@@ -483,7 +490,7 @@ do
   wait_entity "$entity" 5
 done
 
-say "1. UPDATE TO 0.1.19"
+say "1. UPDATE TO 0.1.20"
 
 ha store reload
 sleep 3
@@ -572,7 +579,7 @@ say "4. CREATE SYNTHETIC HA FIXTURES"
 
 publish_fixture_discovery
 
-for entity in   "$OUTDOOR_SENSOR"   "$HUMIDITY_SENSOR"   "$WINDOW_SENSOR"   "$REVERSIBLE"   "$NARROW"   "$STUBBORN"   "$SLOW"   "$PHYSICAL_HUMIDIFIER"
+for entity in   "$OUTDOOR_SENSOR"   "$OUTDOOR_BACKUP_SENSOR"   "$HUMIDITY_SENSOR"   "$WINDOW_SENSOR"   "$REVERSIBLE"   "$NARROW"   "$STUBBORN"   "$SLOW"   "$PHYSICAL_HUMIDIFIER"
 do
   state_json "$entity" | jq '{
     entity_id,
@@ -592,7 +599,7 @@ say "5. APPLY ACCEPTANCE OPTIONS"
 TEST_OPTIONS_FILE="${WORKDIR}/test_options.json"
 
 jq '
-  .outdoor_temperature_sources = "sensor.dh_climate_accept_outdoor" |
+  .outdoor_temperature_sources = "sensor.dh_climate_accept_outdoor, sensor.dh_climate_accept_outdoor_backup" |
   .outdoor_humidity_sources = "sensor.dh_climate_accept_humidity" |
   .night_mode = "" |
   .we_at_home = "" |
@@ -624,10 +631,53 @@ set_number "$HEAT_DAY" 23
 wait_number "$HEAT_DAY" 23 20
 
 mqtt_pub "dh_climate_accept/outdoor/state" "5.0" true
+mqtt_pub "dh_climate_accept/outdoor_backup/state" "6.0" true
 mqtt_pub "dh_climate_accept/humidity/state" "40.0" true
 mqtt_pub "dh_climate_accept/window/state" "OFF" true
 mqtt_pub "dh_climate_accept/stubborn/mode/state" "heat" true
 mqtt_pub "dh_climate_accept/stubborn/temp/state" "23.0" true
+
+say "5A. OUTDOOR SOURCE PRIORITY / LOG / EVENT"
+
+wait_attr "$SEASON_CLIMATE" "temperature_source" "sensor.dh_climate_accept_outdoor" 30
+wait_number "$APP_OUTDOOR_SENSOR" 5 30
+
+mqtt_pub "dh_climate_accept/outdoor/state" "7.0" true
+wait_number "$APP_OUTDOOR_SENSOR" 7 30
+
+OUTDOOR_LOG="$(ha apps logs "$APP" | tail -n 500 | grep '\[OUTDOOR\]' || true)"
+echo "$OUTDOOR_LOG" | tail -n 30
+echo "$OUTDOOR_LOG" | grep -Fq "temperature 5.0 °C -> 7.0 °C | source=sensor.dh_climate_accept_outdoor" ||
+  fail "outdoor temperature change log missing"
+
+mqtt_pub "dh_climate_accept/outdoor/state" "unavailable" true
+wait_attr "$SEASON_CLIMATE" "temperature_source" "sensor.dh_climate_accept_outdoor_backup" 30
+wait_number "$APP_OUTDOOR_SENSOR" 6 30
+wait_attr "$EVENT" "event_type" "outdoor_temperature_source_changed" 30
+
+state_json "$EVENT" | jq -e '
+  .attributes.event_type == "outdoor_temperature_source_changed" and
+  .attributes.previous_source == "sensor.dh_climate_accept_outdoor" and
+  .attributes.current_source == "sensor.dh_climate_accept_outdoor_backup" and
+  (.attributes.previous_temperature == 7 or .attributes.previous_temperature == 7.0) and
+  (.attributes.current_temperature == 6 or .attributes.current_temperature == 6.0)
+' >/dev/null || fail "outdoor source-change event payload mismatch"
+
+OUTDOOR_LOG="$(ha apps logs "$APP" | tail -n 500 | grep '\[OUTDOOR\]' || true)"
+echo "$OUTDOOR_LOG" | tail -n 30
+echo "$OUTDOOR_LOG" | grep -Fq "source sensor.dh_climate_accept_outdoor -> sensor.dh_climate_accept_outdoor_backup | temperature=6.0 °C" ||
+  fail "outdoor source switch log missing"
+echo "PASS outdoor source failover + log + event"
+
+mqtt_pub "dh_climate_accept/outdoor/state" "5.0" true
+wait_attr "$SEASON_CLIMATE" "temperature_source" "sensor.dh_climate_accept_outdoor" 30
+wait_number "$APP_OUTDOOR_SENSOR" 5 30
+wait_attr "$EVENT" "event_type" "outdoor_temperature_source_changed" 30
+state_json "$EVENT" | jq -e '
+  .attributes.previous_source == "sensor.dh_climate_accept_outdoor_backup" and
+  .attributes.current_source == "sensor.dh_climate_accept_outdoor"
+' >/dev/null || fail "outdoor preferred-source recovery event mismatch"
+echo "PASS preferred outdoor source restored"
 
 say "5B. ROOM CLIMATE · NATIVE HVAC / ACTION / PRESET"
 
@@ -882,9 +932,10 @@ BACKUP_SLUG=""
 
 echo
 echo "============================================================"
-echo "DH CLIMATE 0.1.19 · BUNDLED LIVE ACCEPTANCE = PASS"
+echo "DH CLIMATE 0.1.20 · BUNDLED LIVE ACCEPTANCE = PASS"
 echo "============================================================"
 echo "PASS outdoor temperature avg24 sensor"
+echo "PASS outdoor source priority + temperature log + source-change event"
 echo "PASS room climate native heat/cool + action + presets"
 echo "PASS device_target_out_of_range"
 echo "PASS no_confirmation -> RETRY -> COOLDOWN -> recovery"
