@@ -24,12 +24,12 @@ class RoomState:
     season: Season
     effective_profile: Profile
     target_temperature: float | None
-    control_profile: Profile
-    control_target_temperature: float | None
     climate_control_enabled: bool
     control_action: HvacAction
     hvac_mode: str
     hvac_action: HvacAction
+    control_profile: Profile = Profile.DAY
+    control_target_temperature: float | None = None
     window_state: str = "not_configured"
 
     @property
