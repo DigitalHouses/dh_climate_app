@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.14 — development
+
+- Separated Home Assistant service-call success from device-state verification: successful calls now log `SENT`, never `CONFIRMED`.
+- Added event-driven delayed HA-state verification: post-command `state_changed` starts a settle window and only the later matching state becomes `VERIFIED_HA`.
+- Added delayed drift detection for a previously stable actuator state before corrective commands are sent.
+- Kept a bounded no-event watchdog/retry path and gave the final retry attempt its full confirmation window before entering cooldown.
+- Reset transient verification evidence across Home Assistant disconnects.
+
 ## 0.1.13 — development
 
 - Serialized the best-effort `script.write2climatelog` mirror through one asynchronous queue so `climate.log` preserves decision order.
