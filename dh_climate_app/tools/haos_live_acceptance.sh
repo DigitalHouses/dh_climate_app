@@ -2,7 +2,7 @@
 set -Ee -o pipefail
 
 APP="8d59ce70_dh_climate_app"
-EXPECTED_VERSION="0.1.18"
+EXPECTED_VERSION="0.1.19"
 CORE="http://supervisor/core"
 SUPERVISOR="http://supervisor"
 TOKEN="${SUPERVISOR_TOKEN:-}"
@@ -29,6 +29,7 @@ COOL_DAY="number.dh_climate_app_livingroom_cool_day"
 ROOM_TEMP_HELPER="input_number.dh_climate_test_livingroom_temperature"
 ROOM_TEMP_SENSOR="sensor.dh_climate_test_livingroom_temperature"
 HUMIDITY_FACADE="humidifier.dh_climate_app_livingroom"
+AVG24_SENSOR="sensor.dh_climate_app_outdoor_temperature_avg24"
 
 WORKDIR="/config/.dh_climate_acceptance"
 LOG="${WORKDIR}/run_$(date +%Y%m%d_%H%M%S).log"
@@ -482,7 +483,7 @@ do
   wait_entity "$entity" 5
 done
 
-say "1. UPDATE TO 0.1.18"
+say "1. UPDATE TO 0.1.19"
 
 ha store reload
 sleep 3
@@ -508,6 +509,16 @@ fi
 APP_INFO="$(ha apps info "$APP" --no-progress --raw-json)"
 CURRENT="$(echo "$APP_INFO" | jq -r '.data.version')"
 [ "$CURRENT" = "$EXPECTED_VERSION" ] || fail "Installed version=$CURRENT expected=$EXPECTED_VERSION"
+
+wait_entity "$AVG24_SENSOR" 40
+wait_numeric_state_present "$AVG24_SENSOR" 40
+wait_numeric_attr_present "$SEASON_CLIMATE" "avg_24h_temperature" 40
+
+AVG24_STATE="$(state_value "$AVG24_SENSOR")"
+AVG24_ATTR="$(attr_value "$SEASON_CLIMATE" "avg_24h_temperature")"
+[ "$AVG24_STATE" = "$AVG24_ATTR" ] ||
+  fail "avg24 sensor=$AVG24_STATE season_attr=$AVG24_ATTR"
+echo "PASS outdoor temperature avg24 sensor = $AVG24_STATE °C"
 
 say "2. CAPTURE CLEAN BASELINE"
 
@@ -871,8 +882,9 @@ BACKUP_SLUG=""
 
 echo
 echo "============================================================"
-echo "DH CLIMATE 0.1.18 · BUNDLED LIVE ACCEPTANCE = PASS"
+echo "DH CLIMATE 0.1.19 · BUNDLED LIVE ACCEPTANCE = PASS"
 echo "============================================================"
+echo "PASS outdoor temperature avg24 sensor"
 echo "PASS room climate native heat/cool + action + presets"
 echo "PASS device_target_out_of_range"
 echo "PASS no_confirmation -> RETRY -> COOLDOWN -> recovery"
