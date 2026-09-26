@@ -91,7 +91,7 @@ refresh command; see [Experimental update runbook](docs/EXPERIMENTAL_UPDATE_RUNB
 
 ## Release status
 
-Version `0.1.11` is still an **experimental pre-release implementation**. Unit/CI and container-build validation are automated. The remaining release gate is end-to-end testing on a real Home Assistant OS installation with real MQTT discovery and physical actuator entities.
+Version `0.1.12` is still an **experimental pre-release implementation**. Unit/CI and container-build validation are automated. The remaining release gate is end-to-end testing on a real Home Assistant OS installation with real MQTT discovery and physical actuator entities.
 
 Canonical release identity:
 
