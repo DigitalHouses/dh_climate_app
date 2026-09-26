@@ -31,6 +31,7 @@ DATABASE_FILE = Path("/data/dh_climate.db")
 APP_VERSION = os.environ.get("APP_VERSION", "0.1.0-local")
 RUNTIME_TICK_SECONDS = 10.0
 WEATHER_FORECAST_REFRESH_SECONDS = 15 * 60
+SEASON_RANGE_DEBOUNCE_SECONDS = 0.1
 
 ROOM_TARGET_COMMANDS = {
     "heat_day": (Season.HEAT, Profile.DAY),
@@ -369,8 +370,50 @@ class ClimateRuntime:
                     )
 
     async def _command_loop(self) -> None:
+        deferred: MqttCommand | None = None
+        range_commands = {"target_temp_low", "target_temp_high"}
+
         while not self.stop_event.is_set():
-            command = await self.command_queue.get()
+            command = deferred
+            if command is None:
+                command = await self.command_queue.get()
+            else:
+                deferred = None
+
+            if command.scope == "season" and command.command in range_commands:
+                batch = [command]
+                try:
+                    await asyncio.sleep(SEASON_RANGE_DEBOUNCE_SECONDS)
+                    while True:
+                        try:
+                            queued = self.command_queue.get_nowait()
+                        except asyncio.QueueEmpty:
+                            break
+                        if (
+                            queued.scope == "season"
+                            and queued.command in range_commands
+                        ):
+                            batch.append(queued)
+                            continue
+                        deferred = queued
+                        break
+
+                    await self._handle_season_range_commands(batch)
+                    if self._ha_connected:
+                        await self._recalculate(
+                            observed_at=datetime.now(timezone.utc),
+                            record_outdoor_sample=False,
+                        )
+                except Exception:
+                    LOGGER.exception(
+                        "MQTT season range command failed: %s",
+                        [(item.command, item.payload) for item in batch],
+                    )
+                finally:
+                    for _ in batch:
+                        self.command_queue.task_done()
+                continue
+
             try:
                 await self._handle_command(command)
             except Exception:
@@ -438,21 +481,36 @@ class ClimateRuntime:
                 raise ValueError("season thermostat supports only heat_cool")
             return
 
-        try:
-            value = round(float(payload), 1)
-        except ValueError as exc:
-            raise ValueError(f"invalid numeric season command: {payload}") from exc
+        await self._handle_season_range_commands(
+            [MqttCommand(scope="season", command=command, payload=payload)]
+        )
 
+    async def _handle_season_range_commands(
+        self,
+        commands: list[MqttCommand],
+    ) -> None:
         thresholds = self.store.get_season_thresholds()
         heat = thresholds.heat
         cool = thresholds.cool
 
-        if command == "target_temp_low":
-            heat = value
-        elif command == "target_temp_high":
-            cool = value
-        else:
-            raise ValueError(f"unsupported season command: {command}")
+        for item in commands:
+            if item.scope != "season":
+                raise ValueError("season range batch contains non-season command")
+            try:
+                value = round(float(item.payload), 1)
+            except ValueError as exc:
+                raise ValueError(
+                    f"invalid numeric season command: {item.payload}"
+                ) from exc
+
+            if item.command == "target_temp_low":
+                heat = value
+            elif item.command == "target_temp_high":
+                cool = value
+            else:
+                raise ValueError(
+                    f"unsupported season range command: {item.command}"
+                )
 
         self.outdoor.set_thresholds(heat=heat, cool=cool)
 
