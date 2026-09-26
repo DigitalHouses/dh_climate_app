@@ -91,7 +91,7 @@ refresh command; see [Experimental update runbook](docs/EXPERIMENTAL_UPDATE_RUNB
 
 ## Release status
 
-Version `0.1.15` has passed the bundled runtime acceptance on a real Home Assistant OS installation, including Supervisor options, MQTT Discovery, actuator fault handling, SLOW/window/cold-weather policy, humidity safety, and App-only backup/restore. Deterministic actuator fixtures were used instead of commandeering physical HVAC equipment. The remaining release gate is publication of the canonical tag and immutable multi-architecture GHCR artifact. See [0.1.15 HAOS acceptance](docs/ACCEPTANCE_0.1.15.md).
+Version `0.1.15` has passed the bundled runtime acceptance on a real Home Assistant OS installation and is published as an immutable multi-architecture release. Deterministic actuator fixtures were used instead of commandeering physical HVAC equipment. See [0.1.15 HAOS acceptance](docs/ACCEPTANCE_0.1.15.md).
 
 Canonical release identity:
 
