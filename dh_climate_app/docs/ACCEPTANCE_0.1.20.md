@@ -69,9 +69,16 @@ final clean baseline = green
 runtime acceptance = PASS
 ```
 
-## Release target
+## Release status
+
+Runtime acceptance and immutable publication are complete.
+
+Published release:
 
 - tag: `digitalhouses_climate_app-v0.1.20`;
-- image: `ghcr.io/digitalhouses/digitalhouses_climate_app:0.1.20`.
+- release commit: `50f6ed7cc72cc3b01f8f12b05325d1eb9469a14b`;
+- image: `ghcr.io/digitalhouses/digitalhouses_climate_app:0.1.20`;
+- manifest digest: `sha256:1405f6b91adddc1325047bcdebcee23af0da401b6df4ffd742450d23a0f1476c`;
+- release workflow run: `36280643923`.
 
 No published immutable image version may be overwritten with different content.

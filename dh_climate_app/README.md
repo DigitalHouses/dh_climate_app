@@ -91,7 +91,7 @@ refresh command; see [Experimental update runbook](docs/EXPERIMENTAL_UPDATE_RUNB
 
 ## Release status
 
-Version `0.1.20` has passed bundled runtime acceptance on a real Home Assistant OS installation. Acceptance includes outdoor-temperature source logging, primary/backup failover, preferred-source recovery, source-switch Events, and the complete existing room climate, actuator safety, and App-only backup/restore regression suite. Deterministic actuator fixtures were used instead of commandeering physical HVAC equipment. See [0.1.20 HAOS acceptance](docs/ACCEPTANCE_0.1.20.md).
+Version `0.1.20` has passed bundled runtime acceptance on a real Home Assistant OS installation and is published as an immutable multi-architecture release. Acceptance includes outdoor-temperature source logging, primary/backup failover, preferred-source recovery, source-switch Events, and the complete existing room climate, actuator safety, and App-only backup/restore regression suite. Deterministic actuator fixtures were used instead of commandeering physical HVAC equipment. See [0.1.20 HAOS acceptance](docs/ACCEPTANCE_0.1.20.md).
 
 Canonical release identity:
 
