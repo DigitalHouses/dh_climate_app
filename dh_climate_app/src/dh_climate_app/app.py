@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import signal
 
+from .climate_log import ClimateLog
 from .config import AppConfig, configured_entity_ids, parse_options
 from .core import Profile, Season
 from .devices import compile_room_devices
@@ -83,6 +84,7 @@ class ClimateRuntime:
         self._weather_forecast_fetched_at: datetime | None = None
         self._last_reconcile = ReconcileSummary(commands=0, problems=())
         self._last_problems: tuple[Problem, ...] = ()
+        self._last_room_log_signatures: dict[str, tuple[object, ...]] = {}
 
         loop = asyncio.get_running_loop()
         self.mqtt = MqttBridge(
@@ -104,7 +106,11 @@ class ClimateRuntime:
             token=os.environ["SUPERVISOR_TOKEN"],
             entity_ids=self.cache.allowed,
         )
-        self.executor = DeviceExecutor(self.ha)
+        self.climate_log = ClimateLog(self.ha)
+        self.executor = DeviceExecutor(
+            self.ha,
+            climate_log=self.climate_log,
+        )
         self.telemetry = TelemetryClient(
             enabled=config.telemetry_enabled,
             version=APP_VERSION,
@@ -137,6 +143,7 @@ class ClimateRuntime:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
             self.telemetry_runner.stop()
+            await self.climate_log.close()
             self.facade.stop()
 
     async def _on_snapshot(self, states: list[HaState]) -> None:
@@ -264,6 +271,30 @@ class ClimateRuntime:
                 season=outdoor_state.season,
             )
             humidity_states = self.humidity.evaluate_all(values)
+
+            for room_id, room_state in room_states.items():
+                signature = (
+                    room_state.season.value,
+                    room_state.effective_profile.value,
+                    room_state.climate_control_enabled,
+                    room_state.control_action.value,
+                    room_state.control_target_temperature,
+                    room_state.window_state,
+                )
+                if self._last_room_log_signatures.get(room_id) != signature:
+                    self._last_room_log_signatures[room_id] = signature
+                    self.climate_log.write2climate_log(
+                        f"ROOM · {room_id}",
+                        (
+                            f"season={room_state.season.value}"
+                            f" temp={room_state.current_temperature}"
+                            f" target={room_state.control_target_temperature}"
+                            f" profile={room_state.effective_profile.value}"
+                            f" control={room_state.control_action.value}"
+                            f" enabled={room_state.climate_control_enabled}"
+                            f" window={room_state.window_state}"
+                        ),
+                    )
 
             self._last_outdoor_state = outdoor_state
             self._last_room_states = room_states
