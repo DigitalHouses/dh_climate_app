@@ -169,11 +169,11 @@ jobs:
             echo
             echo "### Artifact provenance"
             echo
-            echo "- Tag: `${TAG}`"
-            echo "- Commit: `${RELEASE_SHA}`"
-            echo "- Image: `ghcr.io/digitalhouses/digitalhouses_climate_app:${VERSION}`"
-            echo "- Digest: `${IMAGE_DIGEST}`"
-            echo "- CI: `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}`"
+            printf -- '- Tag: `%s`\n' "${TAG}"
+            printf -- '- Commit: `%s`\n' "${RELEASE_SHA}"
+            printf -- '- Image: `ghcr.io/digitalhouses/digitalhouses_climate_app:%s`\n' "${VERSION}"
+            printf -- '- Digest: `%s`\n' "${IMAGE_DIGEST}"
+            printf -- '- CI: `%s/%s/actions/runs/%s`\n'               "${GITHUB_SERVER_URL}" "${GITHUB_REPOSITORY}" "${GITHUB_RUN_ID}"
           } >> release-notes.md
 
       - name: Publish GitHub Release
