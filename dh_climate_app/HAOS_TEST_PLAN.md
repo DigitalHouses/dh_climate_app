@@ -103,7 +103,7 @@ Acceptance:
 - an already-correct physical state produces no duplicate service call;
 - unsupported HVAC mode or out-of-range target is not blindly sent;
 - unavailable physical entity produces a Problem diagnostic instead of a tight retry loop;
-- App log shows FAST desired/actual, CALL, retry/cooldown and confirmation transitions;
+- App log shows FAST desired/actual, CALL, SENT, retry/cooldown, VERIFIED_HA and delayed DRIFT transitions; no executor CONFIRMED line is emitted;
 - local `climate.log` receives the same selected traces through `script.write2climatelog` in App decision order;
 - repeated already-correct reconciles do not create log spam;
 - failure of the local climate-log mirror does not change actuator control or Problem state.
