@@ -22,6 +22,8 @@ SYSTEM_AVAILABILITY_TOPIC = f"{BASE_TOPIC}/availability"
 SYSTEM_PROBLEM_TOPIC = f"{BASE_TOPIC}/problem"
 SYSTEM_PROBLEM_ATTRIBUTES_TOPIC = f"{BASE_TOPIC}/problem_attributes"
 SYSTEM_EVENT_TOPIC = f"{BASE_TOPIC}/event"
+OUTDOOR_BASE = f"{BASE_TOPIC}/outdoor"
+OUTDOOR_ATTRIBUTES_TOPIC = f"{OUTDOOR_BASE}/attributes"
 WEATHER_BASE = f"{BASE_TOPIC}/weather"
 WEATHER_ATTRIBUTES_TOPIC = f"{WEATHER_BASE}/precipitation/attributes"
 
@@ -160,6 +162,49 @@ def diagnostic_discovery_payloads(app_version: str) -> dict[str, tuple[str, dict
                 "entity_category": "config",
                 "icon": "mdi:delete-outline",
                 "availability_topic": SYSTEM_AVAILABILITY_TOPIC,
+                "device": device,
+                "origin": origin,
+            },
+        ),
+    }
+
+
+def outdoor_discovery_payloads(
+    app_version: str,
+) -> dict[str, tuple[str, dict[str, Any]]]:
+    device = system_device(app_version)
+    origin = _origin(app_version)
+    return {
+        "outdoor_temperature": (
+            f"{DISCOVERY_PREFIX}/sensor/dh_climate_app_outdoor_temperature/config",
+            {
+                "name": "Outdoor temperature",
+                "unique_id": "dh_climate_app_outdoor_temperature",
+                "default_entity_id": "sensor.dh_climate_app_outdoor_temperature",
+                "state_topic": f"{OUTDOOR_BASE}/temperature",
+                "json_attributes_topic": OUTDOOR_ATTRIBUTES_TOPIC,
+                "device_class": "temperature",
+                "unit_of_measurement": "°C",
+                "state_class": "measurement",
+                "availability_topic": SYSTEM_AVAILABILITY_TOPIC,
+                "icon": "mdi:thermometer",
+                "device": device,
+                "origin": origin,
+            },
+        ),
+        "outdoor_humidity": (
+            f"{DISCOVERY_PREFIX}/sensor/dh_climate_app_outdoor_humidity/config",
+            {
+                "name": "Outdoor humidity",
+                "unique_id": "dh_climate_app_outdoor_humidity",
+                "default_entity_id": "sensor.dh_climate_app_outdoor_humidity",
+                "state_topic": f"{OUTDOOR_BASE}/humidity",
+                "json_attributes_topic": OUTDOOR_ATTRIBUTES_TOPIC,
+                "device_class": "humidity",
+                "unit_of_measurement": "%",
+                "state_class": "measurement",
+                "availability_topic": SYSTEM_AVAILABILITY_TOPIC,
+                "icon": "mdi:water-percent",
                 "device": device,
                 "origin": origin,
             },
@@ -434,6 +479,26 @@ def room_humidity_state_topics(state: HumidityState) -> dict[str, str]:
         f"{base}/humidity/action": state.action,
         f"{base}/humidity/current": _number(state.current_humidity),
         f"{base}/humidity/target": _number(state.target_humidity),
+    }
+
+
+def outdoor_state_topics(state: OutdoorState) -> dict[str, str]:
+    attrs = {
+        "temperature_source": state.temperature_source,
+        "humidity_source": state.humidity_source,
+        "avg_24h_temperature": state.avg_24h_temperature,
+        "avg_24h_humidity": state.avg_24h_humidity,
+        "observed_at": state.observed_at.isoformat(),
+    }
+    return {
+        f"{OUTDOOR_BASE}/temperature": _number(state.current_temperature),
+        f"{OUTDOOR_BASE}/humidity": _number(state.current_humidity),
+        OUTDOOR_ATTRIBUTES_TOPIC: json.dumps(
+            attrs,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
     }
 
 
