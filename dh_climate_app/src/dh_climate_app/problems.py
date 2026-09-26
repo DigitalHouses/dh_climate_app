@@ -79,6 +79,7 @@ def collect_problems(
                 code=f"device_{item.reason}",
                 scope="device",
                 severity="critical" if item.reason == "service_error" else "warning",
+                room_id=item.room_id,
                 entity_id=item.entity_id,
                 details=item.details,
             )
