@@ -8,8 +8,9 @@ from dh_climate_app.core import HvacAction, Profile, Season
 from dh_climate_app.discovery import (
     diagnostic_discovery_payloads,
     room_climate_discovery_payload,
+    ROOM_TARGET_KEYS,
     room_humidity_discovery_payload,
-    room_profile_discovery_payload,
+    room_target_discovery_payload,
     season_discovery_payload,
     season_state_topics,
 )
@@ -121,13 +122,19 @@ class DiscoveryTests(unittest.TestCase):
         self.assertNotIn("fan_mode_state_topic", payload)
         self.assertNotIn("fan_mode_command_topic", payload)
 
-        profile = room_profile_discovery_payload(room, "0.1.4")
-        self.assertEqual(["day", "night", "away"], profile["options"])
-        self.assertNotIn("none", profile["options"])
-        self.assertNotIn("antifreeze", profile["options"])
+        self.assertEqual(7, len(ROOM_TARGET_KEYS))
+        target = room_target_discovery_payload(
+            room,
+            "0.1.5",
+            target_key="heat_night",
+            name="Heat night target",
+        )
+        self.assertEqual("config", target["entity_category"])
+        self.assertEqual("temperature", target["device_class"])
+        self.assertFalse(target["visible_by_default"])
         self.assertEqual(
-            "select.dh_climate_app_living_room_profile",
-            profile["default_entity_id"],
+            "number.dh_climate_app_living_room_heat_night",
+            target["default_entity_id"],
         )
 
     def test_dehumidifier_facade(self) -> None:
