@@ -32,6 +32,7 @@ jobs:
               print(f"YAML OK: {path}")
           PY
       - run: bash -n dh_climate_app/rootfs/run.sh
+      - run: bash -n dh_climate_app/tools/haos_live_acceptance.sh
       - name: Build HAOS image
         run: |
           VERSION="$(awk '$1 == "version:" {print $2; exit}' dh_climate_app/config.yaml)"
