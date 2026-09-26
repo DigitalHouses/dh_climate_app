@@ -234,8 +234,9 @@ class DiscoveryTests(unittest.TestCase):
                 )
 
     def test_outdoor_ui_sensors_use_current_values(self) -> None:
-        discovery = outdoor_discovery_payloads("0.1.9")
+        discovery = outdoor_discovery_payloads("0.1.19")
         temperature = discovery["outdoor_temperature"][1]
+        temperature_avg24 = discovery["outdoor_temperature_avg24"][1]
         humidity = discovery["outdoor_humidity"][1]
 
         self.assertEqual(
@@ -245,6 +246,18 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual("temperature", temperature["device_class"])
         self.assertEqual("measurement", temperature["state_class"])
         self.assertEqual("°C", temperature["unit_of_measurement"])
+
+        self.assertEqual(
+            "sensor.dh_climate_app_outdoor_temperature_avg24",
+            temperature_avg24["default_entity_id"],
+        )
+        self.assertEqual("temperature", temperature_avg24["device_class"])
+        self.assertEqual("measurement", temperature_avg24["state_class"])
+        self.assertEqual("°C", temperature_avg24["unit_of_measurement"])
+        self.assertEqual(
+            "DigitalHouses/Global/dh_climate_app/outdoor/temperature_avg24",
+            temperature_avg24["state_topic"],
+        )
 
         self.assertEqual(
             "sensor.dh_climate_app_outdoor_humidity",
@@ -272,6 +285,12 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual(
             "20.9",
             topics["DigitalHouses/Global/dh_climate_app/outdoor/temperature"],
+        )
+        self.assertEqual(
+            "18.7",
+            topics[
+                "DigitalHouses/Global/dh_climate_app/outdoor/temperature_avg24"
+            ],
         )
         self.assertEqual(
             "39.0",

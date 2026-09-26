@@ -29,8 +29,9 @@ Acceptance:
 - primary restored -> primary becomes current source again;
 - current source/value is visible in season attributes;
 - `sensor.dh_climate_app_outdoor_temperature` exposes the current selected outdoor temperature;
+- `sensor.dh_climate_app_outdoor_temperature_avg24` exposes the persisted time-weighted 24-hour outdoor temperature average;
 - `sensor.dh_climate_app_outdoor_humidity` exposes the current selected outdoor humidity;
-- dedicated outdoor UI sensors use current values, while avg24 remains separate context;
+- current and avg24 temperature remain separate UI entities while using the same Climate Core source/history;
 - rolling avg24 survives App restart;
 - no live outdoor temperature -> season becomes OFF even if old avg24 exists;
 - lower/red slider persists the heating-season threshold;

@@ -34,7 +34,7 @@ SQLite under `/data/dh_climate.db` stores only durable installation state. It is
 ## Implemented behavior
 
 - prioritized outdoor temperature and humidity fallback chains;
-- dedicated current outdoor temperature and humidity sensors for UI;
+- dedicated current outdoor temperature, 24-hour average outdoor temperature, and current outdoor humidity sensors for UI;
 - one-decimal public temperature presentation while retaining full internal calculation precision;
 - weather-condition precipitation typing plus current-hour forecast amount in mm;
 - one schema-v2 MQTT Event stream for weather, season, window and Problem transitions;
