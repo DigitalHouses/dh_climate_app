@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.6 — development
+
+- Room thermostats are now deliberately unavailable while global season is `OFF`, preventing users from changing an inactive thermostat during interseason.
+- Profile target configuration Number entities remain available independently so seasonal targets can still be prepared in advance.
+
 ## 0.1.5 — development
 
 - Reworked room climate facade for Apple Home/HomeKit: stable `off / auto` HVAC modes, no fan or preset semantics, and the thermostat target always edits the currently active `day / night / away` profile.
