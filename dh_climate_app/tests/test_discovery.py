@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 from datetime import datetime, timezone
 
@@ -76,6 +77,16 @@ class DiscoveryTests(unittest.TestCase):
             topic for topic in topics if topic.endswith("/hvac_action")
         )
         self.assertEqual("heating", topics[action_topic])
+
+        attrs_topic = next(
+            topic for topic in topics if topic.endswith("/attributes")
+        )
+        attrs = json.loads(topics[attrs_topic])
+        self.assertEqual(10.0, attrs["current_temperature"])
+        self.assertEqual(10.5, attrs["avg_24h_temperature"])
+        self.assertEqual(12.0, attrs["heat_threshold"])
+        self.assertEqual(20.0, attrs["cool_threshold"])
+        self.assertEqual(0.5, attrs["hysteresis"])
 
     def test_missing_numeric_state_clears_mqtt_value(self) -> None:
         now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
@@ -177,7 +188,7 @@ class DiscoveryTests(unittest.TestCase):
             observed_at=now,
             current_temperature=20.9,
             current_humidity=39.0,
-            avg_24h_temperature=18.65,
+            avg_24h_temperature=18.685370883826664,
             avg_24h_humidity=42.0,
             temperature_source="weather.forecast_home_assistant",
             humidity_source="weather.forecast_home_assistant",
@@ -195,6 +206,10 @@ class DiscoveryTests(unittest.TestCase):
             "39.0",
             topics["DigitalHouses/Global/dh_climate_app/outdoor/humidity"],
         )
+        attrs = json.loads(
+            topics["DigitalHouses/Global/dh_climate_app/outdoor/attributes"]
+        )
+        self.assertEqual(18.7, attrs["avg_24h_temperature"])
 
     def test_weather_precipitation_discovery(self) -> None:
         weather = weather_discovery_payloads("0.1.8")
