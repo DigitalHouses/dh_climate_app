@@ -25,6 +25,7 @@ from .discovery import (
     room_humidity_discovery_payload,
     room_humidity_discovery_topic,
     room_profile_discovery_topic,
+    room_profile_state_topic,
     room_target_discovery_payload,
     room_target_discovery_topic,
     room_target_state_topics,
@@ -332,7 +333,30 @@ class ClimateMqttFacade:
         profile_targets: dict[str, float | None],
     ) -> int:
         room = self.rooms[state.room_id]
+        climate_state = room_climate_state_topics(
+            state,
+            published_profile=published_profile,
+            published_target=published_target,
+        )
+
+        # Home Assistant resets MQTT Climate preset_mode to "none" whenever
+        # Discovery changes. Prime the new season-scoped preset topic before
+        # publishing the season-specific Discovery payload. Because the topic
+        # changes across HEAT/COOL/OFF, HA must resubscribe and immediately
+        # receives this retained authoritative preset.
+        profile_topic = room_profile_state_topic(
+            room.room_id,
+            state.season.value,
+        )
         count = int(
+            self.bridge.publish(
+                profile_topic,
+                climate_state[profile_topic],
+                retain=True,
+            )
+        )
+
+        count += int(
             self.bridge.publish(
                 room_climate_discovery_topic(room.room_id),
                 json.dumps(
@@ -345,6 +369,16 @@ class ClimateMqttFacade:
                     sort_keys=True,
                     separators=(",", ":"),
                 ),
+                retain=True,
+            )
+        )
+
+        # 0.1.17 used one shared preset state topic. It is no longer referenced
+        # after the seasonal-topic migration, so clear the retained value.
+        count += int(
+            self.bridge.publish(
+                f"DigitalHouses/Global/dh_climate_app/rooms/{room.room_id}/climate/profile",
+                "",
                 retain=True,
             )
         )
@@ -378,11 +412,7 @@ class ClimateMqttFacade:
                 )
             )
 
-        for topic, payload in room_climate_state_topics(
-            state,
-            published_profile=published_profile,
-            published_target=published_target,
-        ).items():
+        for topic, payload in climate_state.items():
             count += int(self.bridge.publish(topic, payload, retain=True))
         for topic, payload in room_target_state_topics(
             room.room_id,
