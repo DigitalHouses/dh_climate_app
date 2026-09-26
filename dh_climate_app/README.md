@@ -91,7 +91,7 @@ refresh command; see [Experimental update runbook](docs/EXPERIMENTAL_UPDATE_RUNB
 
 ## Release status
 
-Version `0.1.15` has passed the bundled runtime acceptance on a real Home Assistant OS installation and is published as an immutable multi-architecture release. Deterministic actuator fixtures were used instead of commandeering physical HVAC equipment. See [0.1.15 HAOS acceptance](docs/ACCEPTANCE_0.1.15.md).
+Version `0.1.17` has passed bundled runtime acceptance on a real Home Assistant OS installation, including native room `heat / cool / off` semantics, `day / night / away` presets, actuator safety, and App-only backup/restore. Deterministic actuator fixtures were used instead of commandeering physical HVAC equipment. See [0.1.17 HAOS acceptance](docs/ACCEPTANCE_0.1.17.md).
 
 Canonical release identity:
 

@@ -1,16 +1,18 @@
 # Changelog
 
-## 0.1.17 — development
+## 0.1.17 — 2026-09-27
 
-- Kept room MQTT Climate capabilities stable as `off / heat / cool` across season transitions while the actual entity state remains season-native (`heat / cool / off`). This avoids Home Assistant rebuilding the Climate entity and resetting native preset state to `none`.
-- Hardened the HAOS acceptance harness to wait for numeric room-target and season baseline values after App update before creating the baseline backup.
-
-## 0.1.16 — development
-
-- Restored season-native room thermostat HVAC state: HEAT season publishes `heat`, COOL season publishes `cool`, and interseason publishes `off`.
+- Restored native room thermostat semantics: the room state is `heat` in HEAT season, `cool` in COOL season, and `off` in interseason.
 - Restored native Climate presets for `day / night / away` instead of misusing fan-speed semantics; Home Assistant's reserved `none` command clears the temporary profile-edit overlay.
 - Restored the short-lived profile-edit overlay so an inactive profile target can be selected and edited from the room thermostat without changing the automatic day/night/away control source.
-- Room `hvac_action` continues to expose the actual current action (`heating / cooling / idle / off`) independently from HVAC mode.
+- Kept `hvac_action` independent from HVAC mode, exposing the actual current action as `heating / cooling / idle / off`.
+- Kept room MQTT Climate capabilities stable as `off / heat / cool` across season transitions so Home Assistant does not rebuild the Climate entity and reset native preset state to `none`.
+- Hardened the HAOS acceptance harness to wait for numeric room-target and season baseline values after App update before creating the baseline backup.
+- Passed bundled live HAOS acceptance on 2026-09-27, including native room heat/cool/off state, day/night/away presets, preset reset, target range protection, bounded no-confirmation retry/cooldown, SLOW, window context, cold-weather reversible protection, humidity safe shutdown, and App-only backup/restore.
+
+## 0.1.16 — unpublished candidate
+
+- Intermediate HAOS validation candidate for the native room Climate UI. Superseded by 0.1.17 before immutable publication.
 
 ## 0.1.15 — 2026-09-27
 
