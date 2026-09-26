@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import time
 from typing import Mapping
 
 from .config import AppConfig, RoomConfig
@@ -25,6 +24,8 @@ class RoomState:
     season: Season
     effective_profile: Profile
     target_temperature: float | None
+    control_profile: Profile
+    control_target_temperature: float | None
     climate_control_enabled: bool
     control_action: HvacAction
     hvac_mode: str
@@ -151,13 +152,25 @@ class RoomEngine:
         )
 
         climate_enabled = self.store.get_climate_control_enabled(room.room_id)
+        # User-facing profile follows schedule/presence even while the room
+        # thermostat is OFF. Antifreeze is an internal HEAT control profile.
         profile = effective_profile(
             season=season,
-            climate_control_enabled=climate_enabled,
+            climate_control_enabled=True,
             we_at_home=we_at_home,
             night_mode=night_mode,
         )
+        control_profile = (
+            Profile.ANTIFREEZE
+            if season is Season.HEAT and not climate_enabled
+            else profile
+        )
         target = self.store.get_room_target(room.room_id, season, profile)
+        control_target = self.store.get_room_target(
+            room.room_id,
+            season,
+            control_profile,
+        )
 
         previous = self.store.get_previous_action(room.room_id)
         if season is Season.HEAT:
@@ -165,7 +178,7 @@ class RoomEngine:
             control_action = next_hvac_action(
                 season=season,
                 current_temperature=current_temperature,
-                target_temperature=target,
+                target_temperature=control_target,
                 hysteresis=self.config.global_config.hysteresis,
                 previous_action=previous,
             )
@@ -175,7 +188,7 @@ class RoomEngine:
             control_action = next_hvac_action(
                 season=season,
                 current_temperature=current_temperature,
-                target_temperature=target,
+                target_temperature=control_target,
                 hysteresis=self.config.global_config.hysteresis,
                 previous_action=previous,
             )
@@ -204,6 +217,8 @@ class RoomEngine:
             season=season,
             effective_profile=profile,
             target_temperature=target,
+            control_profile=control_profile,
+            control_target_temperature=control_target,
             climate_control_enabled=climate_enabled,
             control_action=control_action,
             hvac_mode=hvac_mode,
@@ -211,62 +226,3 @@ class RoomEngine:
             window_state=window_state,
         )
 
-
-class ProfileEditOverlay:
-    """Short-lived facade-only profile selection, matching Climate 5 behavior."""
-
-    def __init__(self, idle_timeout_seconds: float = 10.0) -> None:
-        self.idle_timeout_seconds = float(idle_timeout_seconds)
-        self._selected: dict[str, tuple[Profile, float]] = {}
-
-    def select(
-        self,
-        room_id: str,
-        profile: Profile,
-        *,
-        effective_profile: Profile,
-        now_monotonic: float | None = None,
-    ) -> None:
-        now = time.monotonic() if now_monotonic is None else now_monotonic
-        if profile is effective_profile:
-            self._selected.pop(room_id, None)
-            return
-        self._selected[room_id] = (
-            profile,
-            now + self.idle_timeout_seconds,
-        )
-
-    def touch(
-        self,
-        room_id: str,
-        *,
-        now_monotonic: float | None = None,
-    ) -> None:
-        current = self._selected.get(room_id)
-        if current is None:
-            return
-        now = time.monotonic() if now_monotonic is None else now_monotonic
-        self._selected[room_id] = (
-            current[0],
-            now + self.idle_timeout_seconds,
-        )
-
-    def selected(
-        self,
-        room_id: str,
-        *,
-        effective_profile: Profile,
-        now_monotonic: float | None = None,
-    ) -> Profile:
-        current = self._selected.get(room_id)
-        if current is None:
-            return effective_profile
-        now = time.monotonic() if now_monotonic is None else now_monotonic
-        profile, expires_at = current
-        if now >= expires_at:
-            self._selected.pop(room_id, None)
-            return effective_profile
-        return profile
-
-    def clear(self, room_id: str) -> None:
-        self._selected.pop(room_id, None)
