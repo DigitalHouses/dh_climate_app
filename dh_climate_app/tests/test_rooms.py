@@ -75,7 +75,7 @@ class RoomEngineTests(unittest.TestCase):
         self.assertEqual(23.0, room.target_temperature)
         self.assertEqual(HvacAction.HEATING, room.control_action)
         self.assertEqual(HvacAction.HEATING, room.hvac_action)
-        self.assertEqual("heat", room.hvac_mode)
+        self.assertEqual("auto", room.hvac_mode)
 
     def test_heat_off_hides_action_but_retains_antifreeze(self) -> None:
         self.store.set_climate_control_enabled("living_room", False)
@@ -100,6 +100,18 @@ class RoomEngineTests(unittest.TestCase):
         )["living_room"]
         self.assertEqual(HvacAction.OFF, room.control_action)
         self.assertEqual("off", room.hvac_mode)
+
+    def test_interseason_enabled_room_stays_auto_and_idle(self) -> None:
+        room = self.engine.evaluate_all(
+            {
+                "sensor.living_room_temperature": "22",
+                "input_boolean.we_at_home": "on",
+                "input_boolean.night_mode": "off",
+            },
+            season=Season.OFF,
+        )["living_room"]
+        self.assertEqual("auto", room.hvac_mode)
+        self.assertEqual(HvacAction.IDLE, room.hvac_action)
 
     def test_unavailable_presence_uses_away_profile(self) -> None:
         room = self.engine.evaluate_all(
