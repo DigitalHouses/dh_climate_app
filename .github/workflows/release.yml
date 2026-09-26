@@ -71,7 +71,7 @@ jobs:
           build-args: |
             BUILD_VERSION=${{ steps.version.outputs.version }}
           tags: |
-            ghcr.io/digitalhouses/digitalhouses-climate-app:${{ steps.version.outputs.version }}
+            ghcr.io/digitalhouses/digitalhouses_climate_app:${{ steps.version.outputs.version }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -95,7 +95,7 @@ jobs:
             echo "### Artifact provenance"
             echo
             echo "- Commit: \`${GITHUB_SHA}\`"
-            echo "- Image: \`ghcr.io/digitalhouses/digitalhouses-climate-app:${VERSION}\`"
+            echo "- Image: \`ghcr.io/digitalhouses/digitalhouses_climate_app:${VERSION}\`"
             echo "- Digest: \`${IMAGE_DIGEST}\`"
             echo "- CI: \`${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\`"
           } >> release-notes.md

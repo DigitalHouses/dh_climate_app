@@ -78,6 +78,17 @@ See [docs/CONFIG_EXAMPLE.yaml](docs/CONFIG_EXAMPLE.yaml) and [DOCS.md](DOCS.md).
 - [HAOS acceptance plan](HAOS_TEST_PLAN.md)
 - [Experimental update runbook](docs/EXPERIMENTAL_UPDATE_RUNBOOK.md)
 
+## Experimental updates
+
+For the current source-build channel, refresh Home Assistant Store with:
+
+```bash
+ha store reload
+```
+
+Then update the App normally. Do not use `ha store repair` as a routine
+refresh command; see [Experimental update runbook](docs/EXPERIMENTAL_UPDATE_RUNBOOK.md).
+
 ## Release status
 
 Version `0.1.10` is still an **experimental pre-release implementation**. Unit/CI and container-build validation are automated. The remaining release gate is end-to-end testing on a real Home Assistant OS installation with real MQTT discovery and physical actuator entities.
@@ -91,5 +102,5 @@ digitalhouses_climate_app-v<version>
 Production images:
 
 ```text
-ghcr.io/digitalhouses/digitalhouses-climate-app:<version>
+ghcr.io/digitalhouses/digitalhouses_climate_app:<version>
 ```

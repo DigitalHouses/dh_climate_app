@@ -18,3 +18,16 @@ Repository URL for the Home Assistant App store:
 ```text
 https://github.com/DigitalHouses/dh_climate_app
 ```
+
+
+## Updating the Experimental App
+
+The repository is a standard Home Assistant custom App repository. After a new
+version is committed to `main`, refresh Store metadata with:
+
+```bash
+ha store reload
+```
+
+Do not use `ha store repair` for routine updates. Repair is reserved for a
+corrupt local Supervisor repository clone.
