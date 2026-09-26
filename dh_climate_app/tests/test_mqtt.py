@@ -13,9 +13,14 @@ from test_config import options
 class FakeBridge:
     def __init__(self) -> None:
         self.handler = None
+        self.publications = []
 
     def set_message_handler(self, handler) -> None:
         self.handler = handler
+
+    def publish(self, topic, payload, *, retain, force=False):
+        self.publications.append((topic, payload, retain, force))
+        return True
 
 
 class FakePublishInfo:
@@ -119,6 +124,20 @@ class MqttRoutingTests(unittest.TestCase):
             rooms=parse_options(options()).rooms,
             command_queue=self.queue,
         )
+
+    def test_machine_event_is_transient_qos_transport(self) -> None:
+        self.facade.publish_event(
+            {
+                "schema_version": 2,
+                "event_type": "season_changed",
+                "observed_at": "2026-09-26T16:00:00+05:00",
+            }
+        )
+        topic, payload, retain, force = self.facade.bridge.publications[-1]
+        self.assertTrue(topic.endswith("/event"))
+        self.assertIn('"event_type":"season_changed"', payload)
+        self.assertFalse(retain)
+        self.assertTrue(force)
 
     def test_system_delete_telemetry_command(self) -> None:
         self.facade._on_message(
