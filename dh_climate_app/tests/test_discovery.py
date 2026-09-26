@@ -7,6 +7,8 @@ from dh_climate_app.config import parse_options
 from dh_climate_app.core import HvacAction, Profile, Season
 from dh_climate_app.discovery import (
     diagnostic_discovery_payloads,
+    outdoor_discovery_payloads,
+    outdoor_state_topics,
     weather_discovery_payloads,
     room_climate_discovery_payload,
     ROOM_TARGET_KEYS,
@@ -147,6 +149,51 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual(
             "number.dh_climate_app_living_room_heat_night",
             target["default_entity_id"],
+        )
+
+    def test_outdoor_ui_sensors_use_current_values(self) -> None:
+        discovery = outdoor_discovery_payloads("0.1.9")
+        temperature = discovery["outdoor_temperature"][1]
+        humidity = discovery["outdoor_humidity"][1]
+
+        self.assertEqual(
+            "sensor.dh_climate_app_outdoor_temperature",
+            temperature["default_entity_id"],
+        )
+        self.assertEqual("temperature", temperature["device_class"])
+        self.assertEqual("measurement", temperature["state_class"])
+        self.assertEqual("°C", temperature["unit_of_measurement"])
+
+        self.assertEqual(
+            "sensor.dh_climate_app_outdoor_humidity",
+            humidity["default_entity_id"],
+        )
+        self.assertEqual("humidity", humidity["device_class"])
+        self.assertEqual("measurement", humidity["state_class"])
+        self.assertEqual("%", humidity["unit_of_measurement"])
+
+        now = datetime(2026, 9, 26, 12, tzinfo=timezone.utc)
+        state = OutdoorState(
+            observed_at=now,
+            current_temperature=20.9,
+            current_humidity=39.0,
+            avg_24h_temperature=18.65,
+            avg_24h_humidity=42.0,
+            temperature_source="weather.forecast_home_assistant",
+            humidity_source="weather.forecast_home_assistant",
+            heat_threshold=15.0,
+            cool_threshold=20.0,
+            hysteresis=0.5,
+            season=Season.OFF,
+        )
+        topics = outdoor_state_topics(state)
+        self.assertEqual(
+            "20.9",
+            topics["DigitalHouses/Global/dh_climate_app/outdoor/temperature"],
+        )
+        self.assertEqual(
+            "39.0",
+            topics["DigitalHouses/Global/dh_climate_app/outdoor/humidity"],
         )
 
     def test_weather_precipitation_discovery(self) -> None:
