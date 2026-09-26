@@ -18,10 +18,13 @@ from .discovery import (
     room_climate_discovery_payload,
     room_climate_discovery_topic,
     room_climate_state_topics,
+    ROOM_TARGET_KEYS,
     room_humidity_discovery_payload,
     room_humidity_discovery_topic,
-    room_profile_discovery_payload,
     room_profile_discovery_topic,
+    room_target_discovery_payload,
+    room_target_discovery_topic,
+    room_target_state_topics,
     room_humidity_state_topics,
     problem_state_payload,
     season_discovery_payload,
@@ -201,6 +204,9 @@ class ClimateMqttFacade:
         self.bridge.subscribe(
             "DigitalHouses/Global/dh_climate_app/rooms/+/humidity/set/+"
         )
+        self.bridge.subscribe(
+            "DigitalHouses/Global/dh_climate_app/rooms/+/targets/set/+"
+        )
         self.publish_system_discovery()
         self.bridge.publish(
             SYSTEM_AVAILABILITY_TOPIC,
@@ -258,8 +264,7 @@ class ClimateMqttFacade:
         self,
         state: RoomState,
         *,
-        published_profile: str,
-        published_target: float | None,
+        profile_targets: dict[str, float | None],
     ) -> int:
         room = self.rooms[state.room_id]
         count = int(
@@ -278,25 +283,41 @@ class ClimateMqttFacade:
                 retain=True,
             )
         )
+
+        # 0.1.4 exposed a temporary Profile select. Delete its retained
+        # Discovery payload so upgrades remove that entity from Home Assistant.
         count += int(
             self.bridge.publish(
                 room_profile_discovery_topic(room.room_id),
-                json.dumps(
-                    room_profile_discovery_payload(
-                        room,
-                        self.app_version,
-                    ),
-                    ensure_ascii=False,
-                    sort_keys=True,
-                    separators=(",", ":"),
-                ),
+                "",
                 retain=True,
             )
         )
-        for topic, payload in room_climate_state_topics(
-            state,
-            published_profile=published_profile,
-            published_target=published_target,
+
+        for target_key, name in ROOM_TARGET_KEYS:
+            count += int(
+                self.bridge.publish(
+                    room_target_discovery_topic(room.room_id, target_key),
+                    json.dumps(
+                        room_target_discovery_payload(
+                            room,
+                            self.app_version,
+                            target_key=target_key,
+                            name=name,
+                        ),
+                        ensure_ascii=False,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ),
+                    retain=True,
+                )
+            )
+
+        for topic, payload in room_climate_state_topics(state).items():
+            count += int(self.bridge.publish(topic, payload, retain=True))
+        for topic, payload in room_target_state_topics(
+            room.room_id,
+            profile_targets,
         ).items():
             count += int(self.bridge.publish(topic, payload, retain=True))
         return count
@@ -392,6 +413,8 @@ class ClimateMqttFacade:
                 scope = "room"
             elif parts[2] == "humidity":
                 scope = "humidity"
+            elif parts[2] == "targets":
+                scope = "target"
             else:
                 return
             self.command_queue.put_nowait(
