@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.8 — development
+
+- Changed interseason room climate behavior from unavailable to readable-Off: current room temperature remains visible, no seasonal target is exposed, and room thermostat commands are ignored while season is OFF.
+- Added normalized precipitation state from configured `weather.*` sources: current precipitation type plus current-hour forecast precipitation amount in millimetres.
+- Added one schema-v2 MQTT Event entity for semantic Climate transitions, initially covering season, precipitation, windows and aggregate Problem start/recovery; events use QoS 1, retain=false and are not replayed after reconnect.
+- Added explicit rain/snow/mixed/hail classification and rain↔snow transition events without generating routine thermostat-cycle event noise.
+
 ## 0.1.7 — development
 
 - Fixed migration of profile target Number availability after the 0.1.6 interseason change. Existing MQTT Discovery entities now explicitly replace the old room-dependent availability list with system-only availability, so target settings remain editable while room thermostats are unavailable between seasons.
