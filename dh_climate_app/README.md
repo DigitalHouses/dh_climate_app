@@ -38,7 +38,8 @@ SQLite under `/data/dh_climate.db` stores only durable installation state. It is
 - global `HEAT / COOL / OFF` season;
 - writable two-threshold `heat_cool` season thermostat;
 - one MQTT Device and one room thermostat per configured room;
-- separate `day / night / away` room profile selector with internal `antifreeze` protection;
+- Apple Home-compatible room thermostat with stable `off / auto` modes and active-profile target control;
+- hidden configuration numbers for Heat/Cool Day/Night/Away targets plus internal Heat antifreeze target;
 - one house-wide temperature hysteresis;
 - persisted stateful room hysteresis;
 - FAST heat/cool actuators;
@@ -73,7 +74,7 @@ See [docs/CONFIG_EXAMPLE.yaml](docs/CONFIG_EXAMPLE.yaml) and [DOCS.md](DOCS.md).
 
 ## Release status
 
-Version `0.1.4` is still an **experimental pre-release implementation**. Unit/CI and container-build validation are automated. The remaining release gate is end-to-end testing on a real Home Assistant OS installation with real MQTT discovery and physical actuator entities.
+Version `0.1.5` is still an **experimental pre-release implementation**. Unit/CI and container-build validation are automated. The remaining release gate is end-to-end testing on a real Home Assistant OS installation with real MQTT discovery and physical actuator entities.
 
 Canonical release identity:
 
