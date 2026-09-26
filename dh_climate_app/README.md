@@ -71,6 +71,7 @@ See [docs/CONFIG_EXAMPLE.yaml](docs/CONFIG_EXAMPLE.yaml) and [DOCS.md](DOCS.md).
 - [Configuration example](docs/CONFIG_EXAMPLE.yaml)
 - [Implementation plan](docs/IMPLEMENTATION_PLAN.md)
 - [HAOS acceptance plan](HAOS_TEST_PLAN.md)
+- [Experimental update runbook](docs/EXPERIMENTAL_UPDATE_RUNBOOK.md)
 
 ## Release status
 
