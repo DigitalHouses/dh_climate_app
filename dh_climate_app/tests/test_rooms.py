@@ -82,6 +82,8 @@ class RoomEngineTests(unittest.TestCase):
         states = {
             "sensor.living_room_temperature": "5",
             "sensor.living_room_humidity": "45",
+            "input_boolean.we_at_home": "on",
+            "input_boolean.night_mode": "off",
         }
         room = self.engine.evaluate_all(states, season=Season.HEAT)["living_room"]
         self.assertEqual(Profile.DAY, room.effective_profile)
