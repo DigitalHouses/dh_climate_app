@@ -104,3 +104,9 @@ Production images:
 ```text
 ghcr.io/digitalhouses/digitalhouses_climate_app:<version>
 ```
+
+Release publication is repo-controlled. `dh_climate_app/RELEASE` must contain
+the exact canonical tag for the version in `config.yaml`. A reviewed merge to
+`main` validates the dated changelog, creates the canonical tag, verifies that
+the immutable GHCR version tag and GitHub Release do not already exist, then
+publishes the multi-architecture image and GitHub Release.
