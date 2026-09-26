@@ -5,8 +5,10 @@ import unittest
 from datetime import datetime, timezone
 
 from dh_climate_app.config import parse_options
+from dh_climate_app.core import HvacAction, Profile, Season
 from dh_climate_app.discovery import SYSTEM_AVAILABILITY_TOPIC
 from dh_climate_app.mqtt import ClimateMqttFacade, MqttBridge
+from dh_climate_app.rooms import RoomState
 from test_config import options
 
 
@@ -21,6 +23,30 @@ class FakeBridge:
     def publish(self, topic, payload, *, retain, force=False):
         self.publications.append((topic, payload, retain, force))
         return True
+
+
+class DedupeFakeBridge(FakeBridge):
+    def __init__(self) -> None:
+        super().__init__()
+        self.last_payloads = {}
+        self.scheduled = []
+
+    def publish(self, topic, payload, *, retain, force=False):
+        changed = force or self.last_payloads.get(topic) != payload
+        if changed:
+            self.publications.append((topic, payload, retain, force))
+            self.last_payloads[topic] = payload
+        return changed
+
+    def schedule_retained_republish(
+        self,
+        payloads,
+        *,
+        delay_seconds=0.5,
+    ) -> None:
+        self.scheduled.append((dict(payloads), delay_seconds))
+        for topic, payload in payloads.items():
+            self.publish(topic, payload, retain=True, force=True)
 
 
 class FakePublishInfo:
@@ -112,6 +138,100 @@ class MqttReconnectTests(unittest.IsolatedAsyncioTestCase):
             [("DigitalHouses/test/set", 1)],
             bridge.client.subscriptions,
         )
+
+
+class MqttRoomDiscoveryRehydrateTests(unittest.TestCase):
+    def test_discovery_change_forces_delayed_room_state_rehydrate(self) -> None:
+        bridge = DedupeFakeBridge()
+        queue: asyncio.Queue = asyncio.Queue()
+        config = parse_options(options())
+        facade = ClimateMqttFacade(
+            bridge=bridge,
+            app_version="0.1.16",
+            started_at=datetime.now(timezone.utc),
+            rooms=config.rooms,
+            command_queue=queue,
+        )
+        room = config.rooms[0]
+        state = RoomState(
+            room_id=room.room_id,
+            name=room.name,
+            current_temperature=21.0,
+            current_humidity=45.0,
+            season=Season.HEAT,
+            effective_profile=Profile.DAY,
+            target_temperature=23.0,
+            climate_control_enabled=True,
+            control_action=HvacAction.HEATING,
+            hvac_mode="heat",
+            hvac_action=HvacAction.HEATING,
+        )
+
+        facade.publish_room(
+            state,
+            published_profile="day",
+            published_target=23.0,
+            profile_targets={},
+        )
+
+        self.assertEqual(1, len(bridge.scheduled))
+        payloads, delay = bridge.scheduled[0]
+        self.assertEqual(0.5, delay)
+        profile_topic = (
+            "DigitalHouses/Global/dh_climate_app/rooms/"
+            f"{room.room_id}/climate/profile"
+        )
+        self.assertEqual("day", payloads[profile_topic])
+
+        forced_profile = [
+            item
+            for item in bridge.publications
+            if item[0] == profile_topic and item[3] is True
+        ]
+        self.assertTrue(forced_profile)
+
+    def test_unchanged_discovery_does_not_schedule_rehydrate(self) -> None:
+        bridge = DedupeFakeBridge()
+        queue: asyncio.Queue = asyncio.Queue()
+        config = parse_options(options())
+        facade = ClimateMqttFacade(
+            bridge=bridge,
+            app_version="0.1.16",
+            started_at=datetime.now(timezone.utc),
+            rooms=config.rooms,
+            command_queue=queue,
+        )
+        room = config.rooms[0]
+        state = RoomState(
+            room_id=room.room_id,
+            name=room.name,
+            current_temperature=21.0,
+            current_humidity=45.0,
+            season=Season.HEAT,
+            effective_profile=Profile.DAY,
+            target_temperature=23.0,
+            climate_control_enabled=True,
+            control_action=HvacAction.HEATING,
+            hvac_mode="heat",
+            hvac_action=HvacAction.HEATING,
+        )
+
+        facade.publish_room(
+            state,
+            published_profile="day",
+            published_target=23.0,
+            profile_targets={},
+        )
+        bridge.scheduled.clear()
+
+        facade.publish_room(
+            state,
+            published_profile="day",
+            published_target=23.0,
+            profile_targets={},
+        )
+
+        self.assertEqual([], bridge.scheduled)
 
 
 class MqttRoutingTests(unittest.TestCase):
