@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.12 — development
+
+- Fixed season range updates from the Home Assistant `heat_cool` thermostat: paired lower/upper MQTT commands are now coalesced and validated atomically.
+- The order of `target_temp_low` / `target_temp_high` messages no longer matters.
+- Single-threshold edits remain supported and invalid final ranges are still rejected.
+
 ## 0.1.11 — development
 
 - Added dual-channel Climate diagnostic logging: authoritative App log plus asynchronous best-effort mirroring to local `script.write2climatelog`.
