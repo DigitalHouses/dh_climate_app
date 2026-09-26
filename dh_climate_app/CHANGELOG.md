@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.10 — development
+
+- Standardized every public App temperature value to one decimal place.
+- Internal climate calculations retain full precision; rounding is applied only at Home Assistant, MQTT and machine-event presentation boundaries.
+- Rounded current/avg24 outdoor temperature, season thresholds and temperature fields in semantic events.
+
 ## 0.1.9 — development
 
 - Added dedicated UI sensors for current outdoor temperature and humidity.
