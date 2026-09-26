@@ -269,6 +269,8 @@ The App publishes a native Home Assistant `humidifier` entity containing current
 
 Its physical actuator may be a `switch` or an existing Home Assistant `humidifier` entity. Set `humidity_mode` to `off`, `humidifier`, or `dehumidifier`.
 
+For a `humidifier.*` actuator, the humidity target is applied only while the controller is actively humidifying/dehumidifying. When the controller is inactive, the desired physical state is power-off only, so a device target-range mismatch can never block a shutdown command.
+
 ## Safety and reconciliation
 
 The App compares desired and actual physical state before every service call.
