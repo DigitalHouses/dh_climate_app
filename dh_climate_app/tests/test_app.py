@@ -4,13 +4,27 @@ import unittest
 
 from dh_climate_app.app import ClimateRuntime
 from dh_climate_app.core import HvacAction, Profile, Season
-from dh_climate_app.rooms import ProfileEditOverlay, RoomState
+from dh_climate_app.rooms import RoomState
 
 
-class RoomPresetCommandTests(unittest.IsolatedAsyncioTestCase):
-    async def test_none_clears_temporary_profile_overlay(self) -> None:
+class FakeStore:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, Season, Profile, float]] = []
+
+    def set_room_target(
+        self,
+        room_id: str,
+        season: Season,
+        profile: Profile,
+        target: float,
+    ) -> None:
+        self.calls.append((room_id, season, profile, target))
+
+
+class RoomTargetCommandTests(unittest.IsolatedAsyncioTestCase):
+    def runtime(self) -> ClimateRuntime:
         runtime = object.__new__(ClimateRuntime)
-        runtime.profile_overlay = ProfileEditOverlay(idle_timeout_seconds=10.0)
+        runtime.store = FakeStore()
         runtime._last_room_states = {
             "livingroom": RoomState(
                 room_id="livingroom",
@@ -24,34 +38,39 @@ class RoomPresetCommandTests(unittest.IsolatedAsyncioTestCase):
                 control_action=HvacAction.IDLE,
                 hvac_mode="heat",
                 hvac_action=HvacAction.IDLE,
+                control_profile=Profile.DAY,
+                control_target_temperature=22.0,
                 window_state="not_configured",
             )
         }
+        return runtime
 
-        runtime.profile_overlay.select(
+    async def test_climate_target_changes_only_active_profile(self) -> None:
+        runtime = self.runtime()
+
+        await runtime._handle_room_command(
             "livingroom",
-            Profile.NIGHT,
-            effective_profile=Profile.DAY,
-            now_monotonic=100.0,
-        )
-        self.assertEqual(
-            Profile.NIGHT,
-            runtime.profile_overlay.selected(
-                "livingroom",
-                effective_profile=Profile.DAY,
-                now_monotonic=105.0,
-            ),
+            "target_temperature",
+            "23.5",
         )
 
-        await runtime._handle_room_command("livingroom", "profile", "none")
+        self.assertEqual(
+            [("livingroom", Season.HEAT, Profile.DAY, 23.5)],
+            runtime.store.calls,
+        )
+
+    async def test_profile_setting_can_edit_inactive_night_target(self) -> None:
+        runtime = self.runtime()
+
+        await runtime._handle_room_profile_target_command(
+            "livingroom",
+            "heat_night",
+            "20.0",
+        )
 
         self.assertEqual(
-            Profile.DAY,
-            runtime.profile_overlay.selected(
-                "livingroom",
-                effective_profile=Profile.DAY,
-                now_monotonic=105.0,
-            ),
+            [("livingroom", Season.HEAT, Profile.NIGHT, 20.0)],
+            runtime.store.calls,
         )
 
 
