@@ -81,6 +81,29 @@ Status: implementation-complete for the first HAOS acceptance cycle.
 - unit/contract/compile/shell/container CI;
 - product and architecture documentation.
 
+## Future device-model refactor — documented, not implemented
+
+The architecture now reserves a generalized logical-device model without
+expanding the current v0.1 option schema:
+
+- reusable `Control Profile` definitions (starting with `control_standart`)
+  describe ordered command sets only;
+- device `roles` describe heat, cool, ventilation supply/exhaust,
+  humidification and dehumidification functions;
+- `inertia` is an independent `fast / medium / slow` property;
+- `control_source` identifies normalized demand from season, room thermostat,
+  CO₂ or humidity controllers;
+- `scope` allows room- and house-level devices;
+- optional `equipment_id` groups multiple logical HA entities belonging to one
+  physical installation;
+- Command Plans support ordered multi-step execution, optional per-step
+  verification, final desired-state verification, superseding and drift
+  detection.
+
+This is a compatibility direction, not part of the current acceptance scope.
+The existing FAST/SLOW configuration remains authoritative until a dedicated
+migration is designed and tested.
+
 ## Phase 8 — real HAOS acceptance ⏳
 
 This is the remaining release gate and cannot be proven only inside repository CI.
