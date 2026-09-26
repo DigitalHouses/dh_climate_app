@@ -160,6 +160,11 @@ def room_climate_discovery_topic(room_id: str) -> str:
     return f"{DISCOVERY_PREFIX}/climate/{object_id}/config"
 
 
+def room_profile_discovery_topic(room_id: str) -> str:
+    object_id = f"dh_climate_app_{room_id}_profile"
+    return f"{DISCOVERY_PREFIX}/select/{object_id}/config"
+
+
 def room_humidity_discovery_topic(room_id: str) -> str:
     object_id = f"dh_climate_app_{room_id}_humidity"
     return f"{DISCOVERY_PREFIX}/humidifier/{object_id}/config"
@@ -194,14 +199,34 @@ def room_climate_discovery_payload(
         "mode_state_topic": f"{base}/climate/hvac_mode",
         "mode_command_topic": f"{base}/climate/set/hvac_mode",
         "action_topic": f"{base}/climate/hvac_action",
-        "preset_mode_state_topic": f"{base}/climate/profile",
-        "preset_mode_command_topic": f"{base}/climate/set/profile",
-        "preset_modes": ["day", "night", "away"],
         "json_attributes_topic": f"{base}/climate/attributes",
         "modes": modes,
         "min_temp": 5.0,
         "max_temp": 35.0,
         "temp_step": 0.5,
+        "retain": True,
+        "device": room_device(room, app_version),
+        "origin": _origin(app_version),
+    }
+
+
+def room_profile_discovery_payload(
+    room: RoomConfig,
+    app_version: str,
+) -> dict[str, Any]:
+    base = room_base(room.room_id)
+    return {
+        "name": "Profile",
+        "unique_id": f"dh_climate_app_{room.room_id}_profile",
+        "default_entity_id": f"select.dh_climate_app_{room.room_id}_profile",
+        "state_topic": f"{base}/climate/profile",
+        "command_topic": f"{base}/climate/set/profile",
+        "options": ["day", "night", "away"],
+        "availability": [
+            {"topic": SYSTEM_AVAILABILITY_TOPIC},
+            {"topic": f"{base}/climate/availability"},
+        ],
+        "availability_mode": "all",
         "retain": True,
         "device": room_device(room, app_version),
         "origin": _origin(app_version),
