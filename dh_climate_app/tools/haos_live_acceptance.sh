@@ -144,6 +144,32 @@ wait_attr() {
   fail "$entity.$attr=$actual expected=$expected"
 }
 
+wait_numeric_state_present() {
+  local entity="$1"
+  local seconds="${2:-30}"
+  local i
+  for i in $(seq 1 "$seconds"); do
+    if state_json "$entity" 2>/dev/null | jq -e '.state | tonumber' >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  fail "$entity did not become numeric"
+}
+
+wait_numeric_attr_present() {
+  local entity="$1"
+  local attr="$2"
+  local seconds="${3:-30}"
+  local i
+  for i in $(seq 1 "$seconds"); do
+    if state_json "$entity" 2>/dev/null | jq -e --arg attr "$attr" '.attributes[$attr] | tonumber' >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  fail "$entity.$attr did not become numeric"
+}
 wait_number() {
   local entity="$1"
   local expected="$2"
@@ -490,6 +516,11 @@ jq -e 'type=="object" and (.rooms|type=="array")' "$BASE_OPTIONS_FILE" >/dev/nul
   fail "Could not read current App options"
 
 core_get states > "$BASE_STATE_FILE"
+
+wait_numeric_state_present "$HEAT_DAY" 40
+wait_numeric_state_present "$COOL_DAY" 40
+wait_numeric_attr_present "$SEASON_CLIMATE" "target_temp_low" 40
+wait_numeric_attr_present "$SEASON_CLIMATE" "target_temp_high" 40
 
 BASE_ROOM_TEMP="$(state_value "$ROOM_TEMP_HELPER")"
 BASE_HEAT_DAY="$(state_value "$HEAT_DAY")"

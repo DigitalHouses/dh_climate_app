@@ -74,6 +74,7 @@ class MqttBridge:
         self._subscriptions: set[str] = set()
         self._message_handler: Callable[[str, str, bool], None] | None = None
         self._connected_once = False
+        self._scheduled_republishes: set[asyncio.TimerHandle] = set()
 
         try:
             self.client = mqtt.Client(
@@ -105,6 +106,9 @@ class MqttBridge:
         self.client.loop_start()
 
     def stop(self) -> None:
+        for handle in tuple(self._scheduled_republishes):
+            handle.cancel()
+        self._scheduled_republishes.clear()
         try:
             self.publish(SYSTEM_AVAILABILITY_TOPIC, "offline", retain=True, force=True)
         finally:
@@ -131,6 +135,39 @@ class MqttBridge:
         if retain:
             self._retained_payloads[topic] = payload
         return True
+
+    def schedule_retained_republish(
+        self,
+        payloads: dict[str, str],
+        *,
+        delay_seconds: float = 0.5,
+    ) -> None:
+        """Republish retained state after a Discovery entity rebuild.
+
+        Home Assistant initializes some MQTT Climate attributes (notably
+        preset_mode) while applying an updated Discovery payload. Replaying the
+        retained room state after that rebuild prevents those defaults from
+        replacing the App's authoritative state.
+        """
+        snapshot = dict(payloads)
+        handle: asyncio.TimerHandle | None = None
+
+        def republish() -> None:
+            if handle is not None:
+                self._scheduled_republishes.discard(handle)
+            try:
+                for topic, payload in snapshot.items():
+                    self.publish(
+                        topic,
+                        payload,
+                        retain=True,
+                        force=True,
+                    )
+            except Exception:
+                LOGGER.exception("Delayed MQTT retained-state republish failed")
+
+        handle = self.loop.call_later(float(delay_seconds), republish)
+        self._scheduled_republishes.add(handle)
 
     def _restore_retained_after_reconnect(self) -> None:
         payloads = dict(self._retained_payloads)
@@ -332,22 +369,21 @@ class ClimateMqttFacade:
         profile_targets: dict[str, float | None],
     ) -> int:
         room = self.rooms[state.room_id]
-        count = int(
-            self.bridge.publish(
-                room_climate_discovery_topic(room.room_id),
-                json.dumps(
-                    room_climate_discovery_payload(
-                        room,
-                        state,
-                        self.app_version,
-                    ),
-                    ensure_ascii=False,
-                    sort_keys=True,
-                    separators=(",", ":"),
+        discovery_changed = self.bridge.publish(
+            room_climate_discovery_topic(room.room_id),
+            json.dumps(
+                room_climate_discovery_payload(
+                    room,
+                    state,
+                    self.app_version,
                 ),
-                retain=True,
-            )
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+            retain=True,
         )
+        count = int(discovery_changed)
 
         # 0.1.4 exposed a temporary Profile select. Delete its retained
         # Discovery payload so upgrades remove that entity from Home Assistant.
@@ -378,12 +414,19 @@ class ClimateMqttFacade:
                 )
             )
 
-        for topic, payload in room_climate_state_topics(
+        climate_state_topics = room_climate_state_topics(
             state,
             published_profile=published_profile,
             published_target=published_target,
-        ).items():
+        )
+        for topic, payload in climate_state_topics.items():
             count += int(self.bridge.publish(topic, payload, retain=True))
+
+        if discovery_changed:
+            self.bridge.schedule_retained_republish(
+                climate_state_topics,
+                delay_seconds=0.5,
+            )
         for topic, payload in room_target_state_topics(
             room.room_id,
             profile_targets,
