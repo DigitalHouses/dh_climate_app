@@ -132,8 +132,11 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual("config", target["entity_category"])
         self.assertEqual("temperature", target["device_class"])
         self.assertFalse(target["visible_by_default"])
-        self.assertIn("availability_topic", target)
-        self.assertNotIn("availability", target)
+        self.assertEqual(
+            [{"topic": "DigitalHouses/Global/dh_climate_app/availability"}],
+            target["availability"],
+        )
+        self.assertEqual("all", target["availability_mode"])
         self.assertEqual(
             "number.dh_climate_app_living_room_heat_night",
             target["default_entity_id"],
