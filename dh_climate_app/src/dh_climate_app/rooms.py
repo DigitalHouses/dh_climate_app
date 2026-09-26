@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import time
 from typing import Mapping
 
 from .config import AppConfig, RoomConfig
@@ -206,7 +207,10 @@ class RoomEngine:
             hvac_mode = "off"
             hvac_action = HvacAction.OFF
         else:
-            hvac_mode = "auto"
+            # User-facing HVAC mode follows the active global season.
+            # This keeps the room climate entity semantically native:
+            # HEAT season -> heat, COOL season -> cool.
+            hvac_mode = season.value
             hvac_action = control_action
 
         return RoomState(
@@ -226,3 +230,70 @@ class RoomEngine:
             window_state=window_state,
         )
 
+
+
+class ProfileEditOverlay:
+    """Short-lived facade-only preset selection.
+
+    The effective profile is still decided by presence/night inputs. Selecting
+    day/night/away in the Home Assistant climate card temporarily exposes that
+    profile and its target for editing, then returns to the effective profile.
+    """
+
+    def __init__(self, idle_timeout_seconds: float = 10.0) -> None:
+        self.idle_timeout_seconds = float(idle_timeout_seconds)
+        self._selected: dict[str, tuple[Profile, float]] = {}
+
+    def select(
+        self,
+        room_id: str,
+        profile: Profile,
+        *,
+        effective_profile: Profile,
+        now_monotonic: float | None = None,
+    ) -> None:
+        if profile not in {Profile.DAY, Profile.NIGHT, Profile.AWAY}:
+            raise ValueError(f"profile is not user-selectable: {profile.value}")
+        now = time.monotonic() if now_monotonic is None else now_monotonic
+        if profile is effective_profile:
+            self._selected.pop(room_id, None)
+            return
+        self._selected[room_id] = (
+            profile,
+            now + self.idle_timeout_seconds,
+        )
+
+    def touch(
+        self,
+        room_id: str,
+        *,
+        now_monotonic: float | None = None,
+    ) -> None:
+        current = self._selected.get(room_id)
+        if current is None:
+            return
+        now = time.monotonic() if now_monotonic is None else now_monotonic
+        self._selected[room_id] = (
+            current[0],
+            now + self.idle_timeout_seconds,
+        )
+
+    def selected(
+        self,
+        room_id: str,
+        *,
+        effective_profile: Profile,
+        now_monotonic: float | None = None,
+    ) -> Profile:
+        current = self._selected.get(room_id)
+        if current is None:
+            return effective_profile
+        now = time.monotonic() if now_monotonic is None else now_monotonic
+        profile, expires_at = current
+        if now >= expires_at:
+            self._selected.pop(room_id, None)
+            return effective_profile
+        return profile
+
+    def clear(self, room_id: str) -> None:
+        self._selected.pop(room_id, None)
