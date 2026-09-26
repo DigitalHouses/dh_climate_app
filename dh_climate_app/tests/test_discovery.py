@@ -128,7 +128,7 @@ class DiscoveryTests(unittest.TestCase):
             hvac_action=HvacAction.HEATING,
         )
         payload = room_climate_discovery_payload(room, state, "0.1.0")
-        self.assertEqual(["off", "heat"], payload["modes"])
+        self.assertEqual(["off", "heat", "cool"], payload["modes"])
         self.assertEqual("all", payload["availability_mode"])
         self.assertEqual(2, len(payload["availability"]))
         self.assertEqual(
@@ -194,13 +194,10 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual("away", topics[f"{base}/profile"])
         self.assertEqual("18.0", topics[f"{base}/target_temperature"])
 
-    def test_room_discovery_tracks_cool_and_off_seasons(self) -> None:
+    def test_room_discovery_capabilities_are_stable_across_seasons(self) -> None:
         config = parse_options(options())
         room = config.rooms[0]
-        for season, expected in (
-            (Season.COOL, ["off", "cool"]),
-            (Season.OFF, ["off"]),
-        ):
+        for season in (Season.HEAT, Season.COOL, Season.OFF):
             with self.subTest(season=season):
                 state = RoomState(
                     room_id=room.room_id,
@@ -212,11 +209,19 @@ class DiscoveryTests(unittest.TestCase):
                     target_temperature=None if season is Season.OFF else 24.0,
                     climate_control_enabled=True,
                     control_action=HvacAction.IDLE,
-                    hvac_mode="off" if season is Season.OFF else "cool",
-                    hvac_action=HvacAction.OFF if season is Season.OFF else HvacAction.IDLE,
+                    hvac_mode=(
+                        "off"
+                        if season is Season.OFF
+                        else season.value
+                    ),
+                    hvac_action=(
+                        HvacAction.OFF
+                        if season is Season.OFF
+                        else HvacAction.IDLE
+                    ),
                 )
                 payload = room_climate_discovery_payload(room, state, "0.1.16")
-                self.assertEqual(expected, payload["modes"])
+                self.assertEqual(["off", "heat", "cool"], payload["modes"])
 
     def test_outdoor_ui_sensors_use_current_values(self) -> None:
         discovery = outdoor_discovery_payloads("0.1.9")

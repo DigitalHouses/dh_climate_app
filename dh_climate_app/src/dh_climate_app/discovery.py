@@ -297,12 +297,10 @@ def room_climate_discovery_payload(
     app_version: str,
 ) -> dict[str, Any]:
     base = room_base(room.room_id)
-    if state.season.value == "heat":
-        modes = ["off", "heat"]
-    elif state.season.value == "cool":
-        modes = ["off", "cool"]
-    else:
-        modes = ["off"]
+    # Keep MQTT Climate capabilities stable across season transitions.
+    # The entity state itself remains season-native (heat/cool/off), while
+    # invalid opposite-season commands are rejected by the App runtime.
+    modes = ["off", "heat", "cool"]
 
     return {
         "name": "Thermostat",

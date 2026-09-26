@@ -2,7 +2,7 @@
 set -Ee -o pipefail
 
 APP="8d59ce70_dh_climate_app"
-EXPECTED_VERSION="0.1.16"
+EXPECTED_VERSION="0.1.17"
 CORE="http://supervisor/core"
 SUPERVISOR="http://supervisor"
 TOKEN="${SUPERVISOR_TOKEN:-}"
@@ -482,7 +482,7 @@ do
   wait_entity "$entity" 5
 done
 
-say "1. UPDATE TO 0.1.16"
+say "1. UPDATE TO 0.1.17"
 
 ha store reload
 sleep 3
@@ -626,7 +626,7 @@ wait_state "$ROOM_CLIMATE" "heat" 30
 wait_attr "$ROOM_CLIMATE" "hvac_action" "heating" 30
 wait_attr "$ROOM_CLIMATE" "preset_mode" "day" 30
 state_json "$ROOM_CLIMATE" | jq -e '
-  (.attributes.hvac_modes == ["off","heat"]) and
+  (.attributes.hvac_modes == ["off","heat","cool"]) and
   ((.attributes.preset_modes | index("day")) != null) and
   ((.attributes.preset_modes | index("night")) != null) and
   ((.attributes.preset_modes | index("away")) != null) and
@@ -650,7 +650,7 @@ wait_state "$ROOM_CLIMATE" "cool" 30
 wait_attr "$ROOM_CLIMATE" "hvac_action" "cooling" 30
 wait_attr "$ROOM_CLIMATE" "preset_mode" "day" 30
 state_json "$ROOM_CLIMATE" | jq -e '
-  .attributes.hvac_modes == ["off","cool"]
+  .attributes.hvac_modes == ["off","heat","cool"]
 ' >/dev/null || fail "room climate COOL capability contract mismatch"
 echo "PASS room climate COOL + cooling"
 
@@ -658,7 +658,7 @@ force_off
 wait_state "$ROOM_CLIMATE" "off" 30
 wait_attr "$ROOM_CLIMATE" "hvac_action" "off" 30
 state_json "$ROOM_CLIMATE" | jq -e '
-  .attributes.hvac_modes == ["off"]
+  .attributes.hvac_modes == ["off","heat","cool"]
 ' >/dev/null || fail "room climate OFF capability contract mismatch"
 echo "PASS room climate interseason OFF"
 
@@ -871,7 +871,7 @@ BACKUP_SLUG=""
 
 echo
 echo "============================================================"
-echo "DH CLIMATE 0.1.16 · BUNDLED LIVE ACCEPTANCE = PASS"
+echo "DH CLIMATE 0.1.17 · BUNDLED LIVE ACCEPTANCE = PASS"
 echo "============================================================"
 echo "PASS room climate native heat/cool + action + presets"
 echo "PASS device_target_out_of_range"
