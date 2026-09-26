@@ -337,16 +337,11 @@ class ClimateRuntime:
             if mode == "off":
                 self.store.set_climate_control_enabled(room_id, False)
                 return
-            if state.season is Season.HEAT and mode == "heat":
+            if mode == "auto":
                 self.store.set_climate_control_enabled(room_id, True)
-                return
-            if state.season is Season.COOL and mode == "cool":
-                self.store.set_climate_control_enabled(room_id, True)
-                return
-            if state.season is Season.OFF and mode in {"heat", "cool"}:
                 return
             raise ValueError(
-                f"hvac_mode={mode} is not allowed in season={state.season.value}"
+                f"hvac_mode={mode} is not supported; use off or auto"
             )
 
         if command == "target_temperature":
