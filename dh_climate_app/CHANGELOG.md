@@ -1,9 +1,10 @@
 # Changelog
 
-## 0.1.19 — development
+## 0.1.19 — 2026-09-27
 
 - Added a dedicated `sensor.dh_climate_app_outdoor_temperature_avg24` entity for the App's existing time-weighted 24-hour outdoor temperature average.
 - The sensor reuses the same persisted Climate Core rolling average, publishes one-decimal °C values, and does not introduce a second calculation path.
+- Passed bundled live HAOS acceptance on 2026-09-27; the new avg24 sensor matched the season facade `avg_24h_temperature` value and the full existing safety/backup suite remained green.
 
 ## 0.1.18 — 2026-09-27
 

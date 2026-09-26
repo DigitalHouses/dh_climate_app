@@ -91,7 +91,7 @@ refresh command; see [Experimental update runbook](docs/EXPERIMENTAL_UPDATE_RUNB
 
 ## Release status
 
-Version `0.1.18` has passed bundled runtime acceptance on a real Home Assistant OS installation and is published as an immutable multi-architecture release. Acceptance includes exact season-specific room HVAC modes (`off/heat`, `off/cool`, `off`), native `day / night / away` preset preservation across season changes, actuator safety, and App-only backup/restore. Deterministic actuator fixtures were used instead of commandeering physical HVAC equipment. See [0.1.18 HAOS acceptance](docs/ACCEPTANCE_0.1.18.md).
+Version `0.1.19` has passed bundled runtime acceptance on a real Home Assistant OS installation. Acceptance includes the dedicated outdoor temperature avg24 sensor plus the complete existing room climate, actuator safety, and App-only backup/restore regression suite. Deterministic actuator fixtures were used instead of commandeering physical HVAC equipment. See [0.1.19 HAOS acceptance](docs/ACCEPTANCE_0.1.19.md).
 
 Canonical release identity:
 
