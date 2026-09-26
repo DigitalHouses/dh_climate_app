@@ -37,7 +37,7 @@ class RoomState:
         if self.current_temperature is None:
             return False
         if self.season is Season.OFF:
-            return True
+            return False
         return self.target_temperature is not None
 
 
