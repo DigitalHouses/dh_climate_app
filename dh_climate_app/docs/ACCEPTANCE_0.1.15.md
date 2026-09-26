@@ -72,12 +72,18 @@ The same revision is also covered by repository CI for:
 
 ## Release status
 
-The **runtime acceptance gate is complete**.
+**Runtime acceptance and immutable publication are complete.**
 
-The remaining release-publication gate is operational rather than behavioral:
+Published release:
 
-1. create canonical tag `digitalhouses_climate_app-v0.1.15`;
-2. let the release workflow build/push the immutable multi-architecture image;
-3. verify the GitHub Release and GHCR provenance/digest.
+- tag: `digitalhouses_climate_app-v0.1.15`;
+- release commit: `cfbcc28b856a6d34f6e5892fa7b6aa9f477334a3`;
+- image: `ghcr.io/digitalhouses/digitalhouses_climate_app:0.1.15`;
+- manifest digest: `sha256:2ce86ebdd1a788ca3fbd9357ec0ae4ddef66818008c684559a58192770481997`;
+- release workflow run: `36267401820`.
+
+The canonical tag was created from the validated `main` release commit. The
+release workflow verified that the versioned GHCR destination and GitHub
+Release were unused before publishing.
 
 No published immutable image version may be overwritten with different content.
