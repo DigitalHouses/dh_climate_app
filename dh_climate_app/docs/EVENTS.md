@@ -126,7 +126,7 @@ season
 
 Unknown window truth is not duplicated here. It is represented by
 `problem_started` / `problem_recovered` with
-`problem_code=room_window_state_unknown`.
+`problem_id=room_window_state_unknown`.
 
 ### problem_started / problem_recovered
 
@@ -135,8 +135,8 @@ Generic transition contract for App-owned Problems.
 Fields are the machine Problem identity/context:
 
 ```text
-code
-scope
+problem_id
+category
 severity
 room_id      (when applicable)
 entity_id    (when applicable)
