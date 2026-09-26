@@ -66,8 +66,11 @@ Acceptance:
 - no redundant temperature/humidity sensor entities are created merely to duplicate thermostat values;
 - multiple configured room temperature sensors are averaged;
 - unavailable room temperature makes the room climate facade unavailable;
-- room climate advertises stable `off/auto` capabilities;
-- HEAT/COOL + enabled room publishes `auto`;
+- room climate capabilities follow the global season: HEAT -> `off/heat`,
+  COOL -> `off/cool`, OFF -> `off`;
+- an enabled room publishes `heat` in HEAT season and `cool` in COOL season;
+- HVAC action independently exposes the current room action:
+  `heating / cooling / idle / off`;
 - OFF season keeps the climate entity available when room temperature is valid,
   publishes HVAC mode `off`, exposes current temperature, and no seasonal
   target;

@@ -153,14 +153,23 @@ The target matrix remains:
 room × season × profile → target temperature
 ```
 
-Profiles:
+Native Home Assistant Climate presets:
 
 - `day`
 - `night`
 - `away`
-- `antifreeze`
 
-Changing target temperature in the room thermostat updates the target for the currently selected/effective profile in the current season.
+Home Assistant MQTT Climate also exposes its reserved `none` preset. In this
+App, selecting `none` means "clear the temporary profile-edit overlay and
+return to the automatically effective profile".
+
+`antifreeze` is an internal HEAT protection profile and is never exposed as a
+user-selectable preset.
+
+Changing target temperature in the room thermostat updates the currently
+selected edit-overlay profile, or the automatically effective profile when no
+overlay is active. The edit overlay expires after its idle timeout and does not
+change the automatic presence/night profile source.
 
 ### 5.1 Stateful thermostat hysteresis
 

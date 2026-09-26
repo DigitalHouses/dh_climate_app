@@ -12,6 +12,7 @@ from dh_climate_app.discovery import (
     outdoor_state_topics,
     weather_discovery_payloads,
     room_climate_discovery_payload,
+    room_climate_state_topics,
     ROOM_TARGET_KEYS,
     room_humidity_discovery_payload,
     room_target_discovery_payload,
@@ -123,11 +124,11 @@ class DiscoveryTests(unittest.TestCase):
             target_temperature=23,
             climate_control_enabled=True,
             control_action=HvacAction.HEATING,
-            hvac_mode="auto",
+            hvac_mode="heat",
             hvac_action=HvacAction.HEATING,
         )
         payload = room_climate_discovery_payload(room, state, "0.1.0")
-        self.assertEqual(["off", "auto"], payload["modes"])
+        self.assertEqual(["off", "heat"], payload["modes"])
         self.assertEqual("all", payload["availability_mode"])
         self.assertEqual(2, len(payload["availability"]))
         self.assertEqual(
@@ -135,9 +136,15 @@ class DiscoveryTests(unittest.TestCase):
             payload["device"]["identifiers"],
         )
         self.assertEqual("dh_climate_app", payload["device"]["via_device"])
-        self.assertNotIn("preset_modes", payload)
-        self.assertNotIn("preset_mode_state_topic", payload)
-        self.assertNotIn("preset_mode_command_topic", payload)
+        self.assertEqual(["day", "night", "away"], payload["preset_modes"])
+        self.assertEqual(
+            "DigitalHouses/Global/dh_climate_app/rooms/living_room/climate/profile",
+            payload["preset_mode_state_topic"],
+        )
+        self.assertEqual(
+            "DigitalHouses/Global/dh_climate_app/rooms/living_room/climate/set/profile",
+            payload["preset_mode_command_topic"],
+        )
         self.assertNotIn("fan_modes", payload)
         self.assertNotIn("fan_mode_state_topic", payload)
         self.assertNotIn("fan_mode_command_topic", payload)
@@ -161,6 +168,55 @@ class DiscoveryTests(unittest.TestCase):
             "number.dh_climate_app_living_room_heat_night",
             target["default_entity_id"],
         )
+
+    def test_room_state_exposes_profile_and_native_action(self) -> None:
+        state = RoomState(
+            room_id="living_room",
+            name="Living Room",
+            current_temperature=21.0,
+            current_humidity=45.0,
+            season=Season.HEAT,
+            effective_profile=Profile.AWAY,
+            target_temperature=18.0,
+            climate_control_enabled=True,
+            control_action=HvacAction.IDLE,
+            hvac_mode="heat",
+            hvac_action=HvacAction.IDLE,
+        )
+        topics = room_climate_state_topics(
+            state,
+            published_profile="away",
+            published_target=18.0,
+        )
+        base = "DigitalHouses/Global/dh_climate_app/rooms/living_room/climate"
+        self.assertEqual("heat", topics[f"{base}/hvac_mode"])
+        self.assertEqual("idle", topics[f"{base}/hvac_action"])
+        self.assertEqual("away", topics[f"{base}/profile"])
+        self.assertEqual("18.0", topics[f"{base}/target_temperature"])
+
+    def test_room_discovery_tracks_cool_and_off_seasons(self) -> None:
+        config = parse_options(options())
+        room = config.rooms[0]
+        for season, expected in (
+            (Season.COOL, ["off", "cool"]),
+            (Season.OFF, ["off"]),
+        ):
+            with self.subTest(season=season):
+                state = RoomState(
+                    room_id=room.room_id,
+                    name=room.name,
+                    current_temperature=22.0,
+                    current_humidity=45.0,
+                    season=season,
+                    effective_profile=Profile.DAY,
+                    target_temperature=None if season is Season.OFF else 24.0,
+                    climate_control_enabled=True,
+                    control_action=HvacAction.IDLE,
+                    hvac_mode="off" if season is Season.OFF else "cool",
+                    hvac_action=HvacAction.OFF if season is Season.OFF else HvacAction.IDLE,
+                )
+                payload = room_climate_discovery_payload(room, state, "0.1.16")
+                self.assertEqual(expected, payload["modes"])
 
     def test_outdoor_ui_sensors_use_current_values(self) -> None:
         discovery = outdoor_discovery_payloads("0.1.9")

@@ -5,13 +5,14 @@ import unittest
 from dh_climate_app.app import ClimateRuntime
 from dh_climate_app.mqtt import MqttCommand
 from dh_climate_app.core import HvacAction, Profile, Season
-from dh_climate_app.rooms import RoomState
+from dh_climate_app.rooms import ProfileEditOverlay, RoomState
 
 
 class FakeStore:
     def __init__(self) -> None:
         self.calls: list[tuple[str, Season, Profile, float]] = []
         self.threshold_calls: list[tuple[float, float]] = []
+        self.enabled_calls: list[tuple[str, bool]] = []
         self.heat_threshold = 15.0
         self.cool_threshold = 29.8
 
@@ -25,6 +26,9 @@ class FakeStore:
         self.heat_threshold = heat
         self.cool_threshold = cool
         self.threshold_calls.append((heat, cool))
+
+    def set_climate_control_enabled(self, room_id: str, enabled: bool) -> None:
+        self.enabled_calls.append((room_id, bool(enabled)))
 
     def set_room_target(
         self,
@@ -40,6 +44,7 @@ class RoomTargetCommandTests(unittest.IsolatedAsyncioTestCase):
     def runtime(self) -> ClimateRuntime:
         runtime = object.__new__(ClimateRuntime)
         runtime.store = FakeStore()
+        runtime.profile_overlay = ProfileEditOverlay(idle_timeout_seconds=10.0)
         runtime.outdoor = type(
             "FakeOutdoor",
             (),
@@ -61,7 +66,7 @@ class RoomTargetCommandTests(unittest.IsolatedAsyncioTestCase):
                 target_temperature=22.0,
                 climate_control_enabled=True,
                 control_action=HvacAction.IDLE,
-                hvac_mode="auto",
+                hvac_mode="heat",
                 hvac_action=HvacAction.IDLE,
                 control_profile=Profile.DAY,
                 control_target_temperature=22.0,
@@ -108,10 +113,82 @@ class RoomTargetCommandTests(unittest.IsolatedAsyncioTestCase):
         await runtime._handle_room_command(
             "livingroom",
             "hvac_mode",
-            "auto",
+            "heat",
         )
 
         self.assertEqual([], runtime.store.calls)
+
+    async def test_native_heat_mode_enables_room(self) -> None:
+        runtime = self.runtime()
+
+        await runtime._handle_room_command(
+            "livingroom",
+            "hvac_mode",
+            "heat",
+        )
+        await runtime._handle_room_command(
+            "livingroom",
+            "hvac_mode",
+            "off",
+        )
+
+        self.assertEqual(
+            [("livingroom", True), ("livingroom", False)],
+            runtime.store.enabled_calls,
+        )
+
+    async def test_wrong_season_hvac_mode_is_rejected(self) -> None:
+        runtime = self.runtime()
+
+        with self.assertRaises(ValueError):
+            await runtime._handle_room_command(
+                "livingroom",
+                "hvac_mode",
+                "cool",
+            )
+
+    async def test_preset_selects_profile_for_target_edit(self) -> None:
+        runtime = self.runtime()
+
+        await runtime._handle_room_command(
+            "livingroom",
+            "profile",
+            "night",
+        )
+        await runtime._handle_room_command(
+            "livingroom",
+            "target_temperature",
+            "20.5",
+        )
+
+        self.assertEqual(
+            [("livingroom", Season.HEAT, Profile.NIGHT, 20.5)],
+            runtime.store.calls,
+        )
+
+    async def test_none_preset_resets_to_effective_profile(self) -> None:
+        runtime = self.runtime()
+
+        await runtime._handle_room_command(
+            "livingroom",
+            "profile",
+            "night",
+        )
+        await runtime._handle_room_command(
+            "livingroom",
+            "profile",
+            "none",
+        )
+        await runtime._handle_room_command(
+            "livingroom",
+            "target_temperature",
+            "23.5",
+        )
+
+        self.assertEqual(
+            [("livingroom", Season.HEAT, Profile.DAY, 23.5)],
+            runtime.store.calls,
+        )
 
     async def test_profile_setting_can_edit_inactive_night_target(self) -> None:
         runtime = self.runtime()

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.16 — development
+
+- Restored season-native room thermostat HVAC modes: HEAT season publishes `heat`, COOL season publishes `cool`, and interseason publishes `off`.
+- Restored native Climate presets for `day / night / away` instead of misusing fan-speed semantics; Home Assistant's reserved `none` command clears the temporary profile-edit overlay.
+- Restored the short-lived profile-edit overlay so an inactive profile target can be selected and edited from the room thermostat without changing the automatic day/night/away control source.
+- Room `hvac_action` continues to expose the actual current action (`heating / cooling / idle / off`) independently from HVAC mode.
+
 ## 0.1.15 — 2026-09-27
 
 - Fixed humidifier shutdown safety: inactive `humidifier.*` actuators no longer carry a target-humidity command, so an out-of-range target cannot block `turn_off`.

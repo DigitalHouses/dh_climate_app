@@ -7,7 +7,7 @@ from pathlib import Path
 from dh_climate_app.config import parse_options
 from dh_climate_app.core import HvacAction, Profile, Season
 from dh_climate_app.persistence import StateStore
-from dh_climate_app.rooms import RoomEngine, aggregate_window_state
+from dh_climate_app.rooms import ProfileEditOverlay, RoomEngine, aggregate_window_state
 from test_config import options
 
 
@@ -75,7 +75,55 @@ class RoomEngineTests(unittest.TestCase):
         self.assertEqual(23.0, room.target_temperature)
         self.assertEqual(HvacAction.HEATING, room.control_action)
         self.assertEqual(HvacAction.HEATING, room.hvac_action)
-        self.assertEqual("auto", room.hvac_mode)
+        self.assertEqual("heat", room.hvac_mode)
+
+
+    def test_cool_room_uses_native_cool_mode(self) -> None:
+        room = self.engine.evaluate_all(
+            {
+                "sensor.living_room_temperature": "30",
+                "input_boolean.we_at_home": "on",
+                "input_boolean.night_mode": "off",
+            },
+            season=Season.COOL,
+        )["living_room"]
+        self.assertEqual("cool", room.hvac_mode)
+        self.assertEqual(HvacAction.COOLING, room.hvac_action)
+
+    def test_profile_edit_overlay_returns_to_effective_profile(self) -> None:
+        overlay = ProfileEditOverlay(idle_timeout_seconds=10.0)
+        overlay.select(
+            "living_room",
+            Profile.NIGHT,
+            effective_profile=Profile.DAY,
+            now_monotonic=100.0,
+        )
+        self.assertEqual(
+            Profile.NIGHT,
+            overlay.selected(
+                "living_room",
+                effective_profile=Profile.DAY,
+                now_monotonic=109.9,
+            ),
+        )
+        self.assertEqual(
+            Profile.DAY,
+            overlay.selected(
+                "living_room",
+                effective_profile=Profile.DAY,
+                now_monotonic=110.0,
+            ),
+        )
+
+    def test_profile_edit_overlay_rejects_antifreeze(self) -> None:
+        overlay = ProfileEditOverlay()
+        with self.assertRaises(ValueError):
+            overlay.select(
+                "living_room",
+                Profile.ANTIFREEZE,
+                effective_profile=Profile.DAY,
+                now_monotonic=100.0,
+            )
 
     def test_heat_off_hides_action_but_retains_antifreeze(self) -> None:
         self.store.set_climate_control_enabled("living_room", False)

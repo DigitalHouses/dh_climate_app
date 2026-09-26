@@ -20,7 +20,7 @@ from .mqtt import ClimateMqttFacade, MqttBridge, MqttCommand
 from .outdoor import OutdoorEngine, OutdoorState
 from .persistence import StateStore
 from .problems import Problem, collect_problems
-from .rooms import RoomEngine, RoomState
+from .rooms import ProfileEditOverlay, RoomEngine, RoomState
 from .telemetry import TelemetryClient, TelemetryRunner
 from .weather import WeatherState, build_weather_state, select_weather_source
 
@@ -66,6 +66,7 @@ class ClimateRuntime:
             hysteresis=config.global_config.hysteresis,
         )
         self.rooms = RoomEngine(config=config, store=self.store)
+        self.profile_overlay = ProfileEditOverlay(idle_timeout_seconds=10.0)
         self.humidity = HumidityEngine(config=config, store=self.store)
         self.events = ClimateEventEngine()
         self.weather_source = select_weather_source(
@@ -349,12 +350,28 @@ class ClimateRuntime:
                 self.facade.publish_weather(weather_state)
 
             for room_id, room_state in room_states.items():
+                published_profile = self.profile_overlay.selected(
+                    room_id,
+                    effective_profile=room_state.effective_profile,
+                )
+                published_target = room_state.target_temperature
+                if room_state.season is not Season.OFF:
+                    selected_target = self.store.get_room_target(
+                        room_id,
+                        room_state.season,
+                        published_profile,
+                    )
+                    if selected_target is not None:
+                        published_target = selected_target
+
                 profile_targets = {
                     key: self.store.get_room_target(room_id, season, profile)
                     for key, (season, profile) in ROOM_TARGET_COMMANDS.items()
                 }
                 self.facade.publish_room(
                     room_state,
+                    published_profile=published_profile.value,
+                    published_target=published_target,
                     profile_targets=profile_targets,
                 )
 
@@ -568,19 +585,42 @@ class ClimateRuntime:
 
         if command == "hvac_mode":
             # The room climate facade is read-only during interseason. Ignore
-            # commands from HA/HomeKit until a real HEAT/COOL season is active.
+            # commands until a real HEAT/COOL season is active.
             if state.season is Season.OFF:
                 return
             mode = payload.strip().lower()
             if mode == "off":
                 self.store.set_climate_control_enabled(room_id, False)
                 return
-            if mode == "auto":
+            if state.season is Season.HEAT and mode == "heat":
+                self.store.set_climate_control_enabled(room_id, True)
+                return
+            if state.season is Season.COOL and mode == "cool":
                 self.store.set_climate_control_enabled(room_id, True)
                 return
             raise ValueError(
-                f"hvac_mode={mode} is not supported; use off or auto"
+                f"hvac_mode={mode} is not allowed in season={state.season.value}"
             )
+
+        if command == "profile":
+            value = payload.strip().lower()
+            if value == "none":
+                self.profile_overlay.clear(room_id)
+                return
+            try:
+                profile = Profile(value)
+            except ValueError as exc:
+                raise ValueError(f"unsupported room profile={payload}") from exc
+            if profile not in {Profile.DAY, Profile.NIGHT, Profile.AWAY}:
+                raise ValueError(
+                    f"room profile is not user-selectable: {profile.value}"
+                )
+            self.profile_overlay.select(
+                room_id,
+                profile,
+                effective_profile=state.effective_profile,
+            )
+            return
 
         if command == "target_temperature":
             if state.season is Season.OFF:
@@ -592,14 +632,17 @@ class ClimateRuntime:
             if not 5.0 <= target <= 35.0:
                 raise ValueError("room target must be between 5 and 35")
 
-            # Native thermostat contract: changing the climate target always
-            # changes the profile that is actually active for the user now.
+            selected_profile = self.profile_overlay.selected(
+                room_id,
+                effective_profile=state.effective_profile,
+            )
             self.store.set_room_target(
                 room_id,
                 state.season,
-                state.effective_profile,
+                selected_profile,
                 target,
             )
+            self.profile_overlay.touch(room_id)
             return
 
         raise ValueError(f"unsupported room command={command}")

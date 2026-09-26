@@ -327,6 +327,8 @@ class ClimateMqttFacade:
         self,
         state: RoomState,
         *,
+        published_profile: str,
+        published_target: float | None,
         profile_targets: dict[str, float | None],
     ) -> int:
         room = self.rooms[state.room_id]
@@ -376,7 +378,11 @@ class ClimateMqttFacade:
                 )
             )
 
-        for topic, payload in room_climate_state_topics(state).items():
+        for topic, payload in room_climate_state_topics(
+            state,
+            published_profile=published_profile,
+            published_target=published_target,
+        ).items():
             count += int(self.bridge.publish(topic, payload, retain=True))
         for topic, payload in room_target_state_topics(
             room.room_id,

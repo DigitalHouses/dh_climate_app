@@ -161,6 +161,18 @@ class MqttRoutingTests(unittest.TestCase):
         self.assertEqual("living_room", command.room_id)
         self.assertEqual("target_temperature", command.command)
 
+    def test_room_preset_command(self) -> None:
+        self.facade._on_message(
+            "DigitalHouses/Global/dh_climate_app/rooms/living_room/climate/set/profile",
+            "night",
+            False,
+        )
+        command = self.queue.get_nowait()
+        self.assertEqual("room", command.scope)
+        self.assertEqual("living_room", command.room_id)
+        self.assertEqual("profile", command.command)
+        self.assertEqual("night", command.payload)
+
     def test_room_profile_target_command(self) -> None:
         self.facade._on_message(
             "DigitalHouses/Global/dh_climate_app/rooms/living_room/targets/set/heat_night",
