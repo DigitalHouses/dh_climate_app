@@ -23,10 +23,19 @@ Configure at least two temperature sources and, if available, two humidity sourc
 
 Acceptance:
 
+- `outdoor_temperature_sources` accepts an ordered mixed chain of
+  `sensor.*` and `weather.*` entities;
 - first valid temperature source wins;
 - first valid humidity source wins independently;
+- every public one-decimal outdoor temperature change is logged with the active
+  source;
 - primary unavailable -> fallback source is selected;
-- primary restored -> primary becomes current source again;
+- source selection emits `outdoor_temperature_source_changed` with
+  previous/current source and temperature values;
+- primary restored -> primary becomes current source again and emits the reverse
+  source transition;
+- startup/reconnect establishes a baseline and does not emit a false source
+  transition;
 - current source/value is visible in season attributes;
 - `sensor.dh_climate_app_outdoor_temperature` exposes the current selected outdoor temperature;
 - `sensor.dh_climate_app_outdoor_temperature_avg24` exposes the persisted time-weighted 24-hour outdoor temperature average;
