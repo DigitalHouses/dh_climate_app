@@ -400,6 +400,10 @@ def _number(value: float | None, precision: int = 1) -> str:
     return f"{value:.{precision}f}"
 
 
+def _temperature(value: float | None) -> float | None:
+    return None if value is None else round(float(value), 1)
+
+
 def season_state_topics(state: OutdoorState) -> dict[str, str]:
     action = {
         "heat": "heating",
@@ -408,15 +412,15 @@ def season_state_topics(state: OutdoorState) -> dict[str, str]:
     }[state.season.value]
     attrs = {
         "season": state.season.value,
-        "current_temperature": state.current_temperature,
-        "avg_24h_temperature": state.avg_24h_temperature,
+        "current_temperature": _temperature(state.current_temperature),
+        "avg_24h_temperature": _temperature(state.avg_24h_temperature),
         "temperature_source": state.temperature_source,
         "current_humidity": state.current_humidity,
         "avg_24h_humidity": state.avg_24h_humidity,
         "humidity_source": state.humidity_source,
-        "hysteresis": state.hysteresis,
-        "heat_threshold": state.heat_threshold,
-        "cool_threshold": state.cool_threshold,
+        "hysteresis": _temperature(state.hysteresis),
+        "heat_threshold": _temperature(state.heat_threshold),
+        "cool_threshold": _temperature(state.cool_threshold),
         "observed_at": state.observed_at.isoformat(),
     }
     return {
@@ -486,7 +490,7 @@ def outdoor_state_topics(state: OutdoorState) -> dict[str, str]:
     attrs = {
         "temperature_source": state.temperature_source,
         "humidity_source": state.humidity_source,
-        "avg_24h_temperature": state.avg_24h_temperature,
+        "avg_24h_temperature": _temperature(state.avg_24h_temperature),
         "avg_24h_humidity": state.avg_24h_humidity,
         "observed_at": state.observed_at.isoformat(),
     }
