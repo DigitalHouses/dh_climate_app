@@ -115,6 +115,17 @@ The hidden configuration Number entities remain available during interseason,
 so an installer can prepare future seasonal profile targets without exposing
 an inactive room thermostat to normal users.
 
+## Temperature precision
+
+Climate calculations keep full floating-point precision internally. Every
+temperature value exposed through the public Home Assistant / MQTT / machine
+Event contract is rounded to one decimal place.
+
+This includes current temperatures, rolling 24-hour temperature values,
+temperature thresholds and temperature-valued Event fields. Rounding is a
+presentation rule only and does not change season, hysteresis or device-control
+calculations.
+
 ## Outdoor UI sensors
 
 The system Device exposes dedicated current outdoor measurements for dashboards:
