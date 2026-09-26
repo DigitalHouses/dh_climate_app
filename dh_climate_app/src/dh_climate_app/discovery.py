@@ -193,12 +193,9 @@ def room_climate_discovery_payload(
     app_version: str,
 ) -> dict[str, Any]:
     base = room_base(room.room_id)
-    if state.season.value == "heat":
-        modes = ["off", "heat"]
-    elif state.season.value == "cool":
-        modes = ["off", "cool"]
-    else:
-        modes = ["off"]
+    # Stable HomeKit capability contract. The room is either disabled or in
+    # DigitalHouses automatic control; HEAT/COOL/OFF is an internal season.
+    modes = ["off", "auto"]
 
     return {
         "name": "Thermostat",
