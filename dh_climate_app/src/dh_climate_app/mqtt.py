@@ -16,6 +16,8 @@ from .discovery import (
     SYSTEM_PROBLEM_TOPIC,
     SYSTEM_EVENT_TOPIC,
     diagnostic_discovery_payloads,
+    outdoor_discovery_payloads,
+    outdoor_state_topics,
     room_climate_discovery_payload,
     room_climate_discovery_topic,
     room_climate_state_topics,
@@ -251,6 +253,21 @@ class ClimateMqttFacade:
                 force=True,
             )
 
+        for _, (topic, payload) in outdoor_discovery_payloads(
+            self.app_version
+        ).items():
+            self.bridge.publish(
+                topic,
+                json.dumps(
+                    payload,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+                retain=True,
+                force=True,
+            )
+
         for _, (topic, payload) in weather_discovery_payloads(
             self.app_version
         ).items():
@@ -282,6 +299,8 @@ class ClimateMqttFacade:
     def publish_season(self, state: OutdoorState) -> int:
         count = 0
         for topic, payload in season_state_topics(state).items():
+            count += int(self.bridge.publish(topic, payload, retain=True))
+        for topic, payload in outdoor_state_topics(state).items():
             count += int(self.bridge.publish(topic, payload, retain=True))
         return count
 
