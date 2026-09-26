@@ -346,7 +346,7 @@ force_off() {
 publish_fixture_discovery() {
   local payload
 
-  payload='{"name":"DH Climate Accept Outdoor","unique_id":"dh_climate_accept_outdoor","default_entity_id":"sensor.dh_climate_accept_outdoor","device_class":"temperature","unit_of_measurement":"°C","state_topic":"dh_climate_accept/outdoor/state"}'
+  payload='{"name":"DH Climate Accept Outdoor","unique_id":"dh_climate_accept_outdoor","default_entity_id":"sensor.dh_climate_accept_outdoor","device_class":"temperature","unit_of_measurement":"°C","state_topic":"dh_climate_accept/outdoor/state","availability_topic":"dh_climate_accept/outdoor/availability","payload_available":"online","payload_not_available":"offline"}'
   mqtt_pub "${DISCOVERY}/sensor/dh_climate_accept_outdoor/config" "$payload" true
 
   payload='{"name":"DH Climate Accept Outdoor Backup","unique_id":"dh_climate_accept_outdoor_backup","default_entity_id":"sensor.dh_climate_accept_outdoor_backup","device_class":"temperature","unit_of_measurement":"°C","state_topic":"dh_climate_accept/outdoor_backup/state"}'
@@ -374,6 +374,7 @@ publish_fixture_discovery() {
   mqtt_pub "${DISCOVERY}/humidifier/dh_climate_accept_humidifier/config" "$payload" true
 
   mqtt_pub "dh_climate_accept/outdoor/state" "5.0" true
+  mqtt_pub "dh_climate_accept/outdoor/availability" "online" true
   mqtt_pub "dh_climate_accept/outdoor_backup/state" "6.0" true
   mqtt_pub "dh_climate_accept/humidity/state" "40.0" true
   mqtt_pub "dh_climate_accept/window/state" "OFF" true
@@ -411,7 +412,7 @@ restrict_humidifier_range() {
 
 clear_fixture_topics() {
   local topic
-  for topic in     "${DISCOVERY}/sensor/dh_climate_accept_outdoor/config"     "${DISCOVERY}/sensor/dh_climate_accept_outdoor_backup/config"     "${DISCOVERY}/sensor/dh_climate_accept_humidity/config"     "${DISCOVERY}/binary_sensor/dh_climate_accept_window/config"     "${DISCOVERY}/climate/dh_climate_accept_reversible/config"     "${DISCOVERY}/climate/dh_climate_accept_narrow/config"     "${DISCOVERY}/climate/dh_climate_accept_stubborn/config"     "${DISCOVERY}/climate/dh_climate_accept_slow/config"     "${DISCOVERY}/humidifier/dh_climate_accept_humidifier/config"     "dh_climate_accept/outdoor/state"     "dh_climate_accept/outdoor_backup/state"     "dh_climate_accept/humidity/state"     "dh_climate_accept/window/state"     "dh_climate_accept/stubborn/mode/state"     "dh_climate_accept/stubborn/temp/state"     "dh_climate_accept/humidifier/power/state"     "dh_climate_accept/humidifier/target/state"
+  for topic in     "${DISCOVERY}/sensor/dh_climate_accept_outdoor/config"     "${DISCOVERY}/sensor/dh_climate_accept_outdoor_backup/config"     "${DISCOVERY}/sensor/dh_climate_accept_humidity/config"     "${DISCOVERY}/binary_sensor/dh_climate_accept_window/config"     "${DISCOVERY}/climate/dh_climate_accept_reversible/config"     "${DISCOVERY}/climate/dh_climate_accept_narrow/config"     "${DISCOVERY}/climate/dh_climate_accept_stubborn/config"     "${DISCOVERY}/climate/dh_climate_accept_slow/config"     "${DISCOVERY}/humidifier/dh_climate_accept_humidifier/config"     "dh_climate_accept/outdoor/state"     "dh_climate_accept/outdoor/availability"     "dh_climate_accept/outdoor_backup/state"     "dh_climate_accept/humidity/state"     "dh_climate_accept/window/state"     "dh_climate_accept/stubborn/mode/state"     "dh_climate_accept/stubborn/temp/state"     "dh_climate_accept/humidifier/power/state"     "dh_climate_accept/humidifier/target/state"
   do
     mqtt_pub "$topic" "" true >/dev/null 2>&1 || true
   done
@@ -650,7 +651,8 @@ echo "$OUTDOOR_LOG" | tail -n 30
 echo "$OUTDOOR_LOG" | grep -Fq "temperature 5.0 °C -> 7.0 °C | source=sensor.dh_climate_accept_outdoor" ||
   fail "outdoor temperature change log missing"
 
-mqtt_pub "dh_climate_accept/outdoor/state" "unavailable" true
+mqtt_pub "dh_climate_accept/outdoor/availability" "offline" true
+wait_state "$OUTDOOR_SENSOR" "unavailable" 30
 wait_attr "$SEASON_CLIMATE" "temperature_source" "sensor.dh_climate_accept_outdoor_backup" 30
 wait_number "$APP_OUTDOOR_SENSOR" 6 30
 wait_attr "$EVENT" "event_type" "outdoor_temperature_source_changed" 30
@@ -670,6 +672,8 @@ echo "$OUTDOOR_LOG" | grep -Fq "source sensor.dh_climate_accept_outdoor -> senso
 echo "PASS outdoor source failover + log + event"
 
 mqtt_pub "dh_climate_accept/outdoor/state" "5.0" true
+mqtt_pub "dh_climate_accept/outdoor/availability" "online" true
+wait_number "$OUTDOOR_SENSOR" 5 30
 wait_attr "$SEASON_CLIMATE" "temperature_source" "sensor.dh_climate_accept_outdoor" 30
 wait_number "$APP_OUTDOOR_SENSOR" 5 30
 wait_attr "$EVENT" "event_type" "outdoor_temperature_source_changed" 30
