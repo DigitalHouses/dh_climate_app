@@ -17,8 +17,6 @@ EVENT_TYPES = (
     "precipitation_type_changed",
     "window_opened",
     "window_closed",
-    "window_state_unknown",
-    "window_state_restored",
     "problem_started",
     "problem_recovered",
 )
@@ -166,11 +164,9 @@ class ClimateEventEngine:
                 event_type = "window_opened"
             elif current == "closed" and previous == "open":
                 event_type = "window_closed"
-            elif current == "unknown":
-                event_type = "window_state_unknown"
-            elif previous == "unknown":
-                event_type = "window_state_restored"
             else:
+                # Unknown/restored window truth is already represented by
+                # room_window_state_unknown Problem start/recovery events.
                 continue
             payload = _base(event_type, observed_at)
             payload.update(
