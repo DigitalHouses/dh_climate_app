@@ -9,6 +9,7 @@ from dh_climate_app.discovery import (
     diagnostic_discovery_payloads,
     room_climate_discovery_payload,
     room_humidity_discovery_payload,
+    room_profile_discovery_payload,
     season_discovery_payload,
     season_state_topics,
 )
@@ -113,13 +114,21 @@ class DiscoveryTests(unittest.TestCase):
             payload["device"]["identifiers"],
         )
         self.assertEqual("dh_climate_app", payload["device"]["via_device"])
-        self.assertEqual(["day", "night", "away"], payload["preset_modes"])
-        self.assertIn("preset_mode_state_topic", payload)
-        self.assertIn("preset_mode_command_topic", payload)
+        self.assertNotIn("preset_modes", payload)
+        self.assertNotIn("preset_mode_state_topic", payload)
+        self.assertNotIn("preset_mode_command_topic", payload)
         self.assertNotIn("fan_modes", payload)
         self.assertNotIn("fan_mode_state_topic", payload)
         self.assertNotIn("fan_mode_command_topic", payload)
-        self.assertNotIn("antifreeze", payload["preset_modes"])
+
+        profile = room_profile_discovery_payload(room, "0.1.4")
+        self.assertEqual(["day", "night", "away"], profile["options"])
+        self.assertNotIn("none", profile["options"])
+        self.assertNotIn("antifreeze", profile["options"])
+        self.assertEqual(
+            "select.dh_climate_app_living_room_profile",
+            profile["default_entity_id"],
+        )
 
     def test_dehumidifier_facade(self) -> None:
         config = parse_options(options())
