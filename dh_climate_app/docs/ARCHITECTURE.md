@@ -559,17 +559,25 @@ The new App directly controls configured devices through Home Assistant services
 
 There is no replacement for the old Universal Controller as a general subsystem.
 
-Instead each actuator has a simple reconcile loop:
+Instead each actuator has a compact reconcile/verification lifecycle:
 
 ```text
 desired state
 vs
 current HA state
-→ equal: no action
-→ different: issue one appropriate HA service call
-→ observe resulting state
-→ bounded retry on failure
+→ equal: establish/keep stable baseline
+→ different: issue the required HA service call(s)
+→ SENT
+→ post-command state_changed starts a settle window
+→ delayed state check
+→ matching state: VERIFIED_HA
+→ persistent mismatch/no event: bounded retry
 ```
+
+A successful Home Assistant service call is only command acceptance and is
+never treated as device confirmation. After a stable state has been
+established, a later actuator `state_changed` away from the still-current
+desired state starts a delayed drift check before corrective execution.
 
 This preserves reliability without recreating the PostgreSQL command lifecycle.
 
