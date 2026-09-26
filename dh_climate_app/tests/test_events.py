@@ -124,6 +124,43 @@ class ClimateEventTests(unittest.TestCase):
         self.assertEqual("precipitation_started", started[0]["event_type"])
         self.assertEqual("precipitation_stopped", stopped[0]["event_type"])
 
+    def test_season_event_rounds_temperature_fields(self) -> None:
+        engine = ClimateEventEngine()
+        engine.observe(
+            outdoor=outdoor(Season.OFF),
+            weather=weather("none"),
+            rooms={"livingroom": room()},
+            problems=(),
+            observed_at=NOW,
+        )
+        changed = outdoor(Season.HEAT)
+        changed = OutdoorState(
+            observed_at=changed.observed_at,
+            current_temperature=20.943,
+            current_humidity=changed.current_humidity,
+            avg_24h_temperature=18.685370883826664,
+            avg_24h_humidity=changed.avg_24h_humidity,
+            temperature_source=changed.temperature_source,
+            humidity_source=changed.humidity_source,
+            heat_threshold=19.54,
+            cool_threshold=24.96,
+            hysteresis=0.54,
+            season=changed.season,
+        )
+        events = engine.observe(
+            outdoor=changed,
+            weather=weather("none"),
+            rooms={"livingroom": room()},
+            problems=(),
+            observed_at=NOW,
+        )
+        event = events[0]
+        self.assertEqual(20.9, event["current_temperature"])
+        self.assertEqual(18.7, event["avg_24h_temperature"])
+        self.assertEqual(19.5, event["heat_threshold"])
+        self.assertEqual(25.0, event["cool_threshold"])
+        self.assertEqual(0.5, event["hysteresis"])
+
     def test_season_window_and_problem_transitions(self) -> None:
         engine = ClimateEventEngine()
         engine.observe(
