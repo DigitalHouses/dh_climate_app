@@ -29,6 +29,7 @@ OPTIONS_FILE = Path("/data/options.json")
 DATABASE_FILE = Path("/data/dh_climate.db")
 APP_VERSION = os.environ.get("APP_VERSION", "0.1.0-local")
 RUNTIME_TICK_SECONDS = 10.0
+WEATHER_FORECAST_REFRESH_SECONDS = 15 * 60
 
 ROOM_TARGET_COMMANDS = {
     "heat_day": (Season.HEAT, Profile.DAY),
@@ -79,6 +80,7 @@ class ClimateRuntime:
         self._last_weather_state: WeatherState | None = None
         self._weather_forecast_response: object | None = None
         self._weather_source_last_updated: datetime | None = None
+        self._weather_forecast_fetched_at: datetime | None = None
         self._last_reconcile = ReconcileSummary(commands=0, problems=())
         self._last_problems: tuple[Problem, ...] = ()
 
@@ -158,6 +160,7 @@ class ClimateRuntime:
             self.cache.clear()
             self.events.reset()
             self._weather_source_last_updated = None
+            self._weather_forecast_fetched_at = None
             self._weather_forecast_response = None
             self.facade.set_season_available(False)
             self.facade.set_rooms_available(False)
@@ -179,13 +182,35 @@ class ClimateRuntime:
 
         source_state = snapshot.get(self.weather_source)
         if source_state is None:
-            return None
+            return WeatherState(
+                source_entity=self.weather_source,
+                condition="unknown",
+                precipitation_type="unknown",
+                precipitation_mm=None,
+                forecast_at=None,
+                observed_at=observed_at,
+            )
 
+        if source_state.state in {"unknown", "unavailable"}:
+            return build_weather_state(
+                source_entity=self.weather_source,
+                ha_state=source_state,
+                hourly_forecast_response=None,
+                observed_at=observed_at,
+            )
+
+        forecast_expired = (
+            self._weather_forecast_fetched_at is None
+            or (
+                observed_at - self._weather_forecast_fetched_at
+            ).total_seconds() >= WEATHER_FORECAST_REFRESH_SECONDS
+        )
         needs_forecast = (
             self._weather_forecast_response is None
             or self._weather_source_last_updated != source_state.last_updated
+            or forecast_expired
         )
-        if needs_forecast and source_state.state not in {"unknown", "unavailable"}:
+        if needs_forecast:
             try:
                 self._weather_forecast_response = await self.ha.call_service_response(
                     "weather",
@@ -203,6 +228,7 @@ class ClimateRuntime:
                 )
                 self._weather_forecast_response = None
             self._weather_source_last_updated = source_state.last_updated
+            self._weather_forecast_fetched_at = observed_at
 
         return build_weather_state(
             source_entity=self.weather_source,
