@@ -676,6 +676,14 @@ restrict_humidifier_range
 wait_problem "device_target_out_of_range" "$PHYSICAL_HUMIDIFIER" 30
 echo "PASS humidifier target range problem reproduced while active"
 
+# Keep the physical device definitely ON with a valid local target. The App's
+# persisted 50% target is deliberately outside the new 60..80% device range.
+# Turning the DigitalHouses humidity controller OFF must still send power-off;
+# target validation must not be allowed to block that safety action.
+set_humidifier_target "$PHYSICAL_HUMIDIFIER" 60
+set_humidifier_power "$PHYSICAL_HUMIDIFIER" "turn_on"
+wait_state "$PHYSICAL_HUMIDIFIER" "on" 15
+
 set_humidifier_power "$HUMIDITY_FACADE" "turn_off"
 wait_state "$HUMIDITY_FACADE" "off" 30
 wait_state "$PHYSICAL_HUMIDIFIER" "off" 30
