@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from dh_climate_app.app import ClimateRuntime
+from dh_climate_app.mqtt import MqttCommand
 from dh_climate_app.core import HvacAction, Profile, Season
 from dh_climate_app.rooms import RoomState
 
@@ -10,6 +11,20 @@ from dh_climate_app.rooms import RoomState
 class FakeStore:
     def __init__(self) -> None:
         self.calls: list[tuple[str, Season, Profile, float]] = []
+        self.threshold_calls: list[tuple[float, float]] = []
+        self.heat_threshold = 15.0
+        self.cool_threshold = 29.8
+
+    def get_season_thresholds(self):
+        from dh_climate_app.persistence import SeasonThresholds
+        return SeasonThresholds(self.heat_threshold, self.cool_threshold)
+
+    def set_season_thresholds(self, heat: float, cool: float) -> None:
+        if heat >= cool:
+            raise ValueError("heat threshold must be lower than cool threshold")
+        self.heat_threshold = heat
+        self.cool_threshold = cool
+        self.threshold_calls.append((heat, cool))
 
     def set_room_target(
         self,
@@ -25,6 +40,16 @@ class RoomTargetCommandTests(unittest.IsolatedAsyncioTestCase):
     def runtime(self) -> ClimateRuntime:
         runtime = object.__new__(ClimateRuntime)
         runtime.store = FakeStore()
+        runtime.outdoor = type(
+            "FakeOutdoor",
+            (),
+            {
+                "set_thresholds": lambda _, heat, cool: runtime.store.set_season_thresholds(
+                    heat,
+                    cool,
+                )
+            },
+        )()
         runtime._last_room_states = {
             "livingroom": RoomState(
                 room_id="livingroom",
@@ -101,6 +126,62 @@ class RoomTargetCommandTests(unittest.IsolatedAsyncioTestCase):
             [("livingroom", Season.HEAT, Profile.NIGHT, 20.0)],
             runtime.store.calls,
         )
+
+    async def test_season_range_pair_is_applied_atomically(self) -> None:
+        runtime = self.runtime()
+
+        await runtime._handle_season_range_commands(
+            [
+                MqttCommand(
+                    scope="season",
+                    command="target_temp_low",
+                    payload="30",
+                ),
+                MqttCommand(
+                    scope="season",
+                    command="target_temp_high",
+                    payload="35",
+                ),
+            ]
+        )
+
+        self.assertEqual([(30.0, 35.0)], runtime.store.threshold_calls)
+
+    async def test_season_range_pair_works_in_reverse_order(self) -> None:
+        runtime = self.runtime()
+
+        await runtime._handle_season_range_commands(
+            [
+                MqttCommand(
+                    scope="season",
+                    command="target_temp_high",
+                    payload="35",
+                ),
+                MqttCommand(
+                    scope="season",
+                    command="target_temp_low",
+                    payload="30",
+                ),
+            ]
+        )
+
+        self.assertEqual([(30.0, 35.0)], runtime.store.threshold_calls)
+
+    async def test_invalid_single_season_threshold_is_rejected(self) -> None:
+        runtime = self.runtime()
+
+        with self.assertRaises(ValueError):
+            await runtime._handle_season_range_commands(
+                [
+                    MqttCommand(
+                        scope="season",
+                        command="target_temp_low",
+                        payload="30",
+                    )
+                ]
+            )
+
+        self.assertEqual([], runtime.store.threshold_calls)
 
 
 if __name__ == "__main__":
