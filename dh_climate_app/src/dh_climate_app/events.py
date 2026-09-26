@@ -45,7 +45,19 @@ def _problem_payload(
     observed_at: datetime,
 ) -> dict[str, object]:
     payload = _base(event_type, observed_at)
-    payload.update(problem.payload())
+    payload.update(
+        {
+            "problem_id": problem.code,
+            "category": problem.scope,
+            "severity": problem.severity,
+        }
+    )
+    if problem.room_id is not None:
+        payload["room_id"] = problem.room_id
+    if problem.entity_id is not None:
+        payload["entity_id"] = problem.entity_id
+    if problem.details is not None:
+        payload["details"] = problem.details
     return payload
 
 
