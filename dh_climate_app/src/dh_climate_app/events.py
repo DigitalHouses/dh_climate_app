@@ -22,6 +22,10 @@ EVENT_TYPES = (
 )
 
 
+def _temperature(value: float | None) -> float | None:
+    return None if value is None else round(float(value), 1)
+
+
 def _base(event_type: str, observed_at: datetime) -> dict[str, object]:
     return {
         "schema_version": EVENT_SCHEMA_VERSION,
@@ -119,11 +123,11 @@ class ClimateEventEngine:
                 {
                     "previous_season": self._season,
                     "current_season": current_season,
-                    "avg_24h_temperature": outdoor.avg_24h_temperature,
-                    "current_temperature": outdoor.current_temperature,
-                    "heat_threshold": outdoor.heat_threshold,
-                    "cool_threshold": outdoor.cool_threshold,
-                    "hysteresis": outdoor.hysteresis,
+                    "avg_24h_temperature": _temperature(outdoor.avg_24h_temperature),
+                    "current_temperature": _temperature(outdoor.current_temperature),
+                    "heat_threshold": _temperature(outdoor.heat_threshold),
+                    "cool_threshold": _temperature(outdoor.cool_threshold),
+                    "hysteresis": _temperature(outdoor.hysteresis),
                 }
             )
             events.append(payload)
