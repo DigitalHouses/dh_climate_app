@@ -322,13 +322,13 @@ publish_fixture_discovery() {
   payload='{"name":"DH Climate Accept Narrow","unique_id":"dh_climate_accept_narrow","default_entity_id":"climate.dh_climate_accept_narrow","modes":["off","heat"],"mode_command_topic":"dh_climate_accept/narrow/mode/set","temperature_command_topic":"dh_climate_accept/narrow/temp/set","min_temp":25,"max_temp":30,"temp_step":0.1,"initial":25,"optimistic":true}'
   mqtt_pub "${DISCOVERY}/climate/dh_climate_accept_narrow/config" "$payload" true
 
-  payload='{"name":"DH Climate Accept Stubborn","unique_id":"dh_climate_accept_stubborn","default_entity_id":"climate.dh_climate_accept_stubborn","modes":["off","heat"],"mode_command_topic":"dh_climate_accept/stubborn/mode/set","mode_state_topic":"dh_climate_accept/stubborn/mode/state","temperature_command_topic":"dh_climate_accept/stubborn/temp/set","temperature_state_topic":"dh_climate_accept/stubborn/temp/state","min_temp":5,"max_temp":35,"temp_step":0.1,"optimistic":false}'
+  payload='{"name":"DH Climate Accept Stubborn","unique_id":"dh_climate_accept_stubborn","default_entity_id":"climate.dh_climate_accept_stubborn","modes":["off","heat"],"mode_command_topic":"dh_climate_accept/stubborn/mode/set","mode_state_topic":"dh_climate_accept/stubborn/mode/state","temperature_command_topic":"dh_climate_accept/stubborn/temp/set","temperature_state_topic":"dh_climate_accept/stubborn/temp/state"     "dh_climate_accept/humidifier/power/state"     "dh_climate_accept/humidifier/target/state","min_temp":5,"max_temp":35,"temp_step":0.1,"optimistic":false}'
   mqtt_pub "${DISCOVERY}/climate/dh_climate_accept_stubborn/config" "$payload" true
 
   payload='{"name":"DH Climate Accept Slow","unique_id":"dh_climate_accept_slow","default_entity_id":"climate.dh_climate_accept_slow","modes":["off","heat"],"mode_command_topic":"dh_climate_accept/slow/mode/set","temperature_command_topic":"dh_climate_accept/slow/temp/set","min_temp":5,"max_temp":35,"temp_step":0.1,"initial":27,"optimistic":true}'
   mqtt_pub "${DISCOVERY}/climate/dh_climate_accept_slow/config" "$payload" true
 
-  payload='{"name":"DH Climate Accept Humidifier","unique_id":"dh_climate_accept_humidifier","default_entity_id":"humidifier.dh_climate_accept_humidifier","command_topic":"dh_climate_accept/humidifier/power/set","target_humidity_command_topic":"dh_climate_accept/humidifier/target/set","min_humidity":30,"max_humidity":80,"optimistic":true}'
+  payload='{"name":"DH Climate Accept Humidifier","unique_id":"dh_climate_accept_humidifier","default_entity_id":"humidifier.dh_climate_accept_humidifier","command_topic":"dh_climate_accept/humidifier/power/set","state_topic":"dh_climate_accept/humidifier/power/state","target_humidity_command_topic":"dh_climate_accept/humidifier/target/set","target_humidity_state_topic":"dh_climate_accept/humidifier/target/state","min_humidity":30,"max_humidity":80,"optimistic":true}'
   mqtt_pub "${DISCOVERY}/humidifier/dh_climate_accept_humidifier/config" "$payload" true
 
   mqtt_pub "dh_climate_accept/outdoor/state" "5.0" true
@@ -336,6 +336,8 @@ publish_fixture_discovery() {
   mqtt_pub "dh_climate_accept/window/state" "OFF" true
   mqtt_pub "dh_climate_accept/stubborn/mode/state" "heat" true
   mqtt_pub "dh_climate_accept/stubborn/temp/state" "23.0" true
+  mqtt_pub "dh_climate_accept/humidifier/power/state" "OFF" true
+  mqtt_pub "dh_climate_accept/humidifier/target/state" "50" true
 
   FIXTURES_CREATED=1
 
@@ -357,8 +359,10 @@ relax_narrow_range() {
 
 restrict_humidifier_range() {
   local payload
-  payload='{"name":"DH Climate Accept Humidifier","unique_id":"dh_climate_accept_humidifier","default_entity_id":"humidifier.dh_climate_accept_humidifier","command_topic":"dh_climate_accept/humidifier/power/set","target_humidity_command_topic":"dh_climate_accept/humidifier/target/set","min_humidity":60,"max_humidity":80,"optimistic":true}'
+  payload='{"name":"DH Climate Accept Humidifier","unique_id":"dh_climate_accept_humidifier","default_entity_id":"humidifier.dh_climate_accept_humidifier","command_topic":"dh_climate_accept/humidifier/power/set","state_topic":"dh_climate_accept/humidifier/power/state","target_humidity_command_topic":"dh_climate_accept/humidifier/target/set","target_humidity_state_topic":"dh_climate_accept/humidifier/target/state","min_humidity":60,"max_humidity":80,"optimistic":true}'
   mqtt_pub "${DISCOVERY}/humidifier/dh_climate_accept_humidifier/config" "$payload" true
+  mqtt_pub "dh_climate_accept/humidifier/power/state" "ON" true
+  mqtt_pub "dh_climate_accept/humidifier/target/state" "50" true
 }
 
 clear_fixture_topics() {
@@ -376,7 +380,14 @@ restore_backup() {
 
   say "RESTORE APP FROM BASELINE BACKUP"
   local result
-  result="$(ha backups restore "$BACKUP_SLUG" --app "$APP" --no-progress --raw-json)"
+  result="$(
+    curl -fsS \
+      -X POST \
+      -H "Authorization: Bearer ${TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d "$(jq -cn --arg app "$APP" '{addons:[$app],background:false}')" \
+      "${SUPERVISOR}/backups/${BACKUP_SLUG}/restore/partial"
+  )"
   echo "$result" | jq .
   echo "$result" | jq -e '.result == "ok"' >/dev/null || return 1
 
@@ -483,13 +494,25 @@ echo "season_low=$BASE_SEASON_LOW"
 echo "season_high=$BASE_SEASON_HIGH"
 state_json "$PROBLEM" | jq '{state, count:.attributes.count, problems:.attributes.problems}'
 
-say "3. CREATE FULL SUPERVISOR BASELINE BACKUP"
+say "3. CREATE CLIMATE-APP-ONLY BASELINE BACKUP"
 
-BACKUP_JSON="$(ha backups new --no-progress --raw-json)"
+BACKUP_JSON="$(
+  curl -fsS \
+    -X POST \
+    -H "Authorization: Bearer ${TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d "$(jq -cn --arg app "$APP" '{
+      name:"DH Climate bundled acceptance baseline",
+      addons:[$app],
+      compressed:true,
+      background:false
+    }')" \
+    "${SUPERVISOR}/backups/new/partial"
+)"
 echo "$BACKUP_JSON" | jq .
 echo "$BACKUP_JSON" | jq -e '.result == "ok"' >/dev/null ||
-  fail "Full backup creation failed"
-BACKUP_SLUG="$(echo "$BACKUP_JSON" | jq -r '.data.slug // empty')"
+  fail "Climate App partial backup creation failed"
+BACKUP_SLUG="$(echo "$BACKUP_JSON" | jq -r '.data.slug // .slug // empty')"
 [ -n "$BACKUP_SLUG" ] || fail "Backup slug is empty"
 echo "baseline_backup=$BACKUP_SLUG"
 
@@ -722,7 +745,7 @@ awk -v a="$CURRENT_LOW" -v b="$BASE_SEASON_LOW"   'BEGIN{exit !((a-b<0?b-a:a-b)<
 awk -v a="$CURRENT_HIGH" -v b="$BASE_SEASON_HIGH"   'BEGIN{exit !((a-b<0?b-a:a-b)<0.051)}' ||
   fail "season high not restored: $CURRENT_HIGH vs $BASE_SEASON_HIGH"
 
-echo "PASS full Supervisor backup -> App-only restore preserved options and /data"
+echo "PASS Climate-App-only Supervisor backup -> restore preserved options and /data"
 
 say "13. FINAL CLEANUP + BASELINE"
 
@@ -768,7 +791,7 @@ echo "PASS SLOW floor execution"
 echo "PASS window context / window_off_devices"
 echo "PASS cold-weather reversible climate protection"
 echo "PASS humidity active + safe shutdown"
-echo "PASS full Supervisor backup -> App-only restore"
+echo "PASS Climate-App-only Supervisor backup -> restore"
 echo "PASS baseline restored"
 echo
 echo "Acceptance log: $LOG"
