@@ -34,11 +34,13 @@ SQLite under `/data/dh_climate.db` stores only durable installation state. It is
 ## Implemented behavior
 
 - prioritized outdoor temperature and humidity fallback chains;
+- weather-condition precipitation typing plus current-hour forecast amount in mm;
+- one schema-v2 MQTT Event stream for weather, season, window and Problem transitions;
 - time-weighted rolling 24-hour outdoor average;
 - global `HEAT / COOL / OFF` season;
 - writable two-threshold `heat_cool` season thermostat;
 - one MQTT Device and one room thermostat per configured room;
-- Apple Home-compatible room thermostat with stable `off / auto` modes, active-profile target control, and deliberate interseason unavailability;
+- Apple Home-compatible room thermostat with stable `off / auto` modes, active-profile target control, and read-only interseason temperature display;
 - hidden configuration numbers for Heat/Cool Day/Night/Away targets plus internal Heat antifreeze target;
 - one house-wide temperature hysteresis;
 - persisted stateful room hysteresis;
