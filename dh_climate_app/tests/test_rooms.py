@@ -7,11 +7,7 @@ from pathlib import Path
 from dh_climate_app.config import parse_options
 from dh_climate_app.core import HvacAction, Profile, Season
 from dh_climate_app.persistence import StateStore
-from dh_climate_app.rooms import (
-    ProfileEditOverlay,
-    RoomEngine,
-    aggregate_window_state,
-)
+from dh_climate_app.rooms import RoomEngine, aggregate_window_state
 from test_config import options
 
 
@@ -88,8 +84,10 @@ class RoomEngineTests(unittest.TestCase):
             "sensor.living_room_humidity": "45",
         }
         room = self.engine.evaluate_all(states, season=Season.HEAT)["living_room"]
-        self.assertEqual(Profile.ANTIFREEZE, room.effective_profile)
-        self.assertEqual(10.0, room.target_temperature)
+        self.assertEqual(Profile.DAY, room.effective_profile)
+        self.assertEqual(23.0, room.target_temperature)
+        self.assertEqual(Profile.ANTIFREEZE, room.control_profile)
+        self.assertEqual(10.0, room.control_target_temperature)
         self.assertEqual(HvacAction.HEATING, room.control_action)
         self.assertEqual(HvacAction.OFF, room.hvac_action)
         self.assertEqual("off", room.hvac_mode)
@@ -114,33 +112,6 @@ class RoomEngineTests(unittest.TestCase):
         )["living_room"]
         self.assertEqual(Profile.AWAY, room.effective_profile)
         self.assertEqual(18.0, room.target_temperature)
-
-
-class ProfileOverlayTests(unittest.TestCase):
-    def test_overlay_expires(self) -> None:
-        overlay = ProfileEditOverlay(idle_timeout_seconds=10)
-        overlay.select(
-            "room",
-            Profile.NIGHT,
-            effective_profile=Profile.DAY,
-            now_monotonic=100,
-        )
-        self.assertEqual(
-            Profile.NIGHT,
-            overlay.selected(
-                "room",
-                effective_profile=Profile.DAY,
-                now_monotonic=105,
-            ),
-        )
-        self.assertEqual(
-            Profile.DAY,
-            overlay.selected(
-                "room",
-                effective_profile=Profile.DAY,
-                now_monotonic=111,
-            ),
-        )
 
 
 if __name__ == "__main__":
