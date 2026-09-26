@@ -18,7 +18,7 @@ from .mqtt import ClimateMqttFacade, MqttBridge, MqttCommand
 from .outdoor import OutdoorEngine, OutdoorState
 from .persistence import StateStore
 from .problems import Problem, collect_problems
-from .rooms import ProfileEditOverlay, RoomEngine, RoomState
+from .rooms import RoomEngine, RoomState
 from .telemetry import TelemetryClient, TelemetryRunner
 
 
@@ -27,6 +27,16 @@ OPTIONS_FILE = Path("/data/options.json")
 DATABASE_FILE = Path("/data/dh_climate.db")
 APP_VERSION = os.environ.get("APP_VERSION", "0.1.0-local")
 RUNTIME_TICK_SECONDS = 10.0
+
+ROOM_TARGET_COMMANDS = {
+    "heat_day": (Season.HEAT, Profile.DAY),
+    "heat_night": (Season.HEAT, Profile.NIGHT),
+    "heat_away": (Season.HEAT, Profile.AWAY),
+    "heat_antifreeze": (Season.HEAT, Profile.ANTIFREEZE),
+    "cool_day": (Season.COOL, Profile.DAY),
+    "cool_night": (Season.COOL, Profile.NIGHT),
+    "cool_away": (Season.COOL, Profile.AWAY),
+}
 
 
 def load_options(path: Path = OPTIONS_FILE) -> AppConfig:
@@ -52,7 +62,6 @@ class ClimateRuntime:
         )
         self.rooms = RoomEngine(config=config, store=self.store)
         self.humidity = HumidityEngine(config=config, store=self.store)
-        self.profile_overlay = ProfileEditOverlay(idle_timeout_seconds=10.0)
 
         self.command_queue: asyncio.Queue[MqttCommand] = asyncio.Queue()
         self._calculation_lock = asyncio.Lock()
@@ -172,24 +181,13 @@ class ClimateRuntime:
             self.facade.publish_season(outdoor_state)
 
             for room_id, room_state in room_states.items():
-                published_profile = self.profile_overlay.selected(
-                    room_id,
-                    effective_profile=room_state.effective_profile,
-                )
-                published_target = room_state.target_temperature
-                if room_state.season is not Season.OFF:
-                    selected_target = self.store.get_room_target(
-                        room_id,
-                        room_state.season,
-                        published_profile,
-                    )
-                    if selected_target is not None:
-                        published_target = selected_target
-
+                profile_targets = {
+                    key: self.store.get_room_target(room_id, season, profile)
+                    for key, (season, profile) in ROOM_TARGET_COMMANDS.items()
+                }
                 self.facade.publish_room(
                     room_state,
-                    published_profile=published_profile.value,
-                    published_target=published_target,
+                    profile_targets=profile_targets,
                 )
 
             for humidity_state in humidity_states.values():
@@ -273,6 +271,14 @@ class ClimateRuntime:
                 command.command,
                 command.payload,
             )
+        elif command.scope == "target":
+            if command.room_id is None:
+                raise ValueError("target command requires room_id")
+            await self._handle_room_profile_target_command(
+                command.room_id,
+                command.command,
+                command.payload,
+            )
         else:
             raise ValueError(f"unsupported command scope={command.scope}")
 
@@ -343,24 +349,6 @@ class ClimateRuntime:
                 f"hvac_mode={mode} is not allowed in season={state.season.value}"
             )
 
-        if command == "profile":
-            requested_profile = payload.strip().lower()
-            if requested_profile == "none":
-                self.profile_overlay.clear(room_id)
-                return
-            try:
-                profile = Profile(requested_profile)
-            except ValueError as exc:
-                raise ValueError(f"unsupported room profile={payload}") from exc
-            if profile is Profile.ANTIFREEZE and state.season is not Season.HEAT:
-                raise ValueError("antifreeze profile is only editable in HEAT season")
-            self.profile_overlay.select(
-                room_id,
-                profile,
-                effective_profile=state.effective_profile,
-            )
-            return
-
         if command == "target_temperature":
             if state.season is Season.OFF:
                 return
@@ -371,25 +359,37 @@ class ClimateRuntime:
             if not 5.0 <= target <= 35.0:
                 raise ValueError("room target must be between 5 and 35")
 
-            selected_profile = self.profile_overlay.selected(
-                room_id,
-                effective_profile=state.effective_profile,
-            )
-            if (
-                selected_profile is Profile.ANTIFREEZE
-                and state.season is not Season.HEAT
-            ):
-                raise ValueError("antifreeze target exists only in HEAT season")
+            # Native thermostat contract: changing the climate target always
+            # changes the profile that is actually active for the user now.
             self.store.set_room_target(
                 room_id,
                 state.season,
-                selected_profile,
+                state.effective_profile,
                 target,
             )
-            self.profile_overlay.touch(room_id)
             return
 
         raise ValueError(f"unsupported room command={command}")
+
+    async def _handle_room_profile_target_command(
+        self,
+        room_id: str,
+        command: str,
+        payload: str,
+    ) -> None:
+        if room_id not in self._last_room_states:
+            raise ValueError(f"room state is not available: {room_id}")
+        try:
+            season, profile = ROOM_TARGET_COMMANDS[command]
+        except KeyError as exc:
+            raise ValueError(f"unsupported room target setting={command}") from exc
+        try:
+            target = round(float(payload), 1)
+        except ValueError as exc:
+            raise ValueError(f"invalid room target={payload}") from exc
+        if not 5.0 <= target <= 35.0:
+            raise ValueError("room target must be between 5 and 35")
+        self.store.set_room_target(room_id, season, profile, target)
 
     async def _handle_humidity_command(
         self,
