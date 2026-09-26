@@ -51,7 +51,7 @@ SQLite under `/data/dh_climate.db` stores only durable installation state. It is
 - optional humidifier/dehumidifier control;
 - optional room window context with per-device open-window shutdown;
 - legacy cold-weather protection for reversible heat/cool climate devices;
-- direct idempotent Home Assistant service reconciliation;
+- direct idempotent Home Assistant service reconciliation with delayed event-driven HA-state verification;
 - bounded retry and aggregate Problem diagnostic;
 - safe Home Assistant reconnect/snapshot handling;
 - Version and Started at diagnostics;
@@ -91,7 +91,7 @@ refresh command; see [Experimental update runbook](docs/EXPERIMENTAL_UPDATE_RUNB
 
 ## Release status
 
-Version `0.1.13` is still an **experimental pre-release implementation**. Unit/CI and container-build validation are automated. The remaining release gate is end-to-end testing on a real Home Assistant OS installation with real MQTT discovery and physical actuator entities.
+Version `0.1.14` is still an **experimental pre-release implementation**. Unit/CI and container-build validation are automated. The remaining release gate is end-to-end testing on a real Home Assistant OS installation with real MQTT discovery and physical actuator entities.
 
 Canonical release identity:
 
