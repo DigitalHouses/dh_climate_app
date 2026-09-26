@@ -139,13 +139,23 @@ The room thermostat contains:
 - HVAC action determined by room demand;
 - profile presented through the same user-facing behavior as legacy DH Climate.
 
-Allowed HVAC modes follow the global season:
+The published MQTT Climate capability list is stable:
 
 ```text
-HEAT → off, heat
-COOL → off, cool
+off, heat, cool
+```
+
+The **current HVAC state** follows the global season:
+
+```text
+HEAT → heat
+COOL → cool
 OFF  → off
 ```
+
+Opposite-season commands are rejected by the App runtime. Keeping Discovery
+capabilities stable avoids Home Assistant rebuilding the MQTT Climate entity on
+every season transition, which would reset native preset state.
 
 The target matrix remains:
 
