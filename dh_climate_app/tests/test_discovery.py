@@ -103,11 +103,11 @@ class DiscoveryTests(unittest.TestCase):
             target_temperature=23,
             climate_control_enabled=True,
             control_action=HvacAction.HEATING,
-            hvac_mode="heat",
+            hvac_mode="auto",
             hvac_action=HvacAction.HEATING,
         )
         payload = room_climate_discovery_payload(room, state, "0.1.0")
-        self.assertEqual(["off", "heat"], payload["modes"])
+        self.assertEqual(["off", "auto"], payload["modes"])
         self.assertEqual("all", payload["availability_mode"])
         self.assertEqual(2, len(payload["availability"]))
         self.assertEqual(
