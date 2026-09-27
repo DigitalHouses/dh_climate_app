@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import logging
 import os
@@ -10,7 +10,7 @@ import signal
 
 from .climate_log import ClimateLog
 from .config import AppConfig, configured_entity_ids, parse_options
-from .core import Profile, Season
+from .core import Profile, Sample, Season
 from .devices import compile_room_devices
 from .events import ClimateEventEngine
 from .executor import DeviceExecutor, ReconcileSummary
@@ -32,6 +32,7 @@ APP_VERSION = os.environ.get("APP_VERSION", "0.1.0-local")
 RUNTIME_TICK_SECONDS = 10.0
 WEATHER_FORECAST_REFRESH_SECONDS = 15 * 60
 SEASON_RANGE_DEBOUNCE_SECONDS = 0.1
+OUTDOOR_TEMPERATURE_ENTITY_ID = "sensor.dh_climate_app_outdoor_temperature"
 
 
 def _temperature_text(value: float | None) -> str:
@@ -158,10 +159,54 @@ class ClimateRuntime:
             self.facade.stop()
 
     async def _on_snapshot(self, states: list[HaState]) -> None:
+        observed_at = datetime.now(timezone.utc)
         self.cache.replace_snapshot(states)
+        await self._bootstrap_outdoor_temperature_history(observed_at=observed_at)
         await self._recalculate(
-            observed_at=datetime.now(timezone.utc),
+            observed_at=observed_at,
             record_outdoor_sample=True,
+        )
+
+    async def _bootstrap_outdoor_temperature_history(
+        self,
+        *,
+        observed_at: datetime,
+    ) -> None:
+        """Seed avg24 from the same Recorder window used by HA Statistics."""
+        start_time = observed_at - timedelta(hours=24, microseconds=1)
+        try:
+            history = await self.ha.get_history(
+                OUTDOOR_TEMPERATURE_ENTITY_ID,
+                start_time=start_time,
+                end_time=observed_at,
+            )
+        except Exception:
+            LOGGER.warning(
+                "Outdoor avg24 Recorder bootstrap failed; using live temperature",
+                exc_info=True,
+            )
+            history = []
+
+        samples: list[Sample] = []
+        for state in history:
+            try:
+                value = float(state.state)
+            except (TypeError, ValueError):
+                continue
+            samples.append(
+                Sample(
+                    observed_at=state.last_updated,
+                    value=value,
+                )
+            )
+
+        self.outdoor.bootstrap_temperature_history(
+            samples,
+            source_name=OUTDOOR_TEMPERATURE_ENTITY_ID,
+        )
+        LOGGER.info(
+            "Outdoor avg24 history bootstrap: %s Recorder sample(s)",
+            len(samples),
         )
 
     async def _on_state(self, state: HaState) -> None:
