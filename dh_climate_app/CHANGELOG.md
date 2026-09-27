@@ -1,12 +1,13 @@
 # Changelog
 
-## 0.1.21 — development
+## 0.1.21 — 2026-09-27
 
 - Reduced Home Assistant Recorder churn from Climate App MQTT facades by removing per-recalculation `observed_at` timestamps from entity attributes.
 - Split outdoor temperature and humidity attribute topics so one source/value change no longer updates unrelated outdoor entities; the avg24 sensor no longer carries dynamic JSON attributes.
 - Split precipitation type and precipitation amount attribute topics so weather-condition changes and hourly amount metadata no longer rewrite both entities together.
 - Rounded public season humidity attributes to one decimal, matching the existing public temperature precision and preventing insignificant floating-point drift from becoming Recorder rows.
 - Added regression coverage proving that a 10-second observation-clock advance with unchanged public climate/weather data produces zero second MQTT publication.
+- Passed bundled live HAOS acceptance on 2026-09-27, including the Recorder churn guard: stable outdoor temperature/humidity facades retained identical `last_updated` values across a runtime tick while the full source-failover, room-climate, safety, backup/restore and clean-baseline suite remained green.
 
 ## 0.1.20 — 2026-09-27
 
