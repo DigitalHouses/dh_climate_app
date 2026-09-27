@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.22 — development
+
+- Changed outdoor temperature `avg24` to match Home Assistant Statistics `state_characteristic: mean`: a simple arithmetic mean of persisted temperature samples inside the rolling 24-hour window.
+- Removed the pre-window baseline sample from the temperature mean so values older than 24 hours cannot influence season selection.
+- Kept outdoor humidity on the existing time-weighted rolling average; season thresholds, hysteresis and `decide_season()` semantics are unchanged.
+- Added regression coverage for irregular sample spacing, 24-hour window exclusion, SQLite restart durability and season transition from the new mean.
+
 ## 0.1.21 — 2026-09-27
 
 - Reduced Home Assistant Recorder churn from Climate App MQTT facades by removing per-recalculation `observed_at` timestamps from entity attributes.
