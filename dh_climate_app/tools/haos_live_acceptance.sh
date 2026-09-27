@@ -2,7 +2,7 @@
 set -Ee -o pipefail
 
 APP="8d59ce70_dh_climate_app"
-EXPECTED_VERSION="0.1.20"
+EXPECTED_VERSION="0.1.21"
 CORE="http://supervisor/core"
 SUPERVISOR="http://supervisor"
 TOKEN="${SUPERVISOR_TOKEN:-}"
@@ -14,6 +14,7 @@ ROOM_ID="livingroom"
 OUTDOOR_SENSOR="sensor.dh_climate_accept_outdoor"
 OUTDOOR_BACKUP_SENSOR="sensor.dh_climate_accept_outdoor_backup"
 APP_OUTDOOR_SENSOR="sensor.dh_climate_app_outdoor_temperature"
+APP_OUTDOOR_HUMIDITY="sensor.dh_climate_app_outdoor_humidity"
 HUMIDITY_SENSOR="sensor.dh_climate_accept_humidity"
 WINDOW_SENSOR="binary_sensor.dh_climate_accept_window"
 REVERSIBLE="climate.dh_climate_accept_reversible"
@@ -491,7 +492,7 @@ do
   wait_entity "$entity" 5
 done
 
-say "1. UPDATE TO 0.1.20"
+say "1. UPDATE TO 0.1.21"
 
 ha store reload
 sleep 3
@@ -638,7 +639,42 @@ mqtt_pub "dh_climate_accept/window/state" "OFF" true
 mqtt_pub "dh_climate_accept/stubborn/mode/state" "heat" true
 mqtt_pub "dh_climate_accept/stubborn/temp/state" "23.0" true
 
-say "5A. OUTDOOR SOURCE PRIORITY / LOG / EVENT"
+say "5A. RECORDER CHURN / STABLE MQTT FACADE"
+
+wait_attr "$SEASON_CLIMATE" "temperature_source" "sensor.dh_climate_accept_outdoor" 30
+wait_number "$APP_OUTDOOR_SENSOR" 5 30
+wait_number "$APP_OUTDOOR_HUMIDITY" 40 30
+
+state_json "$SEASON_CLIMATE" | jq -e '
+  (.attributes | has("observed_at") | not)
+' >/dev/null || fail "season facade still exposes observed_at churn attribute"
+
+state_json "$APP_OUTDOOR_SENSOR" | jq -e '
+  (.attributes | has("observed_at") | not) and
+  (.attributes.temperature_source == "sensor.dh_climate_accept_outdoor")
+' >/dev/null || fail "outdoor temperature attributes are not recorder-stable"
+
+state_json "$APP_OUTDOOR_HUMIDITY" | jq -e '
+  (.attributes | has("observed_at") | not) and
+  (.attributes.humidity_source == "sensor.dh_climate_accept_humidity")
+' >/dev/null || fail "outdoor humidity attributes are not recorder-stable"
+
+TEMP_UPDATED_BEFORE="$(state_json "$APP_OUTDOOR_SENSOR" | jq -r '.last_updated')"
+HUM_UPDATED_BEFORE="$(state_json "$APP_OUTDOOR_HUMIDITY" | jq -r '.last_updated')"
+
+sleep 12
+
+TEMP_UPDATED_AFTER="$(state_json "$APP_OUTDOOR_SENSOR" | jq -r '.last_updated')"
+HUM_UPDATED_AFTER="$(state_json "$APP_OUTDOOR_HUMIDITY" | jq -r '.last_updated')"
+
+[ "$TEMP_UPDATED_BEFORE" = "$TEMP_UPDATED_AFTER" ] ||
+  fail "outdoor temperature last_updated churned while value/source were stable"
+[ "$HUM_UPDATED_BEFORE" = "$HUM_UPDATED_AFTER" ] ||
+  fail "outdoor humidity last_updated churned while value/source were stable"
+
+echo "PASS stable outdoor facades do not update every runtime tick"
+
+say "5B. OUTDOOR SOURCE PRIORITY / LOG / EVENT"
 
 wait_attr "$SEASON_CLIMATE" "temperature_source" "sensor.dh_climate_accept_outdoor" 30
 wait_number "$APP_OUTDOOR_SENSOR" 5 30
@@ -683,7 +719,7 @@ state_json "$EVENT" | jq -e '
 ' >/dev/null || fail "outdoor preferred-source recovery event mismatch"
 echo "PASS preferred outdoor source restored"
 
-say "5B. ROOM CLIMATE · NATIVE HVAC / ACTION / PRESET"
+say "5C. ROOM CLIMATE · NATIVE HVAC / ACTION / PRESET"
 
 set_input_number "$ROOM_TEMP_HELPER" 20
 force_heat
@@ -936,9 +972,10 @@ BACKUP_SLUG=""
 
 echo
 echo "============================================================"
-echo "DH CLIMATE 0.1.20 · BUNDLED LIVE ACCEPTANCE = PASS"
+echo "DH CLIMATE 0.1.21 · BUNDLED LIVE ACCEPTANCE = PASS"
 echo "============================================================"
 echo "PASS outdoor temperature avg24 sensor"
+echo "PASS recorder churn guard · stable outdoor facades"
 echo "PASS outdoor source priority + temperature log + source-change event"
 echo "PASS room climate native heat/cool + action + presets"
 echo "PASS device_target_out_of_range"

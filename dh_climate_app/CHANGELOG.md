@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.21 — development
+
+- Reduced Home Assistant Recorder churn from Climate App MQTT facades by removing per-recalculation `observed_at` timestamps from entity attributes.
+- Split outdoor temperature and humidity attribute topics so one source/value change no longer updates unrelated outdoor entities; the avg24 sensor no longer carries dynamic JSON attributes.
+- Split precipitation type and precipitation amount attribute topics so weather-condition changes and hourly amount metadata no longer rewrite both entities together.
+- Rounded public season humidity attributes to one decimal, matching the existing public temperature precision and preventing insignificant floating-point drift from becoming Recorder rows.
+- Added regression coverage proving that a 10-second observation-clock advance with unchanged public climate/weather data produces zero second MQTT publication.
+
 ## 0.1.20 — 2026-09-27
 
 - Added outdoor-temperature source observability: every public one-decimal temperature change is logged with the currently active source.

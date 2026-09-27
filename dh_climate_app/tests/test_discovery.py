@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import unittest
-from datetime import datetime, timezone
+from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 
 from dh_climate_app.config import parse_options
 from dh_climate_app.core import HvacAction, Profile, Season
@@ -11,6 +12,7 @@ from dh_climate_app.discovery import (
     outdoor_discovery_payloads,
     outdoor_state_topics,
     weather_discovery_payloads,
+    weather_state_topics,
     room_climate_discovery_payload,
     room_climate_state_topics,
     ROOM_TARGET_KEYS,
@@ -21,6 +23,7 @@ from dh_climate_app.discovery import (
 )
 from dh_climate_app.outdoor import OutdoorState
 from dh_climate_app.rooms import RoomState
+from dh_climate_app.weather import WeatherState
 from test_config import options
 
 
@@ -300,10 +303,86 @@ class DiscoveryTests(unittest.TestCase):
             "39.0",
             topics["DigitalHouses/Global/dh_climate_app/outdoor/humidity"],
         )
-        attrs = json.loads(
-            topics["DigitalHouses/Global/dh_climate_app/outdoor/attributes"]
+        temperature_attrs = json.loads(
+            topics[
+                "DigitalHouses/Global/dh_climate_app/"
+                "outdoor/temperature/attributes"
+            ]
         )
-        self.assertEqual(18.7, attrs["avg_24h_temperature"])
+        humidity_attrs = json.loads(
+            topics[
+                "DigitalHouses/Global/dh_climate_app/"
+                "outdoor/humidity/attributes"
+            ]
+        )
+        self.assertEqual(
+            {"temperature_source": "weather.forecast_home_assistant"},
+            temperature_attrs,
+        )
+        self.assertEqual(
+            {"humidity_source": "weather.forecast_home_assistant"},
+            humidity_attrs,
+        )
+        self.assertNotIn(
+            "json_attributes_topic",
+            temperature_avg24,
+        )
+        self.assertNotEqual(
+            temperature["json_attributes_topic"],
+            humidity["json_attributes_topic"],
+        )
+
+    def test_recorder_payloads_ignore_observation_clock(self) -> None:
+        now = datetime(2026, 9, 26, 12, tzinfo=timezone.utc)
+        state = OutdoorState(
+            observed_at=now,
+            current_temperature=20.9,
+            current_humidity=39.04,
+            avg_24h_temperature=18.685370883826664,
+            avg_24h_humidity=42.049,
+            temperature_source="weather.forecast_home_assistant",
+            humidity_source="weather.forecast_home_assistant",
+            heat_threshold=15.0,
+            cool_threshold=20.0,
+            hysteresis=0.5,
+            season=Season.OFF,
+        )
+        later = replace(state, observed_at=now + timedelta(seconds=10))
+
+        self.assertEqual(
+            season_state_topics(state),
+            season_state_topics(later),
+        )
+        self.assertEqual(
+            outdoor_state_topics(state),
+            outdoor_state_topics(later),
+        )
+
+        season_attrs = json.loads(
+            season_state_topics(state)[
+                "DigitalHouses/Global/dh_climate_app/season/attributes"
+            ]
+        )
+        self.assertNotIn("observed_at", season_attrs)
+        self.assertEqual(39.0, season_attrs["current_humidity"])
+        self.assertEqual(42.0, season_attrs["avg_24h_humidity"])
+
+        weather = WeatherState(
+            source_entity="weather.forecast_home_assistant",
+            condition="cloudy",
+            precipitation_type="none",
+            precipitation_mm=0.0,
+            forecast_at=now,
+            observed_at=now,
+        )
+        weather_later = replace(
+            weather,
+            observed_at=now + timedelta(seconds=10),
+        )
+        self.assertEqual(
+            weather_state_topics(weather),
+            weather_state_topics(weather_later),
+        )
 
     def test_weather_precipitation_discovery(self) -> None:
         weather = weather_discovery_payloads("0.1.8")
@@ -319,6 +398,10 @@ class DiscoveryTests(unittest.TestCase):
         )
         self.assertEqual("precipitation", precipitation_amount["device_class"])
         self.assertEqual("mm", precipitation_amount["unit_of_measurement"])
+        self.assertNotEqual(
+            precipitation_type["json_attributes_topic"],
+            precipitation_amount["json_attributes_topic"],
+        )
 
     def test_dehumidifier_facade(self) -> None:
         config = parse_options(options())

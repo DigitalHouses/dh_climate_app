@@ -10,6 +10,8 @@ import paho.mqtt.client as mqtt
 
 from .config import RoomConfig
 from .discovery import (
+    LEGACY_OUTDOOR_ATTRIBUTES_TOPIC,
+    LEGACY_WEATHER_ATTRIBUTES_TOPIC,
     SEASON_AVAILABILITY_TOPIC,
     SYSTEM_AVAILABILITY_TOPIC,
     SYSTEM_PROBLEM_ATTRIBUTES_TOPIC,
@@ -287,6 +289,23 @@ class ClimateMqttFacade:
                 retain=True,
                 force=True,
             )
+
+        # 0.1.20 and earlier attached multiple entities to shared dynamic
+        # attribute topics containing observed_at. Clear those retained payloads
+        # after publishing the new split Discovery contract.
+        self.bridge.publish(
+            LEGACY_OUTDOOR_ATTRIBUTES_TOPIC,
+            "",
+            retain=True,
+            force=True,
+        )
+        self.bridge.publish(
+            LEGACY_WEATHER_ATTRIBUTES_TOPIC,
+            "",
+            retain=True,
+            force=True,
+        )
+
         self.bridge.publish(
             "DigitalHouses/Global/dh_climate_app/state",
             system_state_payload(

@@ -3,13 +3,16 @@ from __future__ import annotations
 import asyncio
 import json
 import unittest
-from datetime import datetime, timezone
+from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 
 from dh_climate_app.config import parse_options
 from dh_climate_app.core import HvacAction, Profile, Season
 from dh_climate_app.discovery import SYSTEM_AVAILABILITY_TOPIC
 from dh_climate_app.mqtt import ClimateMqttFacade, MqttBridge
+from dh_climate_app.outdoor import OutdoorState
 from dh_climate_app.rooms import RoomState
+from dh_climate_app.weather import WeatherState
 from test_config import options
 
 
@@ -115,6 +118,67 @@ class MqttReconnectTests(unittest.IsolatedAsyncioTestCase):
             [("DigitalHouses/test/set", 1)],
             bridge.client.subscriptions,
         )
+
+
+class MqttRecorderChurnTests(unittest.TestCase):
+    def setUp(self) -> None:
+        bridge = object.__new__(MqttBridge)
+        bridge.client = FakeMqttClient()
+        bridge._last_payloads = {}
+        bridge._retained_payloads = {}
+        bridge._subscriptions = set()
+        self.bridge = bridge
+        self.facade = ClimateMqttFacade(
+            bridge=bridge,
+            app_version="0.1.21",
+            started_at=datetime(2026, 9, 27, tzinfo=timezone.utc),
+            rooms=parse_options(options()).rooms,
+            command_queue=asyncio.Queue(),
+            weather_enabled=True,
+        )
+
+    def test_outdoor_observation_clock_does_not_republish_mqtt_state(self) -> None:
+        now = datetime(2026, 9, 27, 4, 52, tzinfo=timezone.utc)
+        state = OutdoorState(
+            observed_at=now,
+            current_temperature=13.5,
+            current_humidity=63.0,
+            avg_24h_temperature=18.0,
+            avg_24h_humidity=58.0,
+            temperature_source="weather.forecast_home_assistant",
+            humidity_source="weather.forecast_home_assistant",
+            heat_threshold=18.0,
+            cool_threshold=24.0,
+            hysteresis=0.5,
+            season=Season.OFF,
+        )
+
+        first = self.facade.publish_season(state)
+        second = self.facade.publish_season(
+            replace(state, observed_at=now + timedelta(seconds=10))
+        )
+
+        self.assertGreater(first, 0)
+        self.assertEqual(0, second)
+
+    def test_weather_observation_clock_does_not_republish_mqtt_state(self) -> None:
+        now = datetime(2026, 9, 27, 4, 52, tzinfo=timezone.utc)
+        state = WeatherState(
+            source_entity="weather.forecast_home_assistant",
+            condition="cloudy",
+            precipitation_type="none",
+            precipitation_mm=0.0,
+            forecast_at=now.replace(minute=0, second=0),
+            observed_at=now,
+        )
+
+        first = self.facade.publish_weather(state)
+        second = self.facade.publish_weather(
+            replace(state, observed_at=now + timedelta(seconds=10))
+        )
+
+        self.assertGreater(first, 0)
+        self.assertEqual(0, second)
 
 
 class MqttSeasonalClimatePublicationTests(unittest.TestCase):

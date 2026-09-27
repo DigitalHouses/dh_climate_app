@@ -37,6 +37,8 @@ Acceptance:
 - startup/reconnect establishes a baseline and does not emit a false source
   transition;
 - current source/value is visible in season attributes;
+- MQTT facade attributes do not expose a per-recalculation `observed_at` timestamp;
+- with stable outdoor temperature/humidity values and sources, their Home Assistant `last_updated` values remain unchanged across at least one 10-second runtime tick;
 - `sensor.dh_climate_app_outdoor_temperature` exposes the current selected outdoor temperature;
 - `sensor.dh_climate_app_outdoor_temperature_avg24` exposes the persisted time-weighted 24-hour outdoor temperature average;
 - `sensor.dh_climate_app_outdoor_humidity` exposes the current selected outdoor humidity;
