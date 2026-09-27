@@ -39,7 +39,7 @@ SQLite under `/data/dh_climate.db` stores only durable installation state. It is
 - one-decimal public temperature presentation while retaining full internal calculation precision;
 - weather-condition precipitation typing plus current-hour forecast amount in mm;
 - one schema-v2 MQTT Event stream for weather, season, window and Problem transitions;
-- Home Assistant Statistics-style rolling 24-hour outdoor temperature mean; humidity retains its time-weighted rolling average;
+- Home Assistant Statistics-style rolling 24-hour outdoor temperature mean, restored from Recorder history of the canonical public temperature sensor after App start/reconnect; humidity retains its time-weighted rolling average;
 - global `HEAT / COOL / OFF` season;
 - writable two-threshold `heat_cool` season thermostat;
 - one MQTT Device and one room thermostat per configured room;

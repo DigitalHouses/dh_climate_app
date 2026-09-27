@@ -2,7 +2,7 @@
 set -Ee -o pipefail
 
 APP="8d59ce70_dh_climate_app"
-EXPECTED_VERSION="0.1.22"
+EXPECTED_VERSION="0.1.23"
 CORE="http://supervisor/core"
 SUPERVISOR="http://supervisor"
 TOKEN="${SUPERVISOR_TOKEN:-}"
@@ -33,6 +33,7 @@ ROOM_TEMP_HELPER="input_number.dh_climate_test_livingroom_temperature"
 ROOM_TEMP_SENSOR="sensor.dh_climate_test_livingroom_temperature"
 HUMIDITY_FACADE="humidifier.dh_climate_app_livingroom"
 AVG24_SENSOR="sensor.dh_climate_app_outdoor_temperature_avg24"
+AVG24_ORACLE="sensor.avg_outdoor_temperature_24_temp"
 
 WORKDIR="/config/.dh_climate_acceptance"
 LOG="${WORKDIR}/run_$(date +%Y%m%d_%H%M%S).log"
@@ -188,6 +189,24 @@ wait_number() {
   done
   actual="$(state_value "$entity" 2>/dev/null || true)"
   fail "$entity=$actual expected≈$expected"
+}
+
+wait_states_close() {
+  local left="$1"
+  local right="$2"
+  local seconds="${3:-30}"
+  local i a b
+  for i in $(seq 1 "$seconds"); do
+    a="$(state_value "$left" 2>/dev/null || true)"
+    b="$(state_value "$right" 2>/dev/null || true)"
+    if awk -v a="$a" -v b="$b" 'BEGIN{exit !((a-b<0?b-a:a-b)<0.051)}'; then
+      return 0
+    fi
+    sleep 1
+  done
+  a="$(state_value "$left" 2>/dev/null || true)"
+  b="$(state_value "$right" 2>/dev/null || true)"
+  fail "$left=$a $right=$b expected delta<0.051"
 }
 
 wait_numeric_attr() {
@@ -492,7 +511,7 @@ do
   wait_entity "$entity" 5
 done
 
-say "1. UPDATE TO 0.1.22"
+say "1. UPDATE TO 0.1.23"
 
 ha store reload
 sleep 3
@@ -528,6 +547,15 @@ AVG24_ATTR="$(attr_value "$SEASON_CLIMATE" "avg_24h_temperature")"
 [ "$AVG24_STATE" = "$AVG24_ATTR" ] ||
   fail "avg24 sensor=$AVG24_STATE season_attr=$AVG24_ATTR"
 echo "PASS outdoor temperature avg24 sensor = $AVG24_STATE °C"
+
+if state_json "$AVG24_ORACLE" >/dev/null 2>&1; then
+  wait_numeric_state_present "$AVG24_ORACLE" 40
+  wait_states_close "$AVG24_SENSOR" "$AVG24_ORACLE" 40
+  ORACLE_STATE="$(state_value "$AVG24_ORACLE")"
+  echo "PASS avg24 oracle = $ORACLE_STATE °C"
+else
+  echo "SKIP avg24 oracle · $AVG24_ORACLE is not present"
+fi
 
 say "2. CAPTURE CLEAN BASELINE"
 
@@ -972,9 +1000,9 @@ BACKUP_SLUG=""
 
 echo
 echo "============================================================"
-echo "DH CLIMATE 0.1.22 · BUNDLED LIVE ACCEPTANCE = PASS"
+echo "DH CLIMATE 0.1.23 · BUNDLED LIVE ACCEPTANCE = PASS"
 echo "============================================================"
-echo "PASS outdoor temperature avg24 sensor"
+echo "PASS outdoor temperature avg24 sensor + optional HA Statistics oracle"
 echo "PASS recorder churn guard · stable outdoor facades"
 echo "PASS outdoor source priority + temperature log + source-change event"
 echo "PASS room climate native heat/cool + action + presets"

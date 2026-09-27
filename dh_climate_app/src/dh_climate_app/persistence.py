@@ -220,6 +220,35 @@ class StateStore:
                 ),
             )
 
+    def replace_outdoor_samples(
+        self,
+        *,
+        kind: str,
+        samples: list[Sample],
+        source_name: str,
+    ) -> None:
+        """Replace one metric's persisted sample window atomically."""
+        if kind not in {"temperature", "humidity"}:
+            raise ValueError("kind must be temperature or humidity")
+        with self.connect() as db:
+            db.execute("DELETE FROM outdoor_samples WHERE kind=?", (kind,))
+            db.executemany(
+                """
+                INSERT INTO outdoor_samples(
+                    kind, observed_at, value, source_name
+                ) VALUES (?, ?, ?, ?)
+                """,
+                [
+                    (
+                        kind,
+                        sample.observed_at.isoformat(),
+                        float(sample.value),
+                        source_name,
+                    )
+                    for sample in samples
+                ],
+            )
+
     def load_outdoor_samples(
         self,
         *,

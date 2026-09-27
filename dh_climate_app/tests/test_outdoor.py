@@ -7,7 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from dh_climate_app.config import parse_options
-from dh_climate_app.core import Season
+from dh_climate_app.core import Sample, Season
 from dh_climate_app.outdoor import OutdoorEngine
 from dh_climate_app.persistence import StateStore
 from test_config import options
@@ -109,6 +109,83 @@ class OutdoorEngineTests(unittest.TestCase):
         )
         self.assertAlmostEqual(16.0, state.avg_24h_temperature)
         self.assertEqual(Season.OFF, state.season)
+
+    def test_temperature_avg24_empty_history_starts_at_live_temperature(self) -> None:
+        now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
+        self.engine.bootstrap_temperature_history(
+            [],
+            source_name="sensor.dh_climate_app_outdoor_temperature",
+        )
+
+        state = self.engine.evaluate(
+            {
+                "sensor.outdoor_temperature": "18.2",
+                "sensor.outdoor_humidity": "50",
+            },
+            observed_at=now,
+            record_sample=True,
+        )
+
+        self.assertEqual(18.2, state.avg_24h_temperature)
+
+    def test_temperature_avg24_recorder_bootstrap_matches_statistics_mean(self) -> None:
+        now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
+        self.engine.bootstrap_temperature_history(
+            [
+                Sample(now - timedelta(hours=23), 20.0),
+                Sample(now - timedelta(hours=1), 10.0),
+            ],
+            source_name="sensor.dh_climate_app_outdoor_temperature",
+        )
+
+        state = self.engine.evaluate(
+            {
+                "sensor.outdoor_temperature": "10",
+                "sensor.outdoor_humidity": "50",
+            },
+            observed_at=now,
+            record_sample=True,
+        )
+
+        # HA Statistics restores the two Recorder samples, then receives the
+        # App's startup publication of the current public temperature.
+        self.assertAlmostEqual((20.0 + 10.0 + 10.0) / 3.0, state.avg_24h_temperature)
+
+    def test_temperature_avg24_samples_public_one_decimal_transitions(self) -> None:
+        now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
+        self.engine.bootstrap_temperature_history(
+            [],
+            source_name="sensor.dh_climate_app_outdoor_temperature",
+        )
+
+        first = self.engine.evaluate(
+            {
+                "sensor.outdoor_temperature": "10.01",
+                "sensor.outdoor_humidity": "50",
+            },
+            observed_at=now,
+            record_sample=True,
+        )
+        same_public_value = self.engine.evaluate(
+            {
+                "sensor.outdoor_temperature": "10.04",
+                "sensor.outdoor_humidity": "50",
+            },
+            observed_at=now + timedelta(minutes=1),
+            record_sample=True,
+        )
+        next_public_value = self.engine.evaluate(
+            {
+                "sensor.outdoor_temperature": "10.06",
+                "sensor.outdoor_humidity": "50",
+            },
+            observed_at=now + timedelta(minutes=2),
+            record_sample=True,
+        )
+
+        self.assertEqual(10.0, first.avg_24h_temperature)
+        self.assertEqual(10.0, same_public_value.avg_24h_temperature)
+        self.assertAlmostEqual(10.05, next_public_value.avg_24h_temperature)
 
     def test_temperature_avg24_matches_statistics_mean(self) -> None:
         now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)

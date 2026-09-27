@@ -40,10 +40,10 @@ Acceptance:
 - MQTT facade attributes do not expose a per-recalculation `observed_at` timestamp;
 - with stable outdoor temperature/humidity values and sources, their Home Assistant `last_updated` values remain unchanged across at least one 10-second runtime tick;
 - `sensor.dh_climate_app_outdoor_temperature` exposes the current selected outdoor temperature;
-- `sensor.dh_climate_app_outdoor_temperature_avg24` exposes the persisted time-weighted 24-hour outdoor temperature average;
+- `sensor.dh_climate_app_outdoor_temperature_avg24` exposes the Home Assistant Statistics-style arithmetic mean of canonical public temperature samples inside the rolling 24-hour window;
 - `sensor.dh_climate_app_outdoor_humidity` exposes the current selected outdoor humidity;
-- current and avg24 temperature remain separate UI entities while using the same Climate Core source/history;
-- rolling avg24 survives App restart;
+- current and avg24 temperature remain separate UI entities; avg24 restores its sample window from Recorder history of the canonical current-temperature entity;
+- rolling avg24 survives App restart and, when `sensor.avg_outdoor_temperature_24_temp` exists, matches that temporary Home Assistant Statistics oracle within 0.1 °C;
 - no live outdoor temperature -> season becomes OFF even if old avg24 exists;
 - lower/red slider persists the heating-season threshold;
 - upper/blue slider persists the cooling-season threshold;

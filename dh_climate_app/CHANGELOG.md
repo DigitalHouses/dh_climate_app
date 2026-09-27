@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.23 — development
+
+- Make outdoor temperature `avg24` follow Home Assistant Statistics `state_characteristic: mean` / `max_age: 24h` startup semantics instead of relying only on the App's private SQLite sample history.
+- On each Home Assistant snapshot/reconnect, rebuild the temperature sample window from Recorder history of `sensor.dh_climate_app_outdoor_temperature`, excluding any pre-window baseline exactly like Statistics.
+- If Recorder has no usable history, bootstrap the mean from the current live outdoor temperature; no historical value is fabricated.
+- During runtime, sample the same one-decimal public outdoor temperature transitions that Home Assistant sees, so raw source precision or source-only switches cannot skew the mean away from the Statistics oracle.
+- Keep outdoor humidity on its existing time-weighted path; season thresholds and hysteresis semantics are unchanged.
+- Extend unit/live acceptance so the temporary `sensor.avg_outdoor_temperature_24_temp` can be used as an optional 0.1 °C oracle on HAOS.
+
 ## 0.1.22 — development
 
 - Changed outdoor temperature `avg24` to match Home Assistant Statistics `state_characteristic: mean`: a simple arithmetic mean of persisted temperature samples inside the rolling 24-hour window.

@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Mapping
+from typing import Mapping, Sequence
 
 from .config import OutdoorConfig
 from .core import (
     PrioritizedSource,
+    Sample,
     Season,
     average_available,
     decide_season,
@@ -135,6 +136,19 @@ class OutdoorEngine:
             season=season,
         )
 
+    def bootstrap_temperature_history(
+        self,
+        samples: Sequence[Sample],
+        *,
+        source_name: str,
+    ) -> None:
+        """Replace the temperature mean window with Recorder-backed samples."""
+        self.store.replace_outdoor_samples(
+            kind="temperature",
+            samples=list(samples),
+            source_name=source_name,
+        )
+
     def set_thresholds(self, *, heat: float, cool: float) -> None:
         self.store.set_season_thresholds(heat, cool)
 
@@ -151,16 +165,27 @@ class OutdoorEngine:
             if kind == "temperature"
             else self._last_humidity_selection
         )
-        if previous == selection:
-            return
         source_name, value = selection
+
+        if kind == "temperature":
+            public_value = round(float(value), 1)
+            previous_public_value = (
+                None
+                if previous is None
+                else round(float(previous[1]), 1)
+            )
+            self._last_temperature_selection = selection
+            if previous_public_value == public_value:
+                return
+            value = public_value
+        else:
+            if previous == selection:
+                return
+            self._last_humidity_selection = selection
+
         self.store.add_outdoor_sample(
             kind=kind,
             observed_at=observed_at,
             value=value,
             source_name=source_name,
         )
-        if kind == "temperature":
-            self._last_temperature_selection = selection
-        else:
-            self._last_humidity_selection = selection
