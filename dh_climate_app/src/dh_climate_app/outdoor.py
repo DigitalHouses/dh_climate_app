@@ -5,7 +5,14 @@ from datetime import datetime, timedelta
 from typing import Mapping
 
 from .config import OutdoorConfig
-from .core import PrioritizedSource, Season, decide_season, select_prioritized_value, time_weighted_average
+from .core import (
+    PrioritizedSource,
+    Season,
+    average_available,
+    decide_season,
+    select_prioritized_value,
+    time_weighted_average,
+)
 from .persistence import StateStore
 
 
@@ -86,7 +93,7 @@ class OutdoorEngine:
         temperature_samples = self.store.load_outdoor_samples(
             kind="temperature",
             since=since,
-            include_previous=True,
+            include_previous=False,
         )
         humidity_samples = self.store.load_outdoor_samples(
             kind="humidity",
@@ -94,9 +101,8 @@ class OutdoorEngine:
             include_previous=True,
         )
 
-        avg_temperature = time_weighted_average(
-            temperature_samples,
-            window_end=observed_at,
+        avg_temperature = average_available(
+            sample.value for sample in temperature_samples
         )
         avg_humidity = time_weighted_average(
             humidity_samples,
