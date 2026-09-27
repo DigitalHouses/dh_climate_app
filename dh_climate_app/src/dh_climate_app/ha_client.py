@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import json
 import logging
 from typing import Any, Awaitable, Callable, Iterable, Mapping
+from urllib import parse as urllib_parse
 from urllib import request as urllib_request
 
 import websockets
@@ -124,6 +125,62 @@ class HomeAssistantClient:
             if isinstance(item, Mapping)
             and str(item.get("entity_id", "")) in self.entity_ids
         ]
+
+    async def get_history(
+        self,
+        entity_id: str,
+        *,
+        start_time: datetime,
+        end_time: datetime,
+    ) -> list[HaState]:
+        """Return recorded state changes for one entity in chronological order.
+
+        The query intentionally mirrors the History/Statistics startup contract:
+        only changes inside the requested window are returned; the state before
+        the left boundary is not injected.
+        """
+        if start_time.tzinfo is None or end_time.tzinfo is None:
+            raise ValueError("history boundaries must be timezone-aware")
+        if end_time < start_time:
+            raise ValueError("history end_time must not precede start_time")
+
+        start_utc = start_time.astimezone(timezone.utc)
+        end_utc = end_time.astimezone(timezone.utc)
+        encoded_start = urllib_parse.quote(start_utc.isoformat(), safe="")
+        query = urllib_parse.urlencode(
+            {
+                "filter_entity_id": entity_id,
+                "end_time": end_utc.isoformat(),
+                "significant_changes_only": "0",
+            }
+        )
+        payload = await asyncio.to_thread(
+            self._request_json,
+            "GET",
+            (
+                f"/history/period/{encoded_start}?{query}"
+                "&skip_initial_state&no_attributes"
+            ),
+            None,
+        )
+        if not isinstance(payload, list):
+            raise RuntimeError("Home Assistant history response is not a list")
+
+        result: list[HaState] = []
+        for group in payload:
+            if not isinstance(group, list):
+                continue
+            for item in group:
+                if not isinstance(item, Mapping):
+                    continue
+                normalized = dict(item)
+                normalized.setdefault("entity_id", entity_id)
+                if str(normalized.get("entity_id", "")).lower() != entity_id.lower():
+                    continue
+                result.append(HaState.from_payload(normalized))
+
+        result.sort(key=lambda state: state.last_updated)
+        return result
 
     async def call_service(
         self,
