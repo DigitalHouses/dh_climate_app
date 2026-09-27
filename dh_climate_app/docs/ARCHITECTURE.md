@@ -100,7 +100,7 @@ If no valid room temperature exists, FAST thermostat demand is inhibited and the
 
 The App stores outdoor samples required for a rolling 24-hour calculation.
 
-`avg_outdoor_24` is a **time-weighted** rolling average, so irregular HA update frequency does not bias the result.
+Temperature `avg_outdoor_24` matches Home Assistant Statistics `state_characteristic: mean`: it is the arithmetic mean of persisted temperature samples whose timestamps are inside the rolling 24-hour window. Samples before the window are excluded and time spacing does not change sample weight. Outdoor humidity retains the existing time-weighted rolling average.
 
 The global season is:
 
