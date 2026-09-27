@@ -45,7 +45,7 @@ with the active source. Active-source transitions are written as a separate log
 entry and emitted as `outdoor_temperature_source_changed` on
 `event.dh_climate_app_event`.
 
-The App maintains a time-weighted rolling 24-hour outdoor average. Global season is:
+The App maintains a rolling 24-hour outdoor temperature mean matching Home Assistant Statistics `state_characteristic: mean`: every persisted temperature sample inside the last 24 hours has equal weight, regardless of the time between samples. The pre-window sample is excluded. Outdoor humidity keeps its separate time-weighted 24-hour average. Global season is:
 
 ```text
 avg24 < heat_threshold - hysteresis → HEAT
