@@ -23,9 +23,17 @@ SYSTEM_PROBLEM_TOPIC = f"{BASE_TOPIC}/problem"
 SYSTEM_PROBLEM_ATTRIBUTES_TOPIC = f"{BASE_TOPIC}/problem_attributes"
 SYSTEM_EVENT_TOPIC = f"{BASE_TOPIC}/event"
 OUTDOOR_BASE = f"{BASE_TOPIC}/outdoor"
-OUTDOOR_ATTRIBUTES_TOPIC = f"{OUTDOOR_BASE}/attributes"
+OUTDOOR_TEMPERATURE_ATTRIBUTES_TOPIC = f"{OUTDOOR_BASE}/temperature/attributes"
+OUTDOOR_HUMIDITY_ATTRIBUTES_TOPIC = f"{OUTDOOR_BASE}/humidity/attributes"
+LEGACY_OUTDOOR_ATTRIBUTES_TOPIC = f"{OUTDOOR_BASE}/attributes"
 WEATHER_BASE = f"{BASE_TOPIC}/weather"
-WEATHER_ATTRIBUTES_TOPIC = f"{WEATHER_BASE}/precipitation/attributes"
+WEATHER_PRECIPITATION_TYPE_ATTRIBUTES_TOPIC = (
+    f"{WEATHER_BASE}/precipitation/type/attributes"
+)
+WEATHER_PRECIPITATION_AMOUNT_ATTRIBUTES_TOPIC = (
+    f"{WEATHER_BASE}/precipitation/mm/attributes"
+)
+LEGACY_WEATHER_ATTRIBUTES_TOPIC = f"{WEATHER_BASE}/precipitation/attributes"
 
 SYSTEM_DEVICE_ID = "dh_climate_app"
 SEASON_OBJECT_ID = "dh_climate_app_season"
@@ -182,7 +190,7 @@ def outdoor_discovery_payloads(
                 "unique_id": "dh_climate_app_outdoor_temperature",
                 "default_entity_id": "sensor.dh_climate_app_outdoor_temperature",
                 "state_topic": f"{OUTDOOR_BASE}/temperature",
-                "json_attributes_topic": OUTDOOR_ATTRIBUTES_TOPIC,
+                "json_attributes_topic": OUTDOOR_TEMPERATURE_ATTRIBUTES_TOPIC,
                 "device_class": "temperature",
                 "unit_of_measurement": "°C",
                 "state_class": "measurement",
@@ -199,7 +207,6 @@ def outdoor_discovery_payloads(
                 "unique_id": "dh_climate_app_outdoor_temperature_avg24",
                 "default_entity_id": "sensor.dh_climate_app_outdoor_temperature_avg24",
                 "state_topic": f"{OUTDOOR_BASE}/temperature_avg24",
-                "json_attributes_topic": OUTDOOR_ATTRIBUTES_TOPIC,
                 "device_class": "temperature",
                 "unit_of_measurement": "°C",
                 "state_class": "measurement",
@@ -216,7 +223,7 @@ def outdoor_discovery_payloads(
                 "unique_id": "dh_climate_app_outdoor_humidity",
                 "default_entity_id": "sensor.dh_climate_app_outdoor_humidity",
                 "state_topic": f"{OUTDOOR_BASE}/humidity",
-                "json_attributes_topic": OUTDOOR_ATTRIBUTES_TOPIC,
+                "json_attributes_topic": OUTDOOR_HUMIDITY_ATTRIBUTES_TOPIC,
                 "device_class": "humidity",
                 "unit_of_measurement": "%",
                 "state_class": "measurement",
@@ -242,7 +249,7 @@ def weather_discovery_payloads(
                 "unique_id": "dh_climate_app_precipitation_type",
                 "default_entity_id": "sensor.dh_climate_app_precipitation_type",
                 "state_topic": f"{WEATHER_BASE}/precipitation/type",
-                "json_attributes_topic": WEATHER_ATTRIBUTES_TOPIC,
+                "json_attributes_topic": WEATHER_PRECIPITATION_TYPE_ATTRIBUTES_TOPIC,
                 "availability_topic": SYSTEM_AVAILABILITY_TOPIC,
                 "icon": "mdi:weather-rainy",
                 "device": device,
@@ -256,7 +263,7 @@ def weather_discovery_payloads(
                 "unique_id": "dh_climate_app_precipitation_amount",
                 "default_entity_id": "sensor.dh_climate_app_precipitation_amount",
                 "state_topic": f"{WEATHER_BASE}/precipitation/mm",
-                "json_attributes_topic": WEATHER_ATTRIBUTES_TOPIC,
+                "json_attributes_topic": WEATHER_PRECIPITATION_AMOUNT_ATTRIBUTES_TOPIC,
                 "device_class": "precipitation",
                 "unit_of_measurement": "mm",
                 "availability_topic": SYSTEM_AVAILABILITY_TOPIC,
@@ -452,13 +459,12 @@ def season_state_topics(state: OutdoorState) -> dict[str, str]:
         "current_temperature": _temperature(state.current_temperature),
         "avg_24h_temperature": _temperature(state.avg_24h_temperature),
         "temperature_source": state.temperature_source,
-        "current_humidity": state.current_humidity,
-        "avg_24h_humidity": state.avg_24h_humidity,
+        "current_humidity": _temperature(state.current_humidity),
+        "avg_24h_humidity": _temperature(state.avg_24h_humidity),
         "humidity_source": state.humidity_source,
         "hysteresis": _temperature(state.hysteresis),
         "heat_threshold": _temperature(state.heat_threshold),
         "cool_threshold": _temperature(state.cool_threshold),
-        "observed_at": state.observed_at.isoformat(),
     }
     return {
         f"{SEASON_BASE}/current_temperature": _number(state.avg_24h_temperature),
@@ -534,19 +540,24 @@ def room_humidity_state_topics(state: HumidityState) -> dict[str, str]:
 
 
 def outdoor_state_topics(state: OutdoorState) -> dict[str, str]:
-    attrs = {
+    temperature_attrs = {
         "temperature_source": state.temperature_source,
+    }
+    humidity_attrs = {
         "humidity_source": state.humidity_source,
-        "avg_24h_temperature": _temperature(state.avg_24h_temperature),
-        "avg_24h_humidity": state.avg_24h_humidity,
-        "observed_at": state.observed_at.isoformat(),
     }
     return {
         f"{OUTDOOR_BASE}/temperature": _number(state.current_temperature),
         f"{OUTDOOR_BASE}/temperature_avg24": _number(state.avg_24h_temperature),
         f"{OUTDOOR_BASE}/humidity": _number(state.current_humidity),
-        OUTDOOR_ATTRIBUTES_TOPIC: json.dumps(
-            attrs,
+        OUTDOOR_TEMPERATURE_ATTRIBUTES_TOPIC: json.dumps(
+            temperature_attrs,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+        OUTDOOR_HUMIDITY_ATTRIBUTES_TOPIC: json.dumps(
+            humidity_attrs,
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),
@@ -555,10 +566,11 @@ def outdoor_state_topics(state: OutdoorState) -> dict[str, str]:
 
 
 def weather_state_topics(state: WeatherState) -> dict[str, str]:
-    attrs = {
+    type_attrs = {
         "condition": state.condition,
-        "precipitation_type": state.precipitation_type,
-        "precipitation_mm": state.precipitation_mm,
+        "source_entity": state.source_entity,
+    }
+    amount_attrs = {
         "amount_semantics": "hourly_forecast",
         "forecast_at": (
             state.forecast_at.isoformat()
@@ -566,7 +578,6 @@ def weather_state_topics(state: WeatherState) -> dict[str, str]:
             else None
         ),
         "source_entity": state.source_entity,
-        "observed_at": state.observed_at.isoformat(),
     }
     return {
         f"{WEATHER_BASE}/precipitation/type": state.precipitation_type,
@@ -574,8 +585,14 @@ def weather_state_topics(state: WeatherState) -> dict[str, str]:
             state.precipitation_mm,
             precision=3,
         ),
-        WEATHER_ATTRIBUTES_TOPIC: json.dumps(
-            attrs,
+        WEATHER_PRECIPITATION_TYPE_ATTRIBUTES_TOPIC: json.dumps(
+            type_attrs,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+        WEATHER_PRECIPITATION_AMOUNT_ATTRIBUTES_TOPIC: json.dumps(
+            amount_attrs,
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),
