@@ -199,26 +199,26 @@ class OutdoorEngineTests(unittest.TestCase):
         self.store.add_outdoor_sample(
             kind="temperature",
             observed_at=now - timedelta(hours=23),
-            value=10.0,
+            value=20.0,
             source_name="primary",
         )
         self.store.add_outdoor_sample(
             kind="temperature",
             observed_at=now - timedelta(hours=1),
-            value=12.0,
+            value=0.0,
             source_name="primary",
         )
 
         state = self.engine.evaluate(
             {
-                "sensor.outdoor_temperature": "12",
+                "sensor.outdoor_temperature": "0",
                 "sensor.outdoor_humidity": "50",
             },
             observed_at=now,
             record_sample=False,
         )
 
-        self.assertEqual(11.0, state.avg_24h_temperature)
+        self.assertEqual(10.0, state.avg_24h_temperature)
         self.assertEqual(Season.HEAT, state.season)
 
     def test_all_live_sources_unavailable_forces_off(self) -> None:
