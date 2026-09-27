@@ -89,6 +89,7 @@ class ClimateRuntime:
         self._last_room_states: dict[str, RoomState] = {}
         self._last_humidity_states: dict[str, HumidityState] = {}
         self._last_weather_state: WeatherState | None = None
+        self._temperature_history_initialized = False
         self._weather_forecast_response: object | None = None
         self._weather_source_last_updated: datetime | None = None
         self._weather_forecast_fetched_at: datetime | None = None
@@ -181,6 +182,12 @@ class ClimateRuntime:
                 end_time=observed_at,
             )
         except Exception:
+            if self._temperature_history_initialized:
+                LOGGER.warning(
+                    "Outdoor avg24 Recorder refresh failed; keeping current sample window",
+                    exc_info=True,
+                )
+                return
             LOGGER.warning(
                 "Outdoor avg24 Recorder bootstrap failed; using live temperature",
                 exc_info=True,
@@ -204,6 +211,7 @@ class ClimateRuntime:
             samples,
             source_name=OUTDOOR_TEMPERATURE_ENTITY_ID,
         )
+        self._temperature_history_initialized = True
         LOGGER.info(
             "Outdoor avg24 history bootstrap: %s Recorder sample(s)",
             len(samples),
