@@ -151,7 +151,6 @@ class HomeAssistantClient:
             {
                 "filter_entity_id": entity_id,
                 "end_time": end_utc.isoformat(),
-                "significant_changes_only": "0",
             }
         )
         payload = await asyncio.to_thread(

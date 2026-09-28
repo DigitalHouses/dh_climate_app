@@ -55,7 +55,7 @@ class HomeAssistantHistoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("GET", args[0])
         self.assertIn("/history/period/", args[1])
         self.assertIn("filter_entity_id=sensor.dh_climate_app_outdoor_temperature", args[1])
-        self.assertIn("significant_changes_only=0", args[1])
+        self.assertNotIn("significant_changes_only=0", args[1])
         self.assertIn("skip_initial_state", args[1])
         self.assertIn("no_attributes", args[1])
         self.assertIsNone(args[2])
