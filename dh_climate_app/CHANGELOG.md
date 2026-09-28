@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.25 — development
+
+- Align Recorder bootstrap filtering with native Home Assistant Statistics: request only significant/state changes from History instead of forcing `significant_changes_only=0`.
+- This excludes Recorder rows where the outdoor-temperature state is unchanged and only attributes changed, preventing duplicate equal-valued samples from biasing the 24-hour arithmetic mean.
+- Keep the 0.1.24 startup deduplication, empty-history bootstrap, runtime sampling and humidity behavior unchanged.
+- Retain `sensor.avg_outdoor_temperature_24_temp` as the live acceptance oracle; the App avg24 must match it to one decimal after restart.
+
 ## 0.1.24 — development
 
 - Fix the remaining Home Assistant Statistics parity gap on App startup: when Recorder history already contains the current canonical outdoor-temperature value, the startup snapshot no longer inserts that same value a second time into the 24-hour mean.
