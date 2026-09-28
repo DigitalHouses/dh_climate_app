@@ -149,7 +149,7 @@ class OutdoorEngine:
         Recorder sample. If the live value differs, evaluate() records it as
         the same new transition Home Assistant will publish.
         """
-        restored = list(samples)
+        restored = sorted(samples, key=lambda sample: sample.observed_at)
         self.store.replace_outdoor_samples(
             kind="temperature",
             samples=restored,
