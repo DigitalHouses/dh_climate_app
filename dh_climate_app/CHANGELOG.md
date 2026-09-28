@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.24 — development
+
+- Fix the remaining Home Assistant Statistics parity gap on App startup: when Recorder history already contains the current canonical outdoor-temperature value, the startup snapshot no longer inserts that same value a second time into the 24-hour mean.
+- Seed the runtime transition baseline from the newest restored Recorder sample, so a genuinely different live temperature is still appended immediately while an identical startup value is deduplicated.
+- Keep the empty-history contract unchanged: the first live outdoor temperature becomes the initial `avg24` sample.
+- Add regression coverage for both startup deduplication and a real live transition immediately after Recorder bootstrap.
+
 ## 0.1.23 — development
 
 - Make outdoor temperature `avg24` follow Home Assistant Statistics `state_characteristic: mean` / `max_age: 24h` startup semantics instead of relying only on the App's private SQLite sample history.
