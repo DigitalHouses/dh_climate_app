@@ -142,11 +142,23 @@ class OutdoorEngine:
         *,
         source_name: str,
     ) -> None:
-        """Replace the temperature mean window with Recorder-backed samples."""
+        """Replace the temperature mean window with Recorder-backed samples.
+
+        The newest restored public value also becomes the transition baseline,
+        so the startup snapshot is not counted twice when it matches the last
+        Recorder sample. If the live value differs, evaluate() records it as
+        the same new transition Home Assistant will publish.
+        """
+        restored = list(samples)
         self.store.replace_outdoor_samples(
             kind="temperature",
-            samples=list(samples),
+            samples=restored,
             source_name=source_name,
+        )
+        self._last_temperature_selection = (
+            None
+            if not restored
+            else (source_name, float(restored[-1].value))
         )
 
     def set_thresholds(self, *, heat: float, cool: float) -> None:
