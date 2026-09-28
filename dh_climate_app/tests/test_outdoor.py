@@ -147,9 +147,30 @@ class OutdoorEngineTests(unittest.TestCase):
             record_sample=True,
         )
 
-        # HA Statistics restores the two Recorder samples, then receives the
-        # App's startup publication of the current public temperature.
-        self.assertAlmostEqual((20.0 + 10.0 + 10.0) / 3.0, state.avg_24h_temperature)
+        # The startup snapshot matches the newest Recorder sample, so it must
+        # not be counted twice.
+        self.assertEqual(15.0, state.avg_24h_temperature)
+
+    def test_temperature_avg24_records_live_change_after_recorder_bootstrap(self) -> None:
+        now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
+        self.engine.bootstrap_temperature_history(
+            [
+                Sample(now - timedelta(hours=23), 20.0),
+                Sample(now - timedelta(hours=1), 10.0),
+            ],
+            source_name="sensor.dh_climate_app_outdoor_temperature",
+        )
+
+        state = self.engine.evaluate(
+            {
+                "sensor.outdoor_temperature": "9.0",
+                "sensor.outdoor_humidity": "50",
+            },
+            observed_at=now,
+            record_sample=True,
+        )
+
+        self.assertEqual(13.0, state.avg_24h_temperature)
 
     def test_temperature_avg24_samples_public_one_decimal_transitions(self) -> None:
         now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
