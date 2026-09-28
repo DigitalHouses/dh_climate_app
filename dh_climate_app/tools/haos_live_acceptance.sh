@@ -2,7 +2,7 @@
 set -Ee -o pipefail
 
 APP="8d59ce70_dh_climate_app"
-EXPECTED_VERSION="0.1.23"
+EXPECTED_VERSION="0.1.24"
 CORE="http://supervisor/core"
 SUPERVISOR="http://supervisor"
 TOKEN="${SUPERVISOR_TOKEN:-}"
@@ -511,7 +511,7 @@ do
   wait_entity "$entity" 5
 done
 
-say "1. UPDATE TO 0.1.23"
+say "1. UPDATE TO 0.1.24"
 
 ha store reload
 sleep 3
@@ -1000,7 +1000,7 @@ BACKUP_SLUG=""
 
 echo
 echo "============================================================"
-echo "DH CLIMATE 0.1.23 · BUNDLED LIVE ACCEPTANCE = PASS"
+echo "DH CLIMATE 0.1.24 · BUNDLED LIVE ACCEPTANCE = PASS"
 echo "============================================================"
 echo "PASS outdoor temperature avg24 sensor + optional HA Statistics oracle"
 echo "PASS recorder churn guard · stable outdoor facades"
