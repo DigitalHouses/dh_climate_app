@@ -34,12 +34,12 @@ SQLite under `/data/dh_climate.db` stores only durable installation state. It is
 ## Implemented behavior
 
 - prioritized outdoor temperature and humidity fallback chains, with active outdoor-temperature source logging and source-switch Events;
-- dedicated current outdoor temperature, 24-hour average outdoor temperature, and current outdoor humidity sensors for UI;
+- dedicated RAW diagnostic, EMA-filtered outdoor temperature, 24-hour average outdoor temperature, and current outdoor humidity sensors for UI/debugging;
 - Recorder-friendly MQTT facade publishing: no per-tick timestamps in entity attributes, split outdoor/weather attribute topics, and no republish when public state is unchanged;
 - one-decimal public temperature presentation while retaining full internal calculation precision;
 - weather-condition precipitation typing plus current-hour forecast amount in mm;
 - one schema-v2 MQTT Event stream for weather, season, window and Problem transitions;
-- Home Assistant Statistics-style rolling 24-hour outdoor temperature mean, restored from Recorder history of the canonical public temperature sensor after App start/reconnect; humidity retains its time-weighted rolling average;
+- one-minute EMA outdoor-temperature pipeline with a configurable 20-minute default time constant; the 24-hour mean uses persisted equal-cadence filtered samples while humidity retains its time-weighted rolling average;
 - global `HEAT / COOL / OFF` season;
 - writable two-threshold `heat_cool` season thermostat;
 - one MQTT Device and one room thermostat per configured room;
@@ -70,6 +70,12 @@ Home Assistant App option schemas have limited nesting depth, so the external co
 See [docs/CONFIG_EXAMPLE.yaml](docs/CONFIG_EXAMPLE.yaml) and [DOCS.md](DOCS.md).
 
 ## Documentation
+
+Development of this standalone Climate App follows the normative DigitalHouses
+application-development contracts maintained in
+[DigitalHouses/home-assistant-apps](https://github.com/DigitalHouses/home-assistant-apps/tree/main/docs/standards).
+Existing compatibility-sensitive Climate identities are not renamed implicitly;
+any such change requires a controlled migration.
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Legacy behavior contract](docs/LEGACY_BEHAVIOR.md)
