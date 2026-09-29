@@ -2,7 +2,7 @@
 set -Ee -o pipefail
 
 APP="8d59ce70_dh_climate_app"
-EXPECTED_VERSION="0.1.25"
+EXPECTED_VERSION="0.1.26"
 CORE="http://supervisor/core"
 SUPERVISOR="http://supervisor"
 TOKEN="${SUPERVISOR_TOKEN:-}"
@@ -13,6 +13,7 @@ ROOM_ID="livingroom"
 
 OUTDOOR_SENSOR="sensor.dh_climate_accept_outdoor"
 OUTDOOR_BACKUP_SENSOR="sensor.dh_climate_accept_outdoor_backup"
+APP_OUTDOOR_RAW_SENSOR="sensor.dh_climate_app_outdoor_temperature_raw"
 APP_OUTDOOR_SENSOR="sensor.dh_climate_app_outdoor_temperature"
 APP_OUTDOOR_HUMIDITY="sensor.dh_climate_app_outdoor_humidity"
 HUMIDITY_SENSOR="sensor.dh_climate_accept_humidity"
@@ -511,7 +512,7 @@ do
   wait_entity "$entity" 5
 done
 
-say "1. UPDATE TO 0.1.25"
+say "1. UPDATE TO 0.1.26"
 
 ha store reload
 sleep 3
@@ -550,11 +551,10 @@ echo "PASS outdoor temperature avg24 sensor = $AVG24_STATE °C"
 
 if state_json "$AVG24_ORACLE" >/dev/null 2>&1; then
   wait_numeric_state_present "$AVG24_ORACLE" 40
-  wait_states_close "$AVG24_SENSOR" "$AVG24_ORACLE" 40
   ORACLE_STATE="$(state_value "$AVG24_ORACLE")"
-  echo "PASS avg24 oracle = $ORACLE_STATE °C"
+  echo "INFO legacy HA Statistics oracle = $ORACLE_STATE °C · comparison only"
 else
-  echo "SKIP avg24 oracle · $AVG24_ORACLE is not present"
+  echo "SKIP legacy HA Statistics oracle · $AVG24_ORACLE is not present"
 fi
 
 say "2. CAPTURE CLEAN BASELINE"
@@ -634,6 +634,7 @@ jq '
   .night_mode = "" |
   .we_at_home = "" |
   .ac_min_outdoor_temperature = -10 |
+  .outdoor_temperature_ema_minutes = 20 |
   .rooms |= map(
     if .id == "livingroom" then
       .temperature_sensors = "sensor.dh_climate_test_livingroom_temperature" |
@@ -667,58 +668,72 @@ mqtt_pub "dh_climate_accept/window/state" "OFF" true
 mqtt_pub "dh_climate_accept/stubborn/mode/state" "heat" true
 mqtt_pub "dh_climate_accept/stubborn/temp/state" "23.0" true
 
-say "5A. RECORDER CHURN / STABLE MQTT FACADE"
+say "5A. RECORDER CHURN / STATE-ONLY TEMPERATURE SENSORS"
 
 wait_attr "$SEASON_CLIMATE" "temperature_source" "sensor.dh_climate_accept_outdoor" 30
-wait_number "$APP_OUTDOOR_SENSOR" 5 30
+wait_number "$APP_OUTDOOR_RAW_SENSOR" 5 30
+wait_numeric_state_present "$APP_OUTDOOR_SENSOR" 30
+wait_numeric_state_present "$AVG24_SENSOR" 30
 wait_number "$APP_OUTDOOR_HUMIDITY" 40 30
 
 state_json "$SEASON_CLIMATE" | jq -e '
   (.attributes | has("observed_at") | not)
 ' >/dev/null || fail "season facade still exposes observed_at churn attribute"
 
-state_json "$APP_OUTDOOR_SENSOR" | jq -e '
-  (.attributes | has("observed_at") | not) and
-  (.attributes.temperature_source == "sensor.dh_climate_accept_outdoor")
-' >/dev/null || fail "outdoor temperature attributes are not recorder-stable"
+for entity in "$APP_OUTDOOR_RAW_SENSOR" "$APP_OUTDOOR_SENSOR" "$AVG24_SENSOR"
+do
+  state_json "$entity" | jq -e '
+    (.attributes | has("observed_at") | not) and
+    (.attributes | has("temperature_source") | not)
+  ' >/dev/null || fail "$entity exposes custom dynamic temperature attributes"
+done
 
 state_json "$APP_OUTDOOR_HUMIDITY" | jq -e '
   (.attributes | has("observed_at") | not) and
   (.attributes.humidity_source == "sensor.dh_climate_accept_humidity")
 ' >/dev/null || fail "outdoor humidity attributes are not recorder-stable"
 
+RAW_UPDATED_BEFORE="$(state_json "$APP_OUTDOOR_RAW_SENSOR" | jq -r '.last_updated')"
 TEMP_UPDATED_BEFORE="$(state_json "$APP_OUTDOOR_SENSOR" | jq -r '.last_updated')"
+AVG_UPDATED_BEFORE="$(state_json "$AVG24_SENSOR" | jq -r '.last_updated')"
 HUM_UPDATED_BEFORE="$(state_json "$APP_OUTDOOR_HUMIDITY" | jq -r '.last_updated')"
 
 sleep 12
 
+RAW_UPDATED_AFTER="$(state_json "$APP_OUTDOOR_RAW_SENSOR" | jq -r '.last_updated')"
 TEMP_UPDATED_AFTER="$(state_json "$APP_OUTDOOR_SENSOR" | jq -r '.last_updated')"
+AVG_UPDATED_AFTER="$(state_json "$AVG24_SENSOR" | jq -r '.last_updated')"
 HUM_UPDATED_AFTER="$(state_json "$APP_OUTDOOR_HUMIDITY" | jq -r '.last_updated')"
 
+[ "$RAW_UPDATED_BEFORE" = "$RAW_UPDATED_AFTER" ] ||
+  fail "raw outdoor temperature last_updated churned while value was stable"
 [ "$TEMP_UPDATED_BEFORE" = "$TEMP_UPDATED_AFTER" ] ||
-  fail "outdoor temperature last_updated churned while value/source were stable"
+  fail "filtered outdoor temperature last_updated churned below one-minute cadence"
+[ "$AVG_UPDATED_BEFORE" = "$AVG_UPDATED_AFTER" ] ||
+  fail "avg24 last_updated churned below one-minute cadence"
 [ "$HUM_UPDATED_BEFORE" = "$HUM_UPDATED_AFTER" ] ||
   fail "outdoor humidity last_updated churned while value/source were stable"
 
-echo "PASS stable outdoor facades do not update every runtime tick"
+echo "PASS temperature sensors are state-only and do not churn below one minute"
 
-say "5B. OUTDOOR SOURCE PRIORITY / LOG / EVENT"
+say "5B. OUTDOOR SOURCE PRIORITY / RAW / LOG / EVENT"
 
 wait_attr "$SEASON_CLIMATE" "temperature_source" "sensor.dh_climate_accept_outdoor" 30
-wait_number "$APP_OUTDOOR_SENSOR" 5 30
+wait_number "$APP_OUTDOOR_RAW_SENSOR" 5 30
+wait_numeric_state_present "$APP_OUTDOOR_SENSOR" 30
 
 mqtt_pub "dh_climate_accept/outdoor/state" "7.0" true
-wait_number "$APP_OUTDOOR_SENSOR" 7 30
+wait_number "$APP_OUTDOOR_RAW_SENSOR" 7 30
 
 OUTDOOR_LOG="$(ha apps logs "$APP" | tail -n 500 | grep '\[OUTDOOR\]' || true)"
 echo "$OUTDOOR_LOG" | tail -n 30
-echo "$OUTDOOR_LOG" | grep -Fq "temperature 5.0 °C -> 7.0 °C | source=sensor.dh_climate_accept_outdoor" ||
-  fail "outdoor temperature change log missing"
+echo "$OUTDOOR_LOG" | grep -Fq "raw_temperature 5.0 °C -> 7.0 °C | source=sensor.dh_climate_accept_outdoor" ||
+  fail "raw outdoor temperature change log missing"
 
 mqtt_pub "dh_climate_accept/outdoor/availability" "offline" true
 wait_state "$OUTDOOR_SENSOR" "unavailable" 30
 wait_attr "$SEASON_CLIMATE" "temperature_source" "sensor.dh_climate_accept_outdoor_backup" 30
-wait_number "$APP_OUTDOOR_SENSOR" 6 30
+wait_number "$APP_OUTDOOR_RAW_SENSOR" 6 30
 wait_attr "$EVENT" "event_type" "outdoor_temperature_source_changed" 30
 
 state_json "$EVENT" | jq -e '
@@ -731,15 +746,15 @@ state_json "$EVENT" | jq -e '
 
 OUTDOOR_LOG="$(ha apps logs "$APP" | tail -n 500 | grep '\[OUTDOOR\]' || true)"
 echo "$OUTDOOR_LOG" | tail -n 30
-echo "$OUTDOOR_LOG" | grep -Fq "source sensor.dh_climate_accept_outdoor -> sensor.dh_climate_accept_outdoor_backup | temperature=6.0 °C" ||
+echo "$OUTDOOR_LOG" | grep -Fq "source sensor.dh_climate_accept_outdoor -> sensor.dh_climate_accept_outdoor_backup | raw_temperature=6.0 °C" ||
   fail "outdoor source switch log missing"
-echo "PASS outdoor source failover + log + event"
+echo "PASS source failover keeps RAW truth while filtered temperature stays on EMA path"
 
 mqtt_pub "dh_climate_accept/outdoor/state" "5.0" true
 mqtt_pub "dh_climate_accept/outdoor/availability" "online" true
 wait_number "$OUTDOOR_SENSOR" 5 30
 wait_attr "$SEASON_CLIMATE" "temperature_source" "sensor.dh_climate_accept_outdoor" 30
-wait_number "$APP_OUTDOOR_SENSOR" 5 30
+wait_number "$APP_OUTDOOR_RAW_SENSOR" 5 30
 wait_attr "$EVENT" "event_type" "outdoor_temperature_source_changed" 30
 state_json "$EVENT" | jq -e '
   .attributes.previous_source == "sensor.dh_climate_accept_outdoor_backup" and
@@ -882,6 +897,7 @@ say "10. COLD-WEATHER REVERSIBLE CLIMATE PROTECTION"
 
 mqtt_pub "dh_climate_accept/outdoor/state" "-15.0" true
 wait_number "$OUTDOOR_SENSOR" -15 15
+wait_number "$APP_OUTDOOR_RAW_SENSOR" -15 15
 wait_state "$REVERSIBLE" "off" 30
 wait_state "$NARROW" "heat" 30
 wait_state "$STUBBORN" "heat" 30
@@ -890,6 +906,7 @@ echo "PASS reversible heat is blocked below -10 while other heat sources continu
 
 mqtt_pub "dh_climate_accept/outdoor/state" "5.0" true
 wait_number "$OUTDOOR_SENSOR" 5 15
+wait_number "$APP_OUTDOOR_RAW_SENSOR" 5 15
 wait_state "$REVERSIBLE" "heat" 30
 echo "PASS reversible heat restores above threshold"
 
@@ -1000,17 +1017,17 @@ BACKUP_SLUG=""
 
 echo
 echo "============================================================"
-echo "DH CLIMATE 0.1.25 · BUNDLED LIVE ACCEPTANCE = PASS"
+echo "DH CLIMATE 0.1.26 · BUNDLED LIVE ACCEPTANCE = PASS"
 echo "============================================================"
-echo "PASS outdoor temperature avg24 sensor + optional HA Statistics oracle"
-echo "PASS recorder churn guard · stable outdoor facades"
-echo "PASS outdoor source priority + temperature log + source-change event"
+echo "PASS RAW + one-minute EMA + avg24 temperature pipeline"
+echo "PASS state-only Recorder temperature sensors · no sub-minute churn"
+echo "PASS outdoor source priority + RAW log + source-change event"
 echo "PASS room climate native heat/cool + action + presets"
 echo "PASS device_target_out_of_range"
 echo "PASS no_confirmation -> RETRY -> COOLDOWN -> recovery"
 echo "PASS SLOW floor execution"
 echo "PASS window context / window_off_devices"
-echo "PASS cold-weather reversible climate protection"
+echo "PASS cold-weather reversible climate protection uses RAW"
 echo "PASS humidity active + safe shutdown"
 echo "PASS Climate-App-only Supervisor backup -> restore"
 echo "PASS baseline restored"
