@@ -31,6 +31,14 @@ class PersistenceTests(unittest.TestCase):
         )
         self.assertEqual(50.0, self.store.get_humidity_target("living_room"))
 
+    def test_metadata_round_trip(self) -> None:
+        self.assertIsNone(self.store.get_metadata("outdoor_filter"))
+        self.store.set_metadata("outdoor_filter", "ema_minute_v1")
+        self.assertEqual(
+            "ema_minute_v1",
+            self.store.get_metadata("outdoor_filter"),
+        )
+
     def test_runtime_changes_survive_reinitialize(self) -> None:
         self.store.set_season_thresholds(11.0, 21.0)
         self.store.set_room_target(
