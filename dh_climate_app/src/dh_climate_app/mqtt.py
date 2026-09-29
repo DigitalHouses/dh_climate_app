@@ -12,6 +12,7 @@ from .config import RoomConfig
 from .discovery import (
     LEGACY_OUTDOOR_ATTRIBUTES_TOPIC,
     LEGACY_WEATHER_ATTRIBUTES_TOPIC,
+    OUTDOOR_TEMPERATURE_ATTRIBUTES_TOPIC,
     SEASON_AVAILABILITY_TOPIC,
     SYSTEM_AVAILABILITY_TOPIC,
     SYSTEM_PROBLEM_ATTRIBUTES_TOPIC,
@@ -295,6 +296,12 @@ class ClimateMqttFacade:
         # after publishing the new split Discovery contract.
         self.bridge.publish(
             LEGACY_OUTDOOR_ATTRIBUTES_TOPIC,
+            "",
+            retain=True,
+            force=True,
+        )
+        self.bridge.publish(
+            OUTDOOR_TEMPERATURE_ATTRIBUTES_TOPIC,
             "",
             retain=True,
             force=True,

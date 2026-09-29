@@ -115,7 +115,7 @@ class ClimateEventEngine:
             self._initialized = True
             self._season = outdoor.season.value
             self._temperature_source = outdoor.temperature_source
-            self._temperature_value = outdoor.current_temperature
+            self._temperature_value = outdoor.raw_temperature
             self._weather = weather
             self._windows = current_windows
             self._problems = current_problems
@@ -136,7 +136,7 @@ class ClimateEventEngine:
                         self._temperature_value
                     ),
                     "current_temperature": _temperature(
-                        outdoor.current_temperature
+                        outdoor.raw_temperature
                     ),
                 }
             )
@@ -243,7 +243,7 @@ class ClimateEventEngine:
 
         self._season = current_season
         self._temperature_source = outdoor.temperature_source
-        self._temperature_value = outdoor.current_temperature
+        self._temperature_value = outdoor.raw_temperature
         if weather is not None and weather.precipitation_type != "unknown":
             self._weather = weather
         self._windows = current_windows

@@ -32,6 +32,7 @@ def outdoor(
         cool_threshold=20.0,
         hysteresis=0.5,
         season=season,
+        raw_temperature=temperature,
     )
 
 

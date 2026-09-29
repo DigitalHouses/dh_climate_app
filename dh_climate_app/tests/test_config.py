@@ -49,6 +49,7 @@ class ConfigTests(unittest.TestCase):
     def test_parse_valid_options(self) -> None:
         config = parse_options(options())
         self.assertEqual(0.5, config.global_config.hysteresis)
+        self.assertEqual(20.0, config.outdoor.temperature_ema_minutes)
         self.assertEqual(
             ("sensor.outdoor_temperature", "sensor.weather_temperature"),
             config.outdoor.temperature_sources,
@@ -58,6 +59,16 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(DeviceClass.SLOW, config.rooms[0].devices[-1].device_class)
         self.assertEqual(27.0, config.rooms[0].devices[-1].target_temperature)
         self.assertEqual(10.0, config.rooms[0].targets.heat[Profile.ANTIFREEZE])
+
+    def test_outdoor_temperature_ema_range_is_validated(self) -> None:
+        raw = options()
+        raw["outdoor_temperature_ema_minutes"] = 0.5
+        with self.assertRaises(ConfigError):
+            parse_options(raw)
+
+        raw["outdoor_temperature_ema_minutes"] = 30
+        config = parse_options(raw)
+        self.assertEqual(30.0, config.outdoor.temperature_ema_minutes)
 
     def test_configured_entity_ids_contains_all_bindings(self) -> None:
         config = parse_options(options())
