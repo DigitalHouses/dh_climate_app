@@ -1,6 +1,6 @@
 # DH Climate App — HAOS acceptance plan
 
-Status: bundled runtime acceptance for `0.1.21` passed on real HAOS on 2026-09-27. Canonical immutable release publication is complete.
+Status: historical bundled runtime acceptance for `0.1.21` passed on real HAOS on 2026-09-27 and its canonical GHCR artifact provenance is recorded. Current `main` (`0.1.26` development) requires fresh HAOS acceptance. Registry-backed Supervisor delivery is still pending because the App package does not yet declare `image:`.
 
 The unit test suite proves deterministic business rules. This plan proves the boundaries that only a real Home Assistant OS installation can verify: Supervisor configuration, MQTT Discovery, entity UI behavior, service execution, persistence, backup and restore.
 
@@ -39,11 +39,14 @@ Acceptance:
 - current source/value is visible in season attributes;
 - MQTT facade attributes do not expose a per-recalculation `observed_at` timestamp;
 - with stable outdoor temperature/humidity values and sources, their Home Assistant `last_updated` values remain unchanged across at least one 10-second runtime tick;
-- `sensor.dh_climate_app_outdoor_temperature` exposes the current selected outdoor temperature;
-- `sensor.dh_climate_app_outdoor_temperature_avg24` exposes the Home Assistant Statistics-style arithmetic mean of canonical public temperature samples inside the rolling 24-hour window;
+- `sensor.dh_climate_app_outdoor_temperature_raw` exposes the selected RAW source value but publishes no more than once per minute;
+- hard low-temperature safety still uses the immediate selected RAW value internally and is not delayed by the Recorder-facing RAW publication cadence;
+- `sensor.dh_climate_app_outdoor_temperature` exposes the one-minute EMA-filtered outdoor temperature;
+- `sensor.dh_climate_app_outdoor_temperature_avg24` exposes the arithmetic mean of persisted one-minute filtered samples inside the rolling 24-hour window;
 - `sensor.dh_climate_app_outdoor_humidity` exposes the current selected outdoor humidity;
-- current and avg24 temperature remain separate UI entities; avg24 restores its sample window from Recorder history of the canonical current-temperature entity;
-- rolling avg24 survives App restart and, when `sensor.avg_outdoor_temperature_24_temp` exists, matches that temporary Home Assistant Statistics oracle within 0.1 °C;
+- RAW, filtered and avg24 temperature remain separate state-only UI entities without dynamic custom attributes;
+- rolling avg24 survives App restart from the App's persistent SQLite sample window and does not depend on Recorder history for climate calculation;
+- when `sensor.avg_outdoor_temperature_24_temp` exists, it may be used as an observation oracle, but Recorder/Statistics is not the App's source of truth;
 - no live outdoor temperature -> season becomes OFF even if old avg24 exists;
 - lower/red slider persists the heating-season threshold;
 - upper/blue slider persists the cooling-season threshold;
@@ -191,26 +194,43 @@ Acceptance:
 
 ## 11. Telemetry
 
-Acceptance:
+Current `0.1.26` development code is still the policy-v1 baseline. Do not
+declare policy v2 release-ready until the production
+`telemetry.digitalhouses.vip` deployment is independently confirmed as
+DigitalHouses Stats `0.4.1+`.
 
-- default `telemetry_enabled=false` sends no request;
-- enabling telemetry triggers one immediate best-effort heartbeat;
-- ordinary restart does not trigger another heartbeat before cadence is due;
-- version change is eligible for an immediate heartbeat;
-- telemetry-server failure does not affect climate runtime or Problem health;
-- telemetry payload contains no room, entity, device, climate or network-inventory data;
-- Delete telemetry removes this installation from the telemetry service using its installation credential.
+Final policy-v2 acceptance must verify:
+
+- there is no user-facing `telemetry_enabled` opt-out;
+- wire schema remains `1` and `telemetry_policy_version=2`;
+- payload contains only schema, policy version, persistent UUIDv4,
+  `digitalhouses_climate_app` and the released App version;
+- country is absent from the client payload and derived only server-side;
+- UUID/token survive restart, upgrade and supported backup/restore;
+- normal cadence is about 24h ±30 minutes, with non-aggressive failure retry;
+- a fresh install and a new released version may send one immediate best-effort heartbeat;
+- development/local builds never contribute production statistics;
+- telemetry-server/DNS/firewall failure never affects climate runtime or Problem health;
+- authenticated Delete removes server history, rotates the local UUID/token,
+  and continued product use later resumes reporting under the new identity.
 
 ## 12. Backup and immutable delivery
 
-Acceptance:
+Acceptance after registry-backed App delivery is wired into `config.yaml`:
 
+- the installed App uses `ghcr.io/digitalhouses/digitalhouses_climate_app:<version>`;
 - a Supervisor backup containing the Climate App (full or App-only partial) contains persistent `/data` state;
 - restored App preserves season thresholds, room targets, humidity targets and telemetry installation identity;
 - backup does not embed a locally built application image;
-- after a newer version exists, a backup from the older released version can still restore by retrieving its historical versioned GHCR image.
+- restore of the supported current production release retrieves the required published registry image.
+
+Historical-version restore after a newer release exists is not a general
+immutable-delivery acceptance requirement; test downgrade/rollback only when a
+specific migration or recovery plan requires it.
 
 ## 13. Release decision
+
+The block below is the historical acceptance record for released `0.1.21`; it must not be interpreted as acceptance of current `0.1.26` development code.
 
 Runtime acceptance status for 0.1.21:
 
