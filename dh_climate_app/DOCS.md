@@ -40,12 +40,36 @@ For each measurement, the App uses the first currently valid configured entity. 
 
 The temperature chain may freely mix `sensor.*` and `weather.*` entities in the declared priority order. A normal `sensor.*` source is read from its numeric state. A `weather.*` source is supported directly: the App reads its current `temperature` attribute for outdoor temperature and its current `humidity` attribute for outdoor humidity. This allows entities such as `weather.forecast_home_assistant` to be used as primary or fallback sources without template sensors.
 
-Every public one-decimal outdoor temperature change is written to `climate.log`
-with the active source. Active-source transitions are written as a separate log
-entry and emitted as `outdoor_temperature_source_changed` on
+Raw outdoor-temperature changes are written to `climate.log` with the
+active source. Active-source transitions are written as a separate log entry
+and emitted as `outdoor_temperature_source_changed` on
 `event.dh_climate_app_event`.
 
-The App maintains a rolling 24-hour outdoor temperature mean matching Home Assistant Statistics `state_characteristic: mean` with `max_age: 24h`. On Home Assistant snapshot/reconnect it rebuilds that window from Recorder state-change history of the canonical public `sensor.dh_climate_app_outdoor_temperature`, excludes attribute-only rows and the pre-window baseline, and then follows the same one-decimal public temperature transitions during runtime. Every sample inside the window has equal weight regardless of time spacing. If Recorder has no usable history, the first live outdoor temperature becomes the initial mean. Outdoor humidity keeps its separate time-weighted 24-hour average. Global season is:
+Temperature uses one processing path for ordinary source noise and provider/
+sensor failover steps:
+
+```text
+prioritized source
+→ RAW temperature
+→ EMA filter
+→ public outdoor temperature
+→ one-minute internal samples
+→ rolling 24-hour arithmetic mean
+→ season
+```
+
+`outdoor_temperature_ema_minutes` is the EMA time constant and defaults to
+20 minutes. The EMA is advanced at most once per minute. A source change does
+not get a special interpolation mode; its step is handled by the same EMA as
+any other temperature step.
+
+The one-minute filtered samples are persisted in SQLite and the 24-hour mean is
+their arithmetic mean. This gives each known minute equal weight and removes
+the previous dependence on irregular provider update frequency. Existing
+pre-EMA temperature history is converted once to the minute EMA history on
+upgrade. Recorder remains an observation/history surface, not the source of
+truth for the climate calculation. Outdoor humidity keeps its separate
+time-weighted 24-hour average. Global season is:
 
 ```text
 avg24 < heat_threshold - hysteresis → HEAT
@@ -133,14 +157,22 @@ calculations.
 
 ## Outdoor UI sensors
 
-The system Device exposes dedicated current outdoor measurements for dashboards:
+The system Device exposes dedicated outdoor measurements for dashboards and
+debugging:
 
-- `sensor.dh_climate_app_outdoor_temperature`;
+- `sensor.dh_climate_app_outdoor_temperature_raw` — selected source value,
+  diagnostic;
+- `sensor.dh_climate_app_outdoor_temperature` — EMA-filtered temperature used
+  by normal climate logic;
+- `sensor.dh_climate_app_outdoor_temperature_avg24` — rolling 24-hour mean of
+  one-minute filtered samples;
 - `sensor.dh_climate_app_outdoor_humidity`.
 
-These sensors publish the current value from the same prioritized/fallback
-source selection used by Climate Core. They do not substitute the rolling
-24-hour average. Source identity and avg24 values are available as attributes.
+The three temperature sensors use state-only MQTT contracts: no custom dynamic
+attributes are attached to them. Their states are Recorder-friendly and are
+published only when the public one-decimal state changes; the filter itself is
+never advanced more frequently than once per minute. Source identity remains
+available through the season facade, logs and source-change machine event.
 
 ## Weather precipitation
 
@@ -240,7 +272,7 @@ If a configured window contact is unavailable and no other contact is open, the 
 
 A reversible FAST `climate` entity configured in both `fast_heat` and `fast_cool` is treated as the AC/heat-pump class for the legacy low-outdoor-temperature heating limit.
 
-`ac_min_outdoor_temperature` is a global safety threshold. Below it, those reversible devices are inhibited from heating. Cooling behavior is unaffected. Heating-only switches and SLOW floor thermostats are not implicitly classified as AC devices.
+`ac_min_outdoor_temperature` is a global safety threshold. Below it, those reversible devices are inhibited from heating. This hard-safety comparison deliberately uses the selected RAW outdoor temperature rather than the EMA-filtered value, so smoothing cannot delay a low-temperature protection action. Cooling behavior is unaffected. Heating-only switches and SLOW floor thermostats are not implicitly classified as AC devices.
 
 ## SLOW devices
 
