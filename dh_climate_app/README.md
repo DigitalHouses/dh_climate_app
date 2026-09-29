@@ -57,7 +57,7 @@ SQLite under `/data/dh_climate.db` stores only durable installation state. It is
 - safe Home Assistant reconnect/snapshot handling;
 - Version and Started at diagnostics;
 - optional DigitalHouses Telemetry Protocol v1 support;
-- immutable multi-architecture GHCR delivery workflow.
+- canonical multi-architecture GHCR publication workflow; registry-backed Supervisor delivery remains a standards-alignment gate for the Experimental channel.
 
 ## Configuration
 
@@ -98,7 +98,7 @@ refresh command; see [Experimental update runbook](docs/EXPERIMENTAL_UPDATE_RUNB
 
 ## Release status
 
-Version `0.1.21` has passed bundled runtime acceptance on a real Home Assistant OS installation and is published as an immutable multi-architecture release. Acceptance includes the Recorder churn guard, stable outdoor facade `last_updated` across an idle runtime tick, outdoor source failover/recovery, and the complete existing room climate, actuator safety, and App-only backup/restore regression suite. Deterministic actuator fixtures were used instead of commandeering physical HVAC equipment. See [0.1.21 HAOS acceptance](docs/ACCEPTANCE_0.1.21.md).
+Version `0.1.21` has passed bundled runtime acceptance on a real Home Assistant OS installation and has a canonical multi-architecture GHCR artifact with recorded digest provenance. The current App package still omits `image:` and therefore remains source-build delivered; registry-backed Supervisor delivery is not yet considered complete. Acceptance includes the Recorder churn guard, stable outdoor facade `last_updated` across an idle runtime tick, outdoor source failover/recovery, and the complete existing room climate, actuator safety, and App-only backup/restore regression suite. Deterministic actuator fixtures were used instead of commandeering physical HVAC equipment. See [0.1.21 HAOS acceptance](docs/ACCEPTANCE_0.1.21.md).
 
 Canonical release identity:
 
