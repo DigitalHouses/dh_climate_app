@@ -98,9 +98,29 @@ If no valid room temperature exists, FAST thermostat demand is inhibited and the
 
 ## 4. Outdoor calculation
 
-The App stores outdoor samples required for a rolling 24-hour calculation.
+The App uses one temperature-normalization pipeline:
 
-Temperature `avg_outdoor_24` matches Home Assistant Statistics `state_characteristic: mean`: it is the arithmetic mean of persisted temperature samples whose timestamps are inside the rolling 24-hour window. Samples before the window are excluded and time spacing does not change sample weight. Outdoor humidity retains the existing time-weighted rolling average.
+```text
+prioritized source
+→ raw selected temperature
+→ EMA low-pass filter
+→ filtered public outdoor temperature
+→ one-minute persisted samples
+→ rolling 24-hour arithmetic mean
+→ season
+```
+
+The EMA time constant is configured by `outdoor_temperature_ema_minutes`
+(default 20 minutes). It advances no more frequently than once per minute.
+Provider/sensor failover is not a separate smoothing mode: a source step enters
+the same EMA path as an ordinary temperature step.
+
+Temperature `avg_outdoor_24` is the arithmetic mean of the persisted
+one-minute filtered samples inside the rolling 24-hour window. This equal
+sampling cadence prevents provider update frequency from changing sample
+weight. The minute history lives in SQLite and survives App restart. Legacy
+pre-EMA temperature history is migrated once by replaying it through the same
+EMA. Outdoor humidity retains the existing time-weighted rolling average.
 
 The global season is:
 
@@ -339,7 +359,7 @@ FAST climate entity appears in both fast_heat and fast_cool
 +
 room requests heating
 +
-current outdoor temperature < ac_min_outdoor_temperature
+RAW selected outdoor temperature < ac_min_outdoor_temperature
 → that reversible climate device = off
 ```
 
@@ -577,7 +597,7 @@ Startup/reconnect order:
 
 Historical HA events are never replayed.
 
-A periodic lightweight tick recalculates rolling 24h averages even when no outdoor sensor emitted a new state change.
+A periodic lightweight runtime tick keeps control reconciliation active. The outdoor EMA itself has a separate one-minute minimum cadence; repeated faster recalculations cannot advance it or create faster temperature samples.
 
 ## 12. Execution model
 
