@@ -169,10 +169,13 @@ debugging:
 - `sensor.dh_climate_app_outdoor_humidity`.
 
 The three temperature sensors use state-only MQTT contracts: no custom dynamic
-attributes are attached to them. Their states are Recorder-friendly and are
-published only when the public one-decimal state changes; the filter itself is
-never advanced more frequently than once per minute. Source identity remains
-available through the season facade, logs and source-change machine event.
+attributes are attached to them. Their states are Recorder-friendly. The RAW
+diagnostic facade is rate-limited to at most one publication per minute, while
+the filtered and avg24 values can change only on the same one-minute filter
+grid. Unchanged one-decimal states are additionally suppressed by MQTT payload
+deduplication. Internal RAW truth still reaches hard safety, logs and machine
+events immediately. Source identity remains available through the season
+facade, logs and source-change machine event.
 
 ## Weather precipitation
 

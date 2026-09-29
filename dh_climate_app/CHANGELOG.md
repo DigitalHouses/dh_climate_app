@@ -5,6 +5,7 @@
 - Added one outdoor-temperature processing path for both normal source noise and provider/sensor failover steps: selected RAW temperature → one-minute EMA → public filtered temperature → rolling avg24 → season.
 - Added configurable `outdoor_temperature_ema_minutes` with a 20-minute default and a hard one-minute minimum filter/sample cadence.
 - Added diagnostic `sensor.dh_climate_app_outdoor_temperature_raw` for debugging; RAW, filtered and avg24 temperature sensors use state-only MQTT contracts without custom dynamic attributes.
+- Rate-limited the RAW diagnostic MQTT sensor to at most one publication per minute; internal RAW temperature remains immediate for low-temperature safety, logs and source-change events.
 - Changed avg24 to the arithmetic mean of persisted one-minute filtered samples, removing dependence on irregular weather-provider update frequency. Existing pre-EMA temperature history is converted once through the EMA on upgrade.
 - Preserved hard low-temperature AC heating protection on the selected RAW temperature so smoothing cannot delay `ac_min_outdoor_temperature` safety behavior.
 - Removed Recorder history as a climate-calculation dependency; Recorder remains the observation/history surface for the public RAW, filtered and avg24 sensors.

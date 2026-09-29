@@ -722,18 +722,25 @@ wait_attr "$SEASON_CLIMATE" "temperature_source" "sensor.dh_climate_accept_outdo
 wait_number "$APP_OUTDOOR_RAW_SENSOR" 5 30
 wait_numeric_state_present "$APP_OUTDOOR_SENSOR" 30
 
+RAW_UPDATED_BEFORE_STEP="$(state_json "$APP_OUTDOOR_RAW_SENSOR" | jq -r '.last_updated')"
 mqtt_pub "dh_climate_accept/outdoor/state" "7.0" true
-wait_number "$APP_OUTDOOR_RAW_SENSOR" 7 30
+
+sleep 12
+RAW_UPDATED_EARLY="$(state_json "$APP_OUTDOOR_RAW_SENSOR" | jq -r '.last_updated')"
+[ "$RAW_UPDATED_BEFORE_STEP" = "$RAW_UPDATED_EARLY" ] ||
+  fail "RAW diagnostic published sooner than one-minute cadence"
 
 OUTDOOR_LOG="$(ha apps logs "$APP" | tail -n 500 | grep '\[OUTDOOR\]' || true)"
 echo "$OUTDOOR_LOG" | tail -n 30
 echo "$OUTDOOR_LOG" | grep -Fq "raw_temperature 5.0 °C -> 7.0 °C | source=sensor.dh_climate_accept_outdoor" ||
   fail "raw outdoor temperature change log missing"
 
+wait_number "$APP_OUTDOOR_RAW_SENSOR" 7 75
+echo "PASS internal RAW is immediate while diagnostic RAW is capped at one minute"
+
 mqtt_pub "dh_climate_accept/outdoor/availability" "offline" true
 wait_state "$OUTDOOR_SENSOR" "unavailable" 30
 wait_attr "$SEASON_CLIMATE" "temperature_source" "sensor.dh_climate_accept_outdoor_backup" 30
-wait_number "$APP_OUTDOOR_RAW_SENSOR" 6 30
 wait_attr "$EVENT" "event_type" "outdoor_temperature_source_changed" 30
 
 state_json "$EVENT" | jq -e '
@@ -748,13 +755,12 @@ OUTDOOR_LOG="$(ha apps logs "$APP" | tail -n 500 | grep '\[OUTDOOR\]' || true)"
 echo "$OUTDOOR_LOG" | tail -n 30
 echo "$OUTDOOR_LOG" | grep -Fq "source sensor.dh_climate_accept_outdoor -> sensor.dh_climate_accept_outdoor_backup | raw_temperature=6.0 °C" ||
   fail "outdoor source switch log missing"
-echo "PASS source failover keeps RAW truth while filtered temperature stays on EMA path"
+echo "PASS source failover keeps immediate RAW truth while filtered temperature stays on EMA path"
 
 mqtt_pub "dh_climate_accept/outdoor/state" "5.0" true
 mqtt_pub "dh_climate_accept/outdoor/availability" "online" true
 wait_number "$OUTDOOR_SENSOR" 5 30
 wait_attr "$SEASON_CLIMATE" "temperature_source" "sensor.dh_climate_accept_outdoor" 30
-wait_number "$APP_OUTDOOR_RAW_SENSOR" 5 30
 wait_attr "$EVENT" "event_type" "outdoor_temperature_source_changed" 30
 state_json "$EVENT" | jq -e '
   .attributes.previous_source == "sensor.dh_climate_accept_outdoor_backup" and
@@ -897,7 +903,6 @@ say "10. COLD-WEATHER REVERSIBLE CLIMATE PROTECTION"
 
 mqtt_pub "dh_climate_accept/outdoor/state" "-15.0" true
 wait_number "$OUTDOOR_SENSOR" -15 15
-wait_number "$APP_OUTDOOR_RAW_SENSOR" -15 15
 wait_state "$REVERSIBLE" "off" 30
 wait_state "$NARROW" "heat" 30
 wait_state "$STUBBORN" "heat" 30
@@ -906,7 +911,6 @@ echo "PASS reversible heat is blocked below -10 while other heat sources continu
 
 mqtt_pub "dh_climate_accept/outdoor/state" "5.0" true
 wait_number "$OUTDOOR_SENSOR" 5 15
-wait_number "$APP_OUTDOOR_RAW_SENSOR" 5 15
 wait_state "$REVERSIBLE" "heat" 30
 echo "PASS reversible heat restores above threshold"
 

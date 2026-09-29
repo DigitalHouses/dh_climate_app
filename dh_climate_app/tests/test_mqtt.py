@@ -8,7 +8,10 @@ from datetime import datetime, timedelta, timezone
 
 from dh_climate_app.config import parse_options
 from dh_climate_app.core import HvacAction, Profile, Season
-from dh_climate_app.discovery import SYSTEM_AVAILABILITY_TOPIC
+from dh_climate_app.discovery import (
+    OUTDOOR_RAW_TEMPERATURE_TOPIC,
+    SYSTEM_AVAILABILITY_TOPIC,
+)
 from dh_climate_app.mqtt import ClimateMqttFacade, MqttBridge
 from dh_climate_app.outdoor import OutdoorState
 from dh_climate_app.rooms import RoomState
@@ -130,7 +133,7 @@ class MqttRecorderChurnTests(unittest.TestCase):
         self.bridge = bridge
         self.facade = ClimateMqttFacade(
             bridge=bridge,
-            app_version="0.1.21",
+            app_version="0.1.26",
             started_at=datetime(2026, 9, 27, tzinfo=timezone.utc),
             rooms=parse_options(options()).rooms,
             command_queue=asyncio.Queue(),
@@ -151,6 +154,7 @@ class MqttRecorderChurnTests(unittest.TestCase):
             cool_threshold=24.0,
             hysteresis=0.5,
             season=Season.OFF,
+            raw_temperature=13.5,
         )
 
         first = self.facade.publish_season(state)
@@ -160,6 +164,55 @@ class MqttRecorderChurnTests(unittest.TestCase):
 
         self.assertGreater(first, 0)
         self.assertEqual(0, second)
+
+    def test_raw_temperature_is_published_at_most_once_per_minute(self) -> None:
+        now = datetime(2026, 9, 27, 4, 52, tzinfo=timezone.utc)
+        state = OutdoorState(
+            observed_at=now,
+            current_temperature=13.5,
+            current_humidity=63.0,
+            avg_24h_temperature=18.0,
+            avg_24h_humidity=58.0,
+            temperature_source="weather.forecast_home_assistant",
+            humidity_source="weather.forecast_home_assistant",
+            heat_threshold=18.0,
+            cool_threshold=24.0,
+            hysteresis=0.5,
+            season=Season.OFF,
+            raw_temperature=13.5,
+        )
+
+        self.facade.publish_season(state)
+        self.bridge.client.publications.clear()
+
+        within_minute = replace(
+            state,
+            observed_at=now + timedelta(seconds=10),
+            raw_temperature=14.5,
+        )
+        self.facade.publish_season(within_minute)
+        self.assertFalse(
+            any(
+                topic == OUTDOOR_RAW_TEMPERATURE_TOPIC
+                for topic, _, _, _ in self.bridge.client.publications
+            )
+        )
+
+        after_minute = replace(
+            state,
+            observed_at=now + timedelta(seconds=61),
+            raw_temperature=14.5,
+        )
+        self.facade.publish_season(after_minute)
+        raw_publications = [
+            publication
+            for publication in self.bridge.client.publications
+            if publication[0] == OUTDOOR_RAW_TEMPERATURE_TOPIC
+        ]
+        self.assertEqual(
+            [(OUTDOOR_RAW_TEMPERATURE_TOPIC, "14.5", 1, True)],
+            raw_publications,
+        )
 
     def test_weather_observation_clock_does_not_republish_mqtt_state(self) -> None:
         now = datetime(2026, 9, 27, 4, 52, tzinfo=timezone.utc)

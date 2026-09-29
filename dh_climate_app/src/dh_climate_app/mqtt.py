@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from datetime import timedelta
 import json
 import logging
 from typing import Callable, Iterable
@@ -12,6 +13,7 @@ from .config import RoomConfig
 from .discovery import (
     LEGACY_OUTDOOR_ATTRIBUTES_TOPIC,
     LEGACY_WEATHER_ATTRIBUTES_TOPIC,
+    OUTDOOR_RAW_TEMPERATURE_TOPIC,
     OUTDOOR_TEMPERATURE_ATTRIBUTES_TOPIC,
     SEASON_AVAILABILITY_TOPIC,
     SYSTEM_AVAILABILITY_TOPIC,
@@ -204,6 +206,7 @@ class ClimateMqttFacade:
         self.rooms = {room.room_id: room for room in rooms}
         self.command_queue = command_queue
         self.weather_enabled = bool(weather_enabled)
+        self._last_raw_temperature_publish_at = None
         self.bridge.set_message_handler(self._on_message)
 
     def start(self) -> None:
@@ -327,7 +330,16 @@ class ClimateMqttFacade:
         count = 0
         for topic, payload in season_state_topics(state).items():
             count += int(self.bridge.publish(topic, payload, retain=True))
+
         for topic, payload in outdoor_state_topics(state).items():
+            if topic == OUTDOOR_RAW_TEMPERATURE_TOPIC:
+                last = self._last_raw_temperature_publish_at
+                if (
+                    last is not None
+                    and state.observed_at < last + timedelta(minutes=1)
+                ):
+                    continue
+                self._last_raw_temperature_publish_at = state.observed_at
             count += int(self.bridge.publish(topic, payload, retain=True))
         return count
 

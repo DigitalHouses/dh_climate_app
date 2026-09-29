@@ -113,7 +113,9 @@ prioritized source
 The EMA time constant is configured by `outdoor_temperature_ema_minutes`
 (default 20 minutes). It advances no more frequently than once per minute.
 Provider/sensor failover is not a separate smoothing mode: a source step enters
-the same EMA path as an ordinary temperature step.
+the same EMA path as an ordinary temperature step. The internal RAW value is
+available immediately for hard safety, logging and events, while its diagnostic
+MQTT sensor is published no more than once per minute to bound Recorder churn.
 
 Temperature `avg_outdoor_24` is the arithmetic mean of the persisted
 one-minute filtered samples inside the rolling 24-hour window. This equal
