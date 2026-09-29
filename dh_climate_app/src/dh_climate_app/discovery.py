@@ -23,6 +23,7 @@ SYSTEM_PROBLEM_TOPIC = f"{BASE_TOPIC}/problem"
 SYSTEM_PROBLEM_ATTRIBUTES_TOPIC = f"{BASE_TOPIC}/problem_attributes"
 SYSTEM_EVENT_TOPIC = f"{BASE_TOPIC}/event"
 OUTDOOR_BASE = f"{BASE_TOPIC}/outdoor"
+OUTDOOR_RAW_TEMPERATURE_TOPIC = f"{OUTDOOR_BASE}/temperature_raw"
 OUTDOOR_TEMPERATURE_ATTRIBUTES_TOPIC = f"{OUTDOOR_BASE}/temperature/attributes"
 OUTDOOR_HUMIDITY_ATTRIBUTES_TOPIC = f"{OUTDOOR_BASE}/humidity/attributes"
 LEGACY_OUTDOOR_ATTRIBUTES_TOPIC = f"{OUTDOOR_BASE}/attributes"
@@ -205,7 +206,7 @@ def outdoor_discovery_payloads(
                 "name": "Outdoor temperature raw",
                 "unique_id": "dh_climate_app_outdoor_temperature_raw",
                 "default_entity_id": "sensor.dh_climate_app_outdoor_temperature_raw",
-                "state_topic": f"{OUTDOOR_BASE}/temperature_raw",
+                "state_topic": OUTDOOR_RAW_TEMPERATURE_TOPIC,
                 "device_class": "temperature",
                 "unit_of_measurement": "°C",
                 "state_class": "measurement",
@@ -560,7 +561,7 @@ def outdoor_state_topics(state: OutdoorState) -> dict[str, str]:
         "humidity_source": state.humidity_source,
     }
     return {
-        f"{OUTDOOR_BASE}/temperature_raw": _number(state.raw_temperature),
+        OUTDOOR_RAW_TEMPERATURE_TOPIC: _number(state.raw_temperature),
         f"{OUTDOOR_BASE}/temperature": _number(state.current_temperature),
         f"{OUTDOOR_BASE}/temperature_avg24": _number(state.avg_24h_temperature),
         f"{OUTDOOR_BASE}/humidity": _number(state.current_humidity),
