@@ -3,12 +3,17 @@ from __future__ import annotations
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
+from math import exp
 from pathlib import Path
 from types import SimpleNamespace
 
 from dh_climate_app.config import parse_options
-from dh_climate_app.core import Sample, Season
-from dh_climate_app.outdoor import OutdoorEngine
+from dh_climate_app.core import Season
+from dh_climate_app.outdoor import (
+    TEMPERATURE_HISTORY_MODE_EMA_MINUTE_V1,
+    TEMPERATURE_HISTORY_MODE_KEY,
+    OutdoorEngine,
+)
 from dh_climate_app.persistence import StateStore
 from test_config import options
 
@@ -28,16 +33,26 @@ class OutdoorEngineTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
 
-    def test_primary_source_and_avg24(self) -> None:
+    def _states(self, temperature: object, humidity: object = "50") -> dict:
+        return {
+            "sensor.outdoor_temperature": temperature,
+            "sensor.outdoor_humidity": humidity,
+        }
+
+    def _alpha(self) -> float:
+        return 1.0 - exp(
+            -60.0 / (self.config.outdoor.temperature_ema_minutes * 60.0)
+        )
+
+    def test_primary_source_seeds_ema_and_avg24(self) -> None:
         now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
         state = self.engine.evaluate(
-            {
-                "sensor.outdoor_temperature": "10.0",
-                "sensor.outdoor_humidity": "50",
-            },
+            self._states("10.0"),
             observed_at=now,
         )
         self.assertEqual("sensor.outdoor_temperature", state.temperature_source)
+        self.assertEqual(10.0, state.raw_temperature)
+        self.assertEqual(10.0, state.current_temperature)
         self.assertEqual(10.0, state.avg_24h_temperature)
         self.assertEqual(Season.HEAT, state.season)
 
@@ -61,6 +76,7 @@ class OutdoorEngineTests(unittest.TestCase):
             },
             observed_at=now,
         )
+        self.assertEqual(9.5, state.raw_temperature)
         self.assertEqual(9.5, state.current_temperature)
         self.assertEqual(73.0, state.current_humidity)
         self.assertEqual(
@@ -83,235 +99,195 @@ class OutdoorEngineTests(unittest.TestCase):
             observed_at=now,
         )
         self.assertEqual("sensor.weather_temperature", state.temperature_source)
+        self.assertEqual(11.5, state.raw_temperature)
         self.assertEqual(11.5, state.current_temperature)
 
-    def test_rolling_average_changes_season(self) -> None:
+    def test_ema_waits_one_minute_and_smooths_step(self) -> None:
         now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
-        self.store.add_outdoor_sample(
-            kind="temperature",
-            observed_at=now - timedelta(hours=24),
-            value=10.0,
-            source_name="primary",
-        )
-        self.store.add_outdoor_sample(
-            kind="temperature",
-            observed_at=now - timedelta(hours=12),
-            value=22.0,
-            source_name="primary",
-        )
-        state = self.engine.evaluate(
-            {
-                "sensor.outdoor_temperature": "22",
-                "sensor.outdoor_humidity": "50",
-            },
+        first = self.engine.evaluate(
+            self._states("10"),
             observed_at=now,
+        )
+        before_tick = self.engine.evaluate(
+            self._states("20"),
+            observed_at=now + timedelta(seconds=30),
             record_sample=False,
         )
-        self.assertAlmostEqual(16.0, state.avg_24h_temperature)
-        self.assertEqual(Season.OFF, state.season)
+        after_tick = self.engine.evaluate(
+            self._states("20"),
+            observed_at=now + timedelta(minutes=1),
+            record_sample=False,
+        )
 
-    def test_temperature_avg24_empty_history_starts_at_live_temperature(self) -> None:
+        expected = 10.0 + self._alpha() * 10.0
+        self.assertEqual(10.0, first.current_temperature)
+        self.assertEqual(20.0, before_tick.raw_temperature)
+        self.assertEqual(10.0, before_tick.current_temperature)
+        self.assertAlmostEqual(expected, after_tick.current_temperature)
+
+    def test_source_switch_uses_the_same_ema_path(self) -> None:
         now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
-        self.engine.bootstrap_temperature_history(
-            [],
-            source_name="sensor.dh_climate_app_outdoor_temperature",
-        )
-
-        state = self.engine.evaluate(
-            {
-                "sensor.outdoor_temperature": "18.2",
-                "sensor.outdoor_humidity": "50",
-            },
-            observed_at=now,
-            record_sample=True,
-        )
-
-        self.assertEqual(18.2, state.avg_24h_temperature)
-
-    def test_temperature_avg24_recorder_bootstrap_matches_statistics_mean(self) -> None:
-        now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
-        self.engine.bootstrap_temperature_history(
-            [
-                Sample(now - timedelta(hours=23), 20.0),
-                Sample(now - timedelta(hours=1), 10.0),
-            ],
-            source_name="sensor.dh_climate_app_outdoor_temperature",
-        )
-
-        state = self.engine.evaluate(
-            {
-                "sensor.outdoor_temperature": "10",
-                "sensor.outdoor_humidity": "50",
-            },
-            observed_at=now,
-            record_sample=True,
-        )
-
-        # The startup snapshot matches the newest Recorder sample, so it must
-        # not be counted twice.
-        self.assertEqual(15.0, state.avg_24h_temperature)
-
-    def test_temperature_avg24_records_live_change_after_recorder_bootstrap(self) -> None:
-        now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
-        self.engine.bootstrap_temperature_history(
-            [
-                Sample(now - timedelta(hours=23), 20.0),
-                Sample(now - timedelta(hours=1), 10.0),
-            ],
-            source_name="sensor.dh_climate_app_outdoor_temperature",
-        )
-
-        state = self.engine.evaluate(
-            {
-                "sensor.outdoor_temperature": "9.0",
-                "sensor.outdoor_humidity": "50",
-            },
-            observed_at=now,
-            record_sample=True,
-        )
-
-        self.assertEqual(13.0, state.avg_24h_temperature)
-
-    def test_temperature_avg24_samples_public_one_decimal_transitions(self) -> None:
-        now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
-        self.engine.bootstrap_temperature_history(
-            [],
-            source_name="sensor.dh_climate_app_outdoor_temperature",
-        )
-
         first = self.engine.evaluate(
             {
-                "sensor.outdoor_temperature": "10.01",
+                "sensor.outdoor_temperature": "10",
+                "sensor.weather_temperature": "20",
                 "sensor.outdoor_humidity": "50",
             },
             observed_at=now,
-            record_sample=True,
         )
-        same_public_value = self.engine.evaluate(
+        switched = self.engine.evaluate(
             {
-                "sensor.outdoor_temperature": "10.04",
+                "sensor.outdoor_temperature": "unavailable",
+                "sensor.weather_temperature": "20",
+                "sensor.outdoor_humidity": "50",
+            },
+            observed_at=now + timedelta(seconds=10),
+        )
+        after_tick = self.engine.evaluate(
+            {
+                "sensor.outdoor_temperature": "unavailable",
+                "sensor.weather_temperature": "20",
                 "sensor.outdoor_humidity": "50",
             },
             observed_at=now + timedelta(minutes=1),
-            record_sample=True,
-        )
-        next_public_value = self.engine.evaluate(
-            {
-                "sensor.outdoor_temperature": "10.06",
-                "sensor.outdoor_humidity": "50",
-            },
-            observed_at=now + timedelta(minutes=2),
-            record_sample=True,
-        )
-
-        self.assertEqual(10.0, first.avg_24h_temperature)
-        self.assertEqual(10.0, same_public_value.avg_24h_temperature)
-        self.assertAlmostEqual(10.05, next_public_value.avg_24h_temperature)
-
-    def test_temperature_avg24_matches_statistics_mean(self) -> None:
-        now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
-        self.store.add_outdoor_sample(
-            kind="temperature",
-            observed_at=now - timedelta(hours=23),
-            value=20.0,
-            source_name="primary",
-        )
-        self.store.add_outdoor_sample(
-            kind="temperature",
-            observed_at=now - timedelta(hours=1),
-            value=10.0,
-            source_name="primary",
-        )
-
-        state = self.engine.evaluate(
-            {
-                "sensor.outdoor_temperature": "10",
-                "sensor.outdoor_humidity": "50",
-            },
-            observed_at=now,
             record_sample=False,
         )
 
-        self.assertEqual(15.0, state.avg_24h_temperature)
+        expected = 10.0 + self._alpha() * 10.0
+        self.assertEqual("sensor.outdoor_temperature", first.temperature_source)
+        self.assertEqual("sensor.weather_temperature", switched.temperature_source)
+        self.assertEqual(20.0, switched.raw_temperature)
+        self.assertEqual(10.0, switched.current_temperature)
+        self.assertAlmostEqual(expected, after_tick.current_temperature)
 
-    def test_temperature_avg24_ignores_sample_before_window(self) -> None:
+    def test_temperature_history_samples_each_minute_even_when_public_rounding_is_same(
+        self,
+    ) -> None:
+        now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
+        self.engine.evaluate(self._states("10.0"), observed_at=now)
+        self.engine.evaluate(
+            self._states("10.02"),
+            observed_at=now + timedelta(minutes=1),
+            record_sample=False,
+        )
+
+        samples = self.store.load_outdoor_samples(
+            kind="temperature",
+            since=now - timedelta(seconds=1),
+        )
+        self.assertEqual(2, len(samples))
+        self.assertEqual(10.0, round(samples[0].value, 1))
+        self.assertEqual(10.0, round(samples[1].value, 1))
+
+    def test_avg24_uses_equal_cadence_filtered_samples(self) -> None:
+        now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
+        first = self.engine.evaluate(self._states("10"), observed_at=now)
+        second = self.engine.evaluate(
+            self._states("20"),
+            observed_at=now + timedelta(minutes=1),
+            record_sample=False,
+        )
+        third = self.engine.evaluate(
+            self._states("20"),
+            observed_at=now + timedelta(minutes=2),
+            record_sample=False,
+        )
+
+        alpha = self._alpha()
+        filtered_1 = 10.0
+        filtered_2 = filtered_1 + alpha * (20.0 - filtered_1)
+        filtered_3 = filtered_2 + alpha * (20.0 - filtered_2)
+        expected_avg = (filtered_1 + filtered_2 + filtered_3) / 3.0
+
+        self.assertEqual(10.0, first.avg_24h_temperature)
+        self.assertAlmostEqual(filtered_2, second.current_temperature)
+        self.assertAlmostEqual(filtered_3, third.current_temperature)
+        self.assertAlmostEqual(expected_avg, third.avg_24h_temperature)
+
+    def test_legacy_history_is_replayed_to_ema_minute_grid(self) -> None:
         now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
         self.store.add_outdoor_sample(
             kind="temperature",
-            observed_at=now - timedelta(hours=24, seconds=1),
-            value=30.0,
-            source_name="primary",
-        )
-        self.store.add_outdoor_sample(
-            kind="temperature",
-            observed_at=now - timedelta(hours=20),
-            value=20.0,
-            source_name="primary",
+            observed_at=now - timedelta(minutes=2),
+            value=10.0,
+            source_name="legacy",
         )
         self.store.add_outdoor_sample(
             kind="temperature",
             observed_at=now - timedelta(minutes=1),
-            value=10.0,
-            source_name="primary",
+            value=20.0,
+            source_name="legacy",
         )
 
         state = self.engine.evaluate(
-            {
-                "sensor.outdoor_temperature": "10",
-                "sensor.outdoor_humidity": "50",
-            },
+            self._states("20"),
             observed_at=now,
             record_sample=False,
         )
 
-        self.assertEqual(15.0, state.avg_24h_temperature)
+        alpha = self._alpha()
+        first_tick = 10.0 + alpha * 10.0
+        second_tick = first_tick + alpha * (20.0 - first_tick)
+        samples = self.store.load_outdoor_samples(
+            kind="temperature",
+            since=now - timedelta(minutes=3),
+        )
 
-    def test_temperature_avg24_survives_engine_restart(self) -> None:
+        self.assertEqual(
+            TEMPERATURE_HISTORY_MODE_EMA_MINUTE_V1,
+            self.store.get_metadata(TEMPERATURE_HISTORY_MODE_KEY),
+        )
+        self.assertEqual(3, len(samples))
+        self.assertAlmostEqual(second_tick, state.current_temperature)
+        self.assertEqual(20.0, state.raw_temperature)
+
+    def test_restart_restores_filter_without_catching_up_downtime(self) -> None:
         now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
-        for hours, value in ((23, 9.0), (8, 15.0), (1, 21.0)):
-            self.store.add_outdoor_sample(
-                kind="temperature",
-                observed_at=now - timedelta(hours=hours),
-                value=value,
-                source_name="primary",
-            )
+        self.engine.evaluate(self._states("10"), observed_at=now)
+        before_restart = self.engine.evaluate(
+            self._states("20"),
+            observed_at=now + timedelta(minutes=1),
+            record_sample=False,
+        )
 
         restarted = OutdoorEngine(
             config=self.config.outdoor,
             store=self.store,
             hysteresis=self.config.global_config.hysteresis,
         )
-        state = restarted.evaluate(
-            {
-                "sensor.outdoor_temperature": "21",
-                "sensor.outdoor_humidity": "50",
-            },
-            observed_at=now,
+        restored = restarted.evaluate(
+            self._states("30"),
+            observed_at=now + timedelta(minutes=10),
             record_sample=False,
         )
 
-        self.assertEqual(15.0, state.avg_24h_temperature)
+        self.assertAlmostEqual(
+            before_restart.current_temperature,
+            restored.current_temperature,
+        )
+        self.assertEqual(30.0, restored.raw_temperature)
 
     def test_temperature_mean_crossing_changes_season(self) -> None:
         now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
-        self.store.add_outdoor_sample(
-            kind="temperature",
-            observed_at=now - timedelta(hours=23),
-            value=20.0,
-            source_name="primary",
+        self.store.set_metadata(
+            TEMPERATURE_HISTORY_MODE_KEY,
+            TEMPERATURE_HISTORY_MODE_EMA_MINUTE_V1,
         )
-        self.store.add_outdoor_sample(
-            kind="temperature",
-            observed_at=now - timedelta(hours=1),
-            value=0.0,
-            source_name="primary",
-        )
+        for minutes in (2, 1):
+            self.store.add_outdoor_sample(
+                kind="temperature",
+                observed_at=now - timedelta(minutes=minutes),
+                value=10.0,
+                source_name="filtered",
+            )
 
-        state = self.engine.evaluate(
-            {
-                "sensor.outdoor_temperature": "0",
-                "sensor.outdoor_humidity": "50",
-            },
+        engine = OutdoorEngine(
+            config=self.config.outdoor,
+            store=self.store,
+            hysteresis=self.config.global_config.hysteresis,
+        )
+        state = engine.evaluate(
+            self._states("10"),
             observed_at=now,
             record_sample=False,
         )
@@ -321,22 +297,16 @@ class OutdoorEngineTests(unittest.TestCase):
 
     def test_all_live_sources_unavailable_forces_off(self) -> None:
         now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
-        self.store.add_outdoor_sample(
-            kind="temperature",
-            observed_at=now - timedelta(hours=1),
-            value=5.0,
-            source_name="primary",
-        )
+        self.engine.evaluate(self._states("5"), observed_at=now)
         state = self.engine.evaluate(
-            {
-                "sensor.outdoor_temperature": "unavailable",
-                "sensor.outdoor_humidity": "unavailable",
-            },
-            observed_at=now,
+            self._states("unavailable", "unavailable"),
+            observed_at=now + timedelta(minutes=1),
             record_sample=False,
         )
         self.assertEqual(Season.OFF, state.season)
         self.assertFalse(state.available)
+        self.assertIsNone(state.raw_temperature)
+        self.assertIsNone(state.current_temperature)
         self.assertIsNotNone(state.avg_24h_temperature)
 
     def test_threshold_change_is_persistent(self) -> None:
