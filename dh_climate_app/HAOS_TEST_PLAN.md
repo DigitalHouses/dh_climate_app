@@ -232,7 +232,7 @@ specific migration or recovery plan requires it.
 
 The block below is the historical acceptance record for released `0.1.21`; it must not be interpreted as acceptance of current `0.1.26` development code.
 
-Runtime acceptance status for 0.1.21:
+Last completed released runtime acceptance (`0.1.21`):
 
 ```text
 repository CI = green
@@ -267,4 +267,4 @@ See [docs/ACCEPTANCE_0.1.21.md](docs/ACCEPTANCE_0.1.21.md) for the recorded live
 
 Published artifact: `digitalhouses_climate_app-v0.1.21` / `ghcr.io/digitalhouses/digitalhouses_climate_app:0.1.21` / `sha256:5870a9e2791fadc76165f2a5c604cf7d1f84d7448de5e5401721be2a63045349`.
 
-Failures found in HAOS acceptance are fixed in a new commit/version. A published immutable image version is never overwritten with different content.
+This record does not waive the remaining registry-delivery gap: `config.yaml` still omits `image:`. Current `0.1.26` development changes require a new full HAOS acceptance before any release. Failures found in HAOS acceptance are fixed in a new commit/version; a published immutable image version is never overwritten with different content.
