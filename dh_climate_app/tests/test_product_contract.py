@@ -59,21 +59,30 @@ class ProductContractTests(unittest.TestCase):
         )
         self.assertEqual("dh_climate_app", config["slug"])
 
-    def test_experimental_source_build_contract(self) -> None:
+    def test_haos_build_contract(self) -> None:
         config = yaml.safe_load(
             (APP_ROOT / "config.yaml").read_text(encoding="utf-8")
         )
-        config_text = (APP_ROOT / "config.yaml").read_text(encoding="utf-8")
         dockerfile = (APP_ROOT / "Dockerfile").read_text(encoding="utf-8")
 
         self.assertEqual("experimental", config["stage"])
-        self.assertNotIn("image", config)
         self.assertEqual(["amd64", "aarch64"], config["arch"])
         self.assertIn("FROM ghcr.io/home-assistant/base:latest", dockerfile)
         self.assertIn('ARG BUILD_ARCH="amd64"', dockerfile)
         self.assertIn('io.hass.arch="${BUILD_ARCH}"', dockerfile)
         self.assertNotIn("TARGETARCH", dockerfile)
-        self.assertNotIn("\nimage:", config_text)
+
+    def test_release_workflow_uses_canonical_product_identity(self) -> None:
+        workflow = (
+            REPO_ROOT / ".github" / "workflows" / "release.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn("digitalhouses_climate_app-v", workflow)
+        self.assertIn(
+            "ghcr.io/digitalhouses/digitalhouses_climate_app:",
+            workflow,
+        )
+        self.assertIn("org.opencontainers.image.revision", workflow)
+        self.assertIn("steps.build.outputs.digest", workflow)
 
 
 if __name__ == "__main__":
