@@ -26,6 +26,7 @@ class GlobalConfig:
 class OutdoorConfig:
     heat_threshold_default: float
     cool_threshold_default: float
+    temperature_ema_minutes: float
     temperature_sources: tuple[str, ...]
     humidity_sources: tuple[str, ...]
 
@@ -382,9 +383,19 @@ def parse_options(raw: Any) -> AppConfig:
             "ac_min_outdoor_temperature must be between -50 and 20"
         )
 
+    temperature_ema_minutes = _float(
+        root.get("outdoor_temperature_ema_minutes", 20.0),
+        "outdoor_temperature_ema_minutes",
+    )
+    if not 1.0 <= temperature_ema_minutes <= 180.0:
+        raise ConfigError(
+            "outdoor_temperature_ema_minutes must be between 1 and 180"
+        )
+
     outdoor = OutdoorConfig(
         heat_threshold_default=heat_default,
         cool_threshold_default=cool_default,
+        temperature_ema_minutes=temperature_ema_minutes,
         temperature_sources=_entity_list(
             root.get("outdoor_temperature_sources", ""),
             "outdoor_temperature_sources",
