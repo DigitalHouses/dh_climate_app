@@ -169,6 +169,25 @@ class StateStore:
             row = db.execute("PRAGMA integrity_check").fetchone()
             return bool(row and row[0] == "ok")
 
+    def get_metadata(self, key: str) -> str | None:
+        with self.connect() as db:
+            row = db.execute(
+                "SELECT value FROM metadata WHERE key=?",
+                (str(key),),
+            ).fetchone()
+        return None if row is None else str(row["value"])
+
+    def set_metadata(self, key: str, value: str) -> None:
+        with self.connect() as db:
+            db.execute(
+                """
+                INSERT INTO metadata(key, value)
+                VALUES (?, ?)
+                ON CONFLICT(key) DO UPDATE SET value=excluded.value
+                """,
+                (str(key), str(value)),
+            )
+
     def get_season_thresholds(self) -> SeasonThresholds:
         with self.connect() as db:
             row = db.execute(
