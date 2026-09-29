@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.26 — development
+
+- Added one outdoor-temperature processing path for both normal source noise and provider/sensor failover steps: selected RAW temperature → one-minute EMA → public filtered temperature → rolling avg24 → season.
+- Added configurable `outdoor_temperature_ema_minutes` with a 20-minute default and a hard one-minute minimum filter/sample cadence.
+- Added diagnostic `sensor.dh_climate_app_outdoor_temperature_raw` for debugging; RAW, filtered and avg24 temperature sensors use state-only MQTT contracts without custom dynamic attributes.
+- Changed avg24 to the arithmetic mean of persisted one-minute filtered samples, removing dependence on irregular weather-provider update frequency. Existing pre-EMA temperature history is converted once through the EMA on upgrade.
+- Preserved hard low-temperature AC heating protection on the selected RAW temperature so smoothing cannot delay `ac_min_outdoor_temperature` safety behavior.
+- Removed Recorder history as a climate-calculation dependency; Recorder remains the observation/history surface for the public RAW, filtered and avg24 sensors.
+- Aligned the change with the normative DigitalHouses application-development standards maintained in `DigitalHouses/home-assistant-apps`.
+
 ## 0.1.25 — development
 
 - Align Recorder bootstrap filtering with native Home Assistant Statistics: request only significant/state changes from History instead of forcing `significant_changes_only=0`.
