@@ -95,7 +95,9 @@ The room thermostat exposes:
 - current room temperature;
 - current room humidity when configured;
 - the target of the currently active user profile while HEAT or COOL is active;
-- stable HVAC modes `off / auto`;
+- season-native HVAC modes: HEAT exposes only `off / heat`, COOL only
+  `off / cool`, and interseason only `off`;
+- native Home Assistant presets `day / night / away`;
 - HVAC action `heating / cooling / idle / off`.
 
 During interseason (`season: off`) the room thermostat stays available so
@@ -105,16 +107,12 @@ HVAC commands arriving through the room thermostat are ignored until HEAT or
 COOL becomes active. Persisted profile-target Number entities remain editable
 for installer/advanced configuration.
 
-`auto` means DigitalHouses owns the seasonal HEAT / COOL / OFF decision.
-The room thermostat does not expose seasonal heat/cool switching to the user.
-This gives HomeKit/Apple Home a stable native Thermostat capability contract.
-
 Changing the thermostat target always changes the target that is active for
 the user at that moment: `day`, `night`, or `away`. It never edits an
 inactive profile behind the user's back.
 
-Profile presets are deliberately not published as either `fan_mode` or
-`climate.preset_mode`.
+Profiles are published through native `climate.preset_mode`; they are not
+encoded as fan speeds.
 
 Each room exposes separate hidden-by-default configuration `number` entities
 for the persisted profile targets:
