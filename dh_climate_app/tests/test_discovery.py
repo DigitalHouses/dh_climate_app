@@ -240,9 +240,10 @@ class DiscoveryTests(unittest.TestCase):
                     )
                 )
 
-    def test_outdoor_ui_sensors_use_current_values(self) -> None:
-        discovery = outdoor_discovery_payloads("0.1.19")
+    def test_outdoor_ui_sensors_use_filtered_and_raw_values(self) -> None:
+        discovery = outdoor_discovery_payloads("0.1.26")
         temperature = discovery["outdoor_temperature"][1]
+        temperature_raw = discovery["outdoor_temperature_raw"][1]
         temperature_avg24 = discovery["outdoor_temperature_avg24"][1]
         humidity = discovery["outdoor_humidity"][1]
 
@@ -253,6 +254,16 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual("temperature", temperature["device_class"])
         self.assertEqual("measurement", temperature["state_class"])
         self.assertEqual("°C", temperature["unit_of_measurement"])
+        self.assertNotIn("json_attributes_topic", temperature)
+
+        self.assertEqual(
+            "sensor.dh_climate_app_outdoor_temperature_raw",
+            temperature_raw["default_entity_id"],
+        )
+        self.assertEqual("temperature", temperature_raw["device_class"])
+        self.assertEqual("measurement", temperature_raw["state_class"])
+        self.assertEqual("diagnostic", temperature_raw["entity_category"])
+        self.assertNotIn("json_attributes_topic", temperature_raw)
 
         self.assertEqual(
             "sensor.dh_climate_app_outdoor_temperature_avg24",
@@ -261,6 +272,7 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual("temperature", temperature_avg24["device_class"])
         self.assertEqual("measurement", temperature_avg24["state_class"])
         self.assertEqual("°C", temperature_avg24["unit_of_measurement"])
+        self.assertNotIn("json_attributes_topic", temperature_avg24)
         self.assertEqual(
             "DigitalHouses/Global/dh_climate_app/outdoor/temperature_avg24",
             temperature_avg24["state_topic"],
@@ -287,8 +299,13 @@ class DiscoveryTests(unittest.TestCase):
             cool_threshold=20.0,
             hysteresis=0.5,
             season=Season.OFF,
+            raw_temperature=22.4,
         )
         topics = outdoor_state_topics(state)
+        self.assertEqual(
+            "22.4",
+            topics["DigitalHouses/Global/dh_climate_app/outdoor/temperature_raw"],
+        )
         self.assertEqual(
             "20.9",
             topics["DigitalHouses/Global/dh_climate_app/outdoor/temperature"],
@@ -303,11 +320,9 @@ class DiscoveryTests(unittest.TestCase):
             "39.0",
             topics["DigitalHouses/Global/dh_climate_app/outdoor/humidity"],
         )
-        temperature_attrs = json.loads(
-            topics[
-                "DigitalHouses/Global/dh_climate_app/"
-                "outdoor/temperature/attributes"
-            ]
+        self.assertNotIn(
+            "DigitalHouses/Global/dh_climate_app/outdoor/temperature/attributes",
+            topics,
         )
         humidity_attrs = json.loads(
             topics[
@@ -316,20 +331,8 @@ class DiscoveryTests(unittest.TestCase):
             ]
         )
         self.assertEqual(
-            {"temperature_source": "weather.forecast_home_assistant"},
-            temperature_attrs,
-        )
-        self.assertEqual(
             {"humidity_source": "weather.forecast_home_assistant"},
             humidity_attrs,
-        )
-        self.assertNotIn(
-            "json_attributes_topic",
-            temperature_avg24,
-        )
-        self.assertNotEqual(
-            temperature["json_attributes_topic"],
-            humidity["json_attributes_topic"],
         )
 
     def test_recorder_payloads_ignore_observation_clock(self) -> None:
