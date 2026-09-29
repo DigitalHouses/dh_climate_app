@@ -20,6 +20,9 @@ configuration:
   ac_min_outdoor_temperature:
     name: Minimum outdoor temperature for AC heating
     description: Legacy house-wide protection for reversible climate devices used for both heating and cooling.
+  outdoor_temperature_ema_minutes:
+    name: Outdoor temperature EMA
+    description: Exponential moving-average time constant in minutes for the public outdoor temperature used by climate and season logic. Minimum update cadence is one minute.
   outdoor_temperature_sources:
     name: Outdoor temperature sources
     description: Comma-separated sensor.* or weather.* entities in priority order. weather.* uses its current temperature attribute.
