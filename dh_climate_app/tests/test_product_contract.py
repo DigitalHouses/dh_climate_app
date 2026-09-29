@@ -63,7 +63,6 @@ class ProductContractTests(unittest.TestCase):
         config = yaml.safe_load(
             (APP_ROOT / "config.yaml").read_text(encoding="utf-8")
         )
-        config_text = (APP_ROOT / "config.yaml").read_text(encoding="utf-8")
         dockerfile = (APP_ROOT / "Dockerfile").read_text(encoding="utf-8")
 
         self.assertEqual("experimental", config["stage"])
