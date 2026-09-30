@@ -77,6 +77,7 @@ application-development contracts maintained in
 Existing compatibility-sensitive Climate identities are not renamed implicitly;
 any such change requires a controlled migration.
 
+- [Product & configuration manifest](docs/PRODUCT_CONFIGURATION_MANIFEST.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Legacy behavior contract](docs/LEGACY_BEHAVIOR.md)
 - [Configuration example](docs/CONFIG_EXAMPLE.yaml)
