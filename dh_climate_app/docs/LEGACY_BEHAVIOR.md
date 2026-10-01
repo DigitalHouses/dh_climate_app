@@ -1,18 +1,18 @@
-# Legacy DH Climate 5 — behavior extraction
+# Legacy DH Climate 5 — извлечение контракта поведения
 
-This document records the behavior that the new `dh_climate_app` is expected to preserve from `DigitalHouses/dh_climate_1`.
+Этот документ фиксирует поведение, которое новый `dh_climate_app` должен сохранить из `DigitalHouses/dh_climate_1`.
 
-It is a migration contract, not a request to port PostgreSQL code.
+Это контракт миграции, а не требование переносить код PostgreSQL.
 
-## Source reviewed
+## Проверенный источник
 
-Current legacy repository:
+Текущий legacy-репозиторий:
 
 ```text
 DigitalHouses/dh_climate_1
 ```
 
-Relevant implementation:
+Ключевая реализация:
 
 ```text
 src/dh_climate_pg/workers/ha_thermostat_facade_worker.py      v5.12
@@ -21,19 +21,19 @@ src/dh_climate_pg/workers/ha_system_facade_worker.py
 _db_dump.sql
 ```
 
-## Outdoor behavior
+## Наружный контур
 
-Legacy outdoor logic:
+Legacy-логика наружного контура:
 
-- providers have explicit priority;
-- lower numeric priority wins;
-- selected outdoor temperature/humidity feed derived values;
-- rolling/current derived values include avg24;
-- season is global;
-- season thresholds are writable through the outdoor thermostat;
-- season states are `HEAT`, `COOL`, `OFF`.
+- провайдеры имеют явный приоритет;
+- меньшее числовое значение приоритета побеждает;
+- выбранные наружные температура/влажность используются для производных значений;
+- среди текущих/скользящих производных есть avg24;
+- сезон глобальный;
+- пороги сезона можно менять через наружный термостат;
+- состояния сезона: `HEAT`, `COOL`, `OFF`.
 
-Season equation in the PostgreSQL implementation:
+Формула сезона в PostgreSQL-реализации:
 
 ```text
 avg24 < heat_threshold - hysteresis → HEAT
@@ -41,7 +41,7 @@ avg24 > cool_threshold + hysteresis → COOL
 otherwise                           → OFF
 ```
 
-Outdoor thermostat facade:
+Фасад наружного термостата:
 
 ```text
 domain              climate
@@ -53,21 +53,21 @@ target_temp_high    cool threshold
 hvac_action         heating / cooling / idle
 ```
 
-## Room behavior
+## Поведение комнаты
 
-Legacy room inputs:
+Legacy-входы комнаты:
 
-- temperature;
-- humidity;
+- температура;
+- влажность;
 - target;
-- profile;
+- профиль;
 - climate control;
-- global season;
-- global home/night facts.
+- глобальный сезон;
+- глобальные факты home/night.
 
-Room sensor canonicalization averaged latest readings from all enabled sensors of the same kind.
+Канонизация комнатных сенсоров усредняла последние показания всех включённых сенсоров одного типа.
 
-Effective profile precedence:
+Приоритет effective profile:
 
 ```text
 HEAT + climate_control=false → antifreeze
@@ -76,60 +76,60 @@ night mode                   → night
 otherwise                    → day
 ```
 
-Target identity:
+Идентичность target:
 
 ```text
 room × season × profile
 ```
 
-Room thermostat facade:
+Фасад комнатного термостата:
 
-- one climate entity per room;
-- current temperature;
-- selected/effective target temperature;
-- season-constrained modes;
+- одна climate-сущность на комнату;
+- текущая температура;
+- выбранная/effective целевая температура;
+- режимы, ограниченные сезоном;
 - HVAC action;
-- profile presented as thermostat `fan_mode`;
-- profile choices: day/night/away/antifreeze.
+- профиль представлен через `fan_mode` термостата;
+- варианты профиля: day/night/away/antifreeze.
 
-Legacy v5.12 profile selection is a facade edit overlay: choosing a profile lets the user edit that profile target and the overlay resets after an idle timeout.
+В legacy v5.12 выбор профиля работает как временный overlay редактирования фасада: пользователь выбирает профиль, редактирует его target, после idle timeout overlay сбрасывается.
 
-## Important legacy inconsistency
+## Важная неоднозначность legacy
 
-The legacy PostgreSQL repository contains both:
+В legacy-репозитории PostgreSQL одновременно присутствуют:
 
-1. a room facade view that behaves like a one-sided threshold/deadband calculation; and
-2. project-level climate contracts describing a true stateful symmetric hysteresis.
+1. room facade view с поведением, похожим на односторонний threshold/deadband;
+2. проектные климатические контракты с настоящим stateful симметричным гистерезисом.
 
-The compact App deliberately adopts the stateful symmetric form because the product requirement is explicitly a global hysteresis and this avoids output chatter.
+Компактный App намеренно принимает stateful симметричную модель, потому что текущий продукт явно требует общий гистерезис и это предотвращает частое переключение выходов.
 
-This is an intentional behavior cleanup, not a code-port accident.
+Это осознанная очистка поведения, а не случайный эффект переноса кода.
 
-## Deliberate changes in the new App
+## Осознанные изменения в новом App
 
-The following current product decisions override legacy implementation details:
+Следующие продуктовые решения имеют приоритет над деталями legacy-реализации:
 
-- no PostgreSQL;
-- no SQL business logic;
-- no jobs/Matrix/Dispatcher/UC lifecycle;
-- every room is a separate MQTT Device;
-- the App directly executes configured `climate` / `switch` devices;
-- actuator classes `FAST` and `SLOW` are part of the first architecture;
-- SLOW floor target is separate from room air target;
-- optional room humidity control is exposed as a native HA `humidifier` entity;
-- room devices do not publish duplicate temperature/humidity sensors by default;
-- the configured house-wide temperature hysteresis is one global value;
-- outdoor avg24 is time-weighted in the new App.
+- PostgreSQL отсутствует;
+- SQL не содержит бизнес-логику;
+- отсутствует lifecycle jobs/Matrix/Dispatcher/UC;
+- каждая комната — отдельный MQTT Device;
+- App напрямую управляет настроенными `climate` / `switch` устройствами;
+- классы исполнительных устройств `FAST` и `SLOW` входят в базовую архитектуру;
+- SLOW target тёплого пола отделён от target температуры воздуха комнаты;
+- опциональное управление влажностью комнаты публикуется как нативная HA-сущность `humidifier`;
+- room devices по умолчанию не публикуют дублирующие temperature/humidity sensors;
+- настроенный гистерезис температуры дома — одно глобальное значение;
+- наружный avg24 рассчитывается новым App по текущему утверждённому алгоритму.
 
-## Compatibility principle
+## Принцип совместимости
 
-Migration is checked at the Home Assistant behavior boundary:
+Миграция проверяется на границе поведения Home Assistant:
 
 ```text
-same user intent
-→ equivalent entity behavior
-→ equivalent state transitions
-→ equivalent target/profile/season meaning
+тот же пользовательский intent
+→ эквивалентное поведение сущностей
+→ эквивалентные переходы состояния
+→ эквивалентный смысл target/profile/season
 ```
 
-The new Python implementation does not need to resemble the old Python/SQL implementation internally.
+Внутренняя Python-реализация нового App не обязана быть похожа на старую Python/SQL-реализацию.
