@@ -16,7 +16,7 @@ Live run подтвердил:
 - facades наружной температуры и влажности содержат стабильные source attributes;
 - при неизменных values и sources обе outdoor facade entities сохранили ровно те же `last_updated` Home Assistant между runtime ticks;
 - новый acceptance gate сообщил:
-  `PASS stable outdoor facades do not update every runtime tick`;
+  `PASS: стабильные наружные фасады не обновляются на каждом runtime tick`;
 - source failover и source recovery продолжают обновлять facades, когда данные действительно меняются;
 - avg24, room climate и поведение actuators не затронуты.
 
@@ -73,9 +73,9 @@ Runtime acceptance и immutable publication завершены.
 Опубликованный релиз:
 
 - tag: `digitalhouses_climate_app-v0.1.21`;
-- release commit: `0c53d1ffb11d205daffd08ee9ae836ecaa508a01`;
+- commit релиза: `0c53d1ffb11d205daffd08ee9ae836ecaa508a01`;
 - image: `ghcr.io/digitalhouses/digitalhouses_climate_app:0.1.21`;
 - manifest digest: `sha256:5870a9e2791fadc76165f2a5c604cf7d1f84d7448de5e5401721be2a63045349`;
-- release workflow run: `36282433114`.
+- run release workflow: `36282433114`.
 
 Опубликованная immutable image version не может быть перезаписана другим содержимым.
