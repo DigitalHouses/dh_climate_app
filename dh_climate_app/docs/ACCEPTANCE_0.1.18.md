@@ -75,9 +75,9 @@ Runtime acceptance и immutable publication завершены.
 Опубликованный релиз:
 
 - tag: `digitalhouses_climate_app-v0.1.18`;
-- release commit: `744c0cb479305f508ffd4b709d5e96c8623e5357`;
+- commit релиза: `744c0cb479305f508ffd4b709d5e96c8623e5357`;
 - image: `ghcr.io/digitalhouses/digitalhouses_climate_app:0.1.18`;
 - manifest digest: `sha256:386b4890f893ba5c87f755a9b2f56267bba700618b870bb0dc8b875860be5e95`;
-- release workflow run: `36276954342`.
+- run release workflow: `36276954342`.
 
 Опубликованная immutable image version не может быть перезаписана другим содержимым.
