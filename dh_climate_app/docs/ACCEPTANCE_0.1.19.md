@@ -1,44 +1,41 @@
-# DigitalHouses Climate App 0.1.19 — HAOS acceptance
+# DigitalHouses Climate App 0.1.19 — приёмочное тестирование HAOS
 
-Date: 2026-09-27
+Дата: 2026-09-27
 
-## Scope
+## Область проверки
 
-Version `0.1.19` was validated on a real Home Assistant OS installation using
-the bundled acceptance harness.
+Версия `0.1.19` проверена на реальной установке Home Assistant OS с bundled acceptance harness.
 
-This release adds one dedicated UI entity for the already-existing Climate Core
-24-hour outdoor temperature average:
+Релиз добавляет отдельную UI entity для уже существующего в Climate Core среднего значения наружной температуры за 24 часа:
 
 - `sensor.dh_climate_app_outdoor_temperature_avg24`.
 
-## Avg24 sensor result
+## Результат сенсора avg24
 
-The live run confirmed:
+Live run подтвердил:
 
-- the new entity was discovered after update to `0.1.19`;
-- its state was numeric;
-- its state matched the season facade `avg_24h_temperature` attribute;
-- observed value in the acceptance run: `18.0 °C`;
-- the value comes from the existing persisted time-weighted rolling average,
-  not from a second Home Assistant-side calculation.
+- новая entity появилась через Discovery после обновления до `0.1.19`;
+- её state числовой;
+- state совпадает с атрибутом `avg_24h_temperature` season facade;
+- наблюдаемое значение в acceptance run: `18.0 °C`;
+- значение берётся из существующего persisted rolling average Climate Core, а не из второго расчёта на стороне Home Assistant.
 
-## Regression result
+## Результат регрессии
 
-The same bundled run passed the complete existing Climate acceptance set:
+Тот же bundled run прошёл полный существующий набор Climate acceptance:
 
-- native room HEAT / COOL / OFF semantics;
-- native day / night / away presets;
+- нативная семантика room HEAT / COOL / OFF;
+- native presets day / night / away;
 - target-range safety;
-- bounded no-confirmation retry and cooldown recovery;
+- bounded no-confirmation retry и cooldown recovery;
 - SLOW floor control;
-- window context and selective inhibition;
-- cold-weather reversible climate protection;
-- humidity active path and safe shutdown;
-- Climate-App-only Supervisor backup/restore;
-- final clean baseline with aggregate Problem off.
+- window context и selective inhibition;
+- cold-weather protection reversible climate;
+- активный humidity path и safe shutdown;
+- Supervisor backup/restore только Climate App;
+- финальный clean baseline с aggregate Problem off.
 
-## Runtime acceptance result
+## Итог runtime acceptance
 
 ```text
 repository CI = green
@@ -51,11 +48,11 @@ final clean baseline = green
 runtime acceptance = PASS
 ```
 
-## Release status
+## Статус релиза
 
-Runtime acceptance and immutable publication are complete.
+Runtime acceptance и immutable publication завершены.
 
-Published release:
+Опубликованный релиз:
 
 - tag: `digitalhouses_climate_app-v0.1.19`;
 - release commit: `76a91373adae33e4ceffd2d1ad6b7727d6c6841f`;
@@ -63,4 +60,4 @@ Published release:
 - manifest digest: `sha256:3d9a057b56d408fc998dbae7f15b636d9b3c1cde4caab448019585c23a988248`;
 - release workflow run: `36278385669`.
 
-No published immutable image version may be overwritten with different content.
+Опубликованная immutable image version не может быть перезаписана другим содержимым.
