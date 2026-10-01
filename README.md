@@ -1,33 +1,30 @@
-# DigitalHouses Climate App repository
+# Репозиторий DigitalHouses Climate App
 
-This repository publishes the **DigitalHouses Climate App** for Home Assistant.
+Этот репозиторий публикует **DigitalHouses Climate App** для Home Assistant.
 
-The Home Assistant App lives in:
+Само приложение Home Assistant находится в каталоге:
 
 ```text
 dh_climate_app/
 ```
 
-- [App overview](dh_climate_app/README.md)
-- [User documentation](dh_climate_app/DOCS.md)
-- [Architecture](dh_climate_app/docs/ARCHITECTURE.md)
-- [HAOS acceptance plan](dh_climate_app/HAOS_TEST_PLAN.md)
+- [Обзор приложения](dh_climate_app/README.md)
+- [Пользовательская документация](dh_climate_app/DOCS.md)
+- [Архитектура](dh_climate_app/docs/ARCHITECTURE.md)
+- [План приёмочного тестирования HAOS](dh_climate_app/HAOS_TEST_PLAN.md)
 
-Repository URL for the Home Assistant App store:
+URL репозитория для Store приложений Home Assistant:
 
 ```text
 https://github.com/DigitalHouses/dh_climate_app
 ```
 
+## Обновление Experimental-версии
 
-## Updating the Experimental App
-
-The repository is a standard Home Assistant custom App repository. After a new
-version is committed to `main`, refresh Store metadata with:
+Репозиторий имеет стандартную структуру пользовательского репозитория приложений Home Assistant. После публикации новой версии в `main` обновите метаданные Store:
 
 ```bash
 ha store reload
 ```
 
-Do not use `ha store repair` for routine updates. Repair is reserved for a
-corrupt local Supervisor repository clone.
+Не используйте `ha store repair` для обычных обновлений. Repair предназначен только для восстановления повреждённого локального клона репозитория Supervisor.
