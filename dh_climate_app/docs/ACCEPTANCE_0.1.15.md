@@ -1,80 +1,74 @@
-# DigitalHouses Climate App 0.1.15 — HAOS acceptance
+# DigitalHouses Climate App 0.1.15 — приёмочное тестирование HAOS
 
-Date: 2026-09-27  
-Environment: real Home Assistant OS installation  
+Дата: 2026-09-27  
+Среда: реальная установка Home Assistant OS  
 App ID: `8d59ce70_dh_climate_app`  
-Version: `0.1.15`
+Версия: `0.1.15`
 
-## Result
+## Результат
 
 **Bundled live runtime acceptance: PASS**
 
-The acceptance harness ran against the real Home Assistant Supervisor/Core/MQTT
-boundaries. Physical HVAC equipment was not commandeered; temporary MQTT
-Discovery fixtures were used for deterministic actuator fault and safety cases.
-Hardware commissioning remains installation-specific and is not a software
-release gate.
+Acceptance harness выполнялся на реальных границах Home Assistant Supervisor/Core/MQTT. Физическое HVAC-оборудование не перехватывалось; для детерминированных сценариев ошибок и безопасности исполнительных устройств использовались временные MQTT Discovery fixtures.
 
-## Passed live gates
+Пусконаладка физического оборудования остаётся специфичной для конкретного объекта и не является software release gate.
 
-- App update/start at 0.1.15.
-- Clean baseline: Problem off, room temperature 21.0 °C, season thresholds
-  15.0 / 29.8 °C.
+## Пройденные live gates
+
+- обновление/запуск App на 0.1.15;
+- чистый baseline: Problem off, температура комнаты 21.0 °C, пороги сезона 15.0 / 29.8 °C;
 - `device_target_out_of_range`:
-  - out-of-range climate target was blocked;
-  - no forbidden actuator command was accepted;
-  - Problem/Event v2 transition carried room/entity/details;
-  - recovery cleared the Problem and actuator converged normally.
+  - target climate вне допустимого диапазона был заблокирован;
+  - запрещённая команда actuator не была принята;
+  - переход Problem/Event v2 содержал room/entity/details;
+  - recovery очистил Problem, actuator штатно сошёлся к desired state;
 - `device_no_confirmation`:
-  - bounded retries reached RETRY 2/3 and RETRY 3/3;
-  - final confirmation window expired before COOLDOWN 300s;
-  - later state confirmation recovered the Problem and reached VERIFIED_HA.
-- SLOW floor policy:
-  - HEAT season kept the SLOW thermostat in heat at its separate 27 °C target
-    while room air demand was idle;
-  - OFF season turned the SLOW thermostat off.
-- Window policy:
-  - room demand truth remained heating while the window was open;
-  - only the actuator listed in `window_off_devices` was inhibited;
-  - closing the window restored that actuator.
-- Cold-weather reversible-climate protection:
-  - reversible heating was inhibited below -10 °C;
-  - other heating sources continued;
-  - heating restored above the threshold;
-  - cooling remained allowed below the heating-only protection threshold.
-- Humidity:
-  - humidity facade and physical humidifier path became active;
-  - an active out-of-range physical humidity target raised
-    `device_target_out_of_range`;
-  - switching humidity control off still powered the physical humidifier off,
-    proving target validation cannot block shutdown.
+  - bounded retries дошли до RETRY 2/3 и RETRY 3/3;
+  - финальное окно подтверждения истекло до COOLDOWN 300s;
+  - последующее подтверждение state восстановило Problem и дошло до VERIFIED_HA;
+- политика SLOW floor:
+  - HEAT season удерживал SLOW thermostat в heat на отдельном target 27 °C, пока room air demand был idle;
+  - OFF season выключал SLOW thermostat;
+- window policy:
+  - room demand оставался heating при открытом окне;
+  - блокировался только actuator из `window_off_devices`;
+  - закрытие окна восстанавливало этот actuator;
+- cold-weather protection reversible climate:
+  - heating реверсивного устройства блокировался ниже -10 °C;
+  - остальные источники heating продолжали работу;
+  - выше порога heating восстанавливался;
+  - cooling оставался разрешён ниже heating-only protective threshold;
+- влажность:
+  - humidity facade и физический путь humidifier активировались;
+  - активный target влажности вне физического диапазона вызывал `device_target_out_of_range`;
+  - выключение humidity control всё равно физически выключало humidifier, доказывая, что validation target не может блокировать shutdown;
 - Supervisor backup/restore:
-  - a partial backup containing only the Climate App was created;
-  - App options and durable `/data` state were restored;
-  - persisted runtime room target state survived restore;
-  - App returned to 0.1.15 started state.
-- Final cleanup:
-  - temporary MQTT fixtures were removed;
-  - room returned to 21.0 °C;
-  - season returned to OFF;
-  - window state returned to not_configured;
-  - aggregate Problem returned to off/count 0.
+  - создан partial backup только с Climate App;
+  - App options и durable state `/data` восстановлены;
+  - сохранённый runtime target комнаты пережил restore;
+  - App вернулся в started state версии 0.1.15;
+- финальная очистка:
+  - временные MQTT fixtures удалены;
+  - room temperature вернулась к 21.0 °C;
+  - season вернулся в OFF;
+  - window state вернулся в not_configured;
+  - aggregate Problem вернулся в off/count 0.
 
-## Automated repository gates
+## Автоматические gates репозитория
 
-The same revision is also covered by repository CI for:
+Та же revision покрывается CI репозитория:
 
 - Python compile;
-- unit and cross-module acceptance tests;
-- YAML validation;
-- shell syntax validation;
-- HAOS container build.
+- unit и cross-module acceptance tests;
+- validation YAML;
+- validation shell syntax;
+- build HAOS container.
 
-## Release status
+## Статус релиза
 
-**Runtime acceptance and immutable publication are complete.**
+**Runtime acceptance и immutable publication завершены.**
 
-Published release:
+Опубликованный релиз:
 
 - tag: `digitalhouses_climate_app-v0.1.15`;
 - release commit: `cfbcc28b856a6d34f6e5892fa7b6aa9f477334a3`;
@@ -82,8 +76,6 @@ Published release:
 - manifest digest: `sha256:2ce86ebdd1a788ca3fbd9357ec0ae4ddef66818008c684559a58192770481997`;
 - release workflow run: `36267401820`.
 
-The canonical tag was created from the validated `main` release commit. The
-release workflow verified that the versioned GHCR destination and GitHub
-Release were unused before publishing.
+Канонический tag создан из проверенного release commit в `main`. Release workflow проверил, что versioned GHCR destination и GitHub Release ещё не использовались, до публикации.
 
-No published immutable image version may be overwritten with different content.
+Опубликованная immutable image version не может быть перезаписана другим содержимым.
