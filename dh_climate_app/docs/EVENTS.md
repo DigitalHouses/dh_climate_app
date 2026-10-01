@@ -1,17 +1,16 @@
-# Climate App machine events
+# Машинные события Climate App
 
-## Purpose
+## Назначение
 
-DigitalHouses Climate App exposes one Home Assistant MQTT Event entity:
+DigitalHouses Climate App публикует одну MQTT Event-сущность Home Assistant:
 
 ```text
 event.dh_climate_app_event
 ```
 
-It is the single public transition stream for the App. Current facts remain in
-retained climate/sensor/binary-sensor state.
+Это единый публичный поток переходов состояния App. Текущие факты остаются в retained-состояниях climate/sensor/binary_sensor.
 
-## Transport contract
+## Транспортный контракт
 
 ```text
 schema_version: 2
@@ -19,7 +18,7 @@ QoS: 1
 retain: false
 ```
 
-Every payload contains:
+Каждый payload содержит:
 
 ```text
 schema_version
@@ -27,43 +26,36 @@ event_type
 observed_at
 ```
 
-Additional fields are specific to each `event_type`.
+Дополнительные поля зависят от конкретного `event_type`.
 
-The producer publishes machine data only. Notification language, title,
-message, emoji and delivery destination belong to the local Home Assistant
-package.
+Производитель публикует только машинные данные. Язык уведомления, заголовок, текст, emoji и канал доставки принадлежат локальному пакету Home Assistant.
 
-## Ordering
+## Порядок публикации
 
-When a calculation changes retained current state and also creates an Event:
+Если один расчёт одновременно изменяет retained current state и создаёт Event:
 
 ```text
-1. calculate truth
-2. publish retained state
-3. publish retained Problem state
-4. emit transient machine Event
+1. рассчитать truth
+2. опубликовать retained state
+3. опубликовать retained Problem state
+4. отправить transient machine Event
 ```
 
-This guarantees that an automation triggered by the Event can read current
-entities and see the same truth represented by the Event.
+Это гарантирует, что автоматизация, сработавшая по Event, прочитает текущие сущности и увидит ту же truth, которая представлена событием.
 
-## Baseline / reconnect rule
+## Правило baseline / reconnect
 
-Startup and Home Assistant reconnect establish a new baseline and emit no
-transition Event.
+При startup и reconnect Home Assistant создаётся новый baseline без transition Event.
 
-Events that happened while the App or Home Assistant was unavailable are not
-reconstructed. If recovery logic is needed, it must read retained current
-state separately.
+События, произошедшие пока App или Home Assistant были недоступны, не реконструируются. Если логике восстановления нужен контекст, она должна отдельно читать retained current state.
 
-## Event catalog
+## Каталог событий
 
 ### outdoor_temperature_source_changed
 
-Emitted when the active source in the ordered outdoor temperature priority
-chain changes.
+Отправляется при изменении активного источника в упорядоченной priority-цепочке наружной температуры.
 
-Fields:
+Поля:
 
 ```text
 previous_source
@@ -72,15 +64,13 @@ previous_temperature
 current_temperature
 ```
 
-The first complete observation after startup/reconnect establishes the baseline
-and does not emit this Event. A normal temperature-value change from the same
-source is logged but is not emitted as a machine Event.
+Первое полное наблюдение после startup/reconnect только устанавливает baseline и не создаёт Event. Обычное изменение значения температуры от того же источника журналируется, но не публикуется как machine Event.
 
 ### season_changed
 
-Emitted when global season changes between `heat`, `cool` and `off`.
+Отправляется при изменении глобального сезона между `heat`, `cool` и `off`.
 
-Fields:
+Поля:
 
 ```text
 previous_season
@@ -94,10 +84,9 @@ hysteresis
 
 ### precipitation_started
 
-Dry/non-precipitating condition becomes rain, snow, mixed precipitation or
-hail.
+Сухое/без осадков состояние меняется на дождь, снег, смешанные осадки или град.
 
-Fields:
+Поля:
 
 ```text
 previous_type
@@ -108,18 +97,17 @@ forecast_at
 source_entity
 ```
 
-`precipitation_mm` is the normalized amount from the current hourly forecast
-bucket, not a physical rain-gauge measurement.
+`precipitation_mm` — нормализованное количество из текущего hourly forecast bucket, а не измерение физического дождемера.
 
 ### precipitation_stopped
 
-Active precipitation becomes a normal non-precipitating condition.
+Активные осадки сменяются нормальным состоянием без осадков.
 
-Uses the same weather fields.
+Используются те же weather-поля.
 
 ### precipitation_type_changed
 
-Active precipitation changes class, for example:
+Меняется тип активных осадков, например:
 
 ```text
 rain -> snow
@@ -128,11 +116,11 @@ rain -> mixed
 mixed -> snow
 ```
 
-Uses the same weather fields.
+Используются те же weather-поля.
 
 ### window_opened / window_closed
 
-Fields:
+Поля:
 
 ```text
 room_id
@@ -142,15 +130,13 @@ current_state
 season
 ```
 
-Unknown window truth is not duplicated here. It is represented by
-`problem_started` / `problem_recovered` with
-`problem_id=room_window_state_unknown`.
+Неопределённое состояние окна здесь не дублируется. Оно представлено через `problem_started` / `problem_recovered` с `problem_id=room_window_state_unknown`.
 
 ### problem_started / problem_recovered
 
-Generic transition contract for App-owned Problems.
+Общий transition contract для Problems, которыми владеет App.
 
-Fields are the machine Problem identity/context:
+Поля описывают машинную идентичность/контекст Problem:
 
 ```text
 problem_id
@@ -161,45 +147,42 @@ entity_id    (when applicable)
 details      (when applicable)
 ```
 
-This keeps the Event contract extensible when new actuator or sensor Problem
-codes are added.
+Такой контракт остаётся расширяемым при добавлении новых кодов Problems исполнительных устройств или сенсоров.
 
-## What is deliberately not an Event
+## Что намеренно не является Event
 
-Normal thermostat hysteresis cycles are state, not events:
+Обычные циклы гистерезиса термостата — это состояние, а не события:
 
 ```text
 heating -> idle -> heating
 cooling -> idle -> cooling
 ```
 
-Humidity controller cycling and FAST/SLOW reconciliation are also not Events
-unless a future product requirement defines a semantic transition worth
-notifying about.
+Циклы humidity controller и FAST/SLOW reconciliation также не являются Events, пока отдельное продуктовое требование не определит действительно значимый переход, о котором нужно уведомлять.
 
-A new event type must satisfy all of these:
+Новый тип события должен удовлетворять всем условиям:
 
-1. something meaningful happened, rather than a value merely being current;
-2. the same fact is not already emitted as another event type;
-3. the payload has a documented machine schema;
-4. Discovery `event_types`, tests and this document are updated together.
+1. произошло что-то семантически значимое, а не просто существует текущее значение;
+2. тот же факт уже не публикуется другим event type;
+3. payload имеет документированную машинную схему;
+4. Discovery `event_types`, тесты и этот документ обновляются одновременно.
 
-## Local notification pattern
+## Локальный шаблон уведомлений
 
-The intended Home Assistant path is:
+Предполагаемый путь в Home Assistant:
 
 ```text
 event.dh_climate_app_event
--> event.received trigger
+-> trigger event.received
 -> trigger.id
 -> choose
--> direct local action
+-> прямое локальное действие
 ```
 
-The public App does not depend on any local notification service.
+Публичный App не зависит от конкретного локального notification service.
 
-## Logging is separate from Events
+## Логи отделены от Events
 
-Detailed diagnostic logging is not part of the Event contract. The App always writes its own Python log and may mirror selected control traces to the local `script.write2climatelog` service.
+Подробный диагностический logging не входит в Event contract. App всегда пишет собственный Python log и может best-effort зеркалировать выбранные управляющие traces в локальный сервис `script.write2climatelog`.
 
-Mirror failure is isolated from climate control and from the Problem/Event layer. Normal FAST/SLOW commands and thermostat hysteresis remain non-events. Actuator failures use the existing `problem_started` / `problem_recovered` event types; when the actuator belongs to a room, those events include both `room_id` and `entity_id`.
+Ошибка зеркалирования изолирована от climate control и слоя Problem/Event. Обычные FAST/SLOW-команды и циклы гистерезиса не становятся events. Ошибки исполнительных устройств используют существующие `problem_started` / `problem_recovered`; если actuator принадлежит комнате, события содержат и `room_id`, и `entity_id`.
