@@ -2,7 +2,7 @@
 
 Статус: архитектурный аудит  
 Legacy source: `DigitalHouses/dh_climate_1`  
-New source: `DigitalHouses/dh_climate_app`
+Новый source: `DigitalHouses/dh_climate_app`
 
 Правило миграции — **совместимость поведения на границе Home Assistant**, а не совместимость исходного кода или базы данных.
 
