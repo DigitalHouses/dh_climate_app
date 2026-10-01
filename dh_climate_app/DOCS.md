@@ -1,75 +1,63 @@
 # DigitalHouses Climate App
 
-## What the App does
+## Что делает App
 
-The App owns house climate decisions and exposes native Home Assistant climate entities through MQTT Discovery.
+App принимает климатические решения для дома и публикует нативные climate-сущности Home Assistant через MQTT Discovery.
 
-The control chain is:
+Цепочка управления:
 
 ```text
-HA sensor states
-→ outdoor / room facts
-→ season + room thermostat decisions
-→ FAST / SLOW device policy
-→ direct HA service reconciliation
-→ physical climate / switch / humidifier entities
+состояния HA sensors
+→ наружные / комнатные факты
+→ решения season + room thermostat
+→ политика устройств FAST / SLOW
+→ прямое reconciliation через сервисы HA
+→ физические climate / switch / humidifier entities
 ```
 
-The App does not use PostgreSQL. SQLite under `/data/dh_climate.db` is only durable state.
+App не использует PostgreSQL. SQLite в `/data/dh_climate.db` служит только для durable state.
 
-## Configuration shape
+## Форма конфигурации
 
-The Home Assistant App schema is intentionally flat. Home Assistant limits nested option schemas, so lists of Home Assistant entities are entered as comma-separated strings. Room entries contain only primitive fields; the App compiles them into the typed internal model.
+Схема Home Assistant App намеренно плоская. Home Assistant ограничивает глубину вложенности options schema, поэтому списки Home Assistant entities задаются строками через запятую. Записи комнат содержат только primitive fields; App компилирует их в типизированную внутреннюю модель.
 
-See [docs/CONFIG_EXAMPLE.yaml](docs/CONFIG_EXAMPLE.yaml) for a complete example.
+Полный пример см. в [docs/CONFIG_EXAMPLE.yaml](docs/CONFIG_EXAMPLE.yaml).
 
-## Global settings
+## Глобальные настройки
 
+`hysteresis` — единый гистерезис температуры дома, используемый контроллерами сезона и комнатной температуры.
 
-`hysteresis` is the one house-wide temperature hysteresis used by the season and room temperature controllers.
+`humidity_hysteresis` задаётся отдельно, потому что относительная влажность измеряется в другой физической единице.
 
-`humidity_hysteresis` is separate because relative humidity uses a different physical unit.
+`night_mode` и `we_at_home` — опциональные Home Assistant facts. Если настроенная entity `we_at_home` недоступна, App использует более безопасный профиль `away`.
 
-`night_mode` and `we_at_home` are optional Home Assistant facts. When a configured `we_at_home` entity is unavailable, the App uses the safer `away` profile.
+## Наружные источники
 
-## Outdoor sources
+`outdoor_temperature_sources` и `outdoor_humidity_sources` — упорядоченные списки entities через запятую. Температура и влажность имеют независимые priority chains.
 
-`outdoor_temperature_sources` and `outdoor_humidity_sources` are comma-separated ordered entity lists. Temperature and humidity have independent priority chains.
+Для каждого измерения App использует первую текущую валидную настроенную entity. Если она становится недоступной, выбирается следующая. Когда preferred source снова становится валидным, он автоматически возвращается в работу.
 
-For each measurement, the App uses the first currently valid configured entity. If it becomes unavailable, the next entity is selected. When a preferred source becomes valid again, it automatically becomes active again.
+В temperature chain можно свободно смешивать `sensor.*` и `weather.*` entities в заданном порядке приоритета. Обычный `sensor.*` читается из его numeric state. `weather.*` поддерживается напрямую: App читает текущий атрибут `temperature` для наружной температуры и `humidity` для наружной влажности. Поэтому такие entities, как `weather.forecast_home_assistant`, могут быть primary или fallback без template sensors.
 
-The temperature chain may freely mix `sensor.*` and `weather.*` entities in the declared priority order. A normal `sensor.*` source is read from its numeric state. A `weather.*` source is supported directly: the App reads its current `temperature` attribute for outdoor temperature and its current `humidity` attribute for outdoor humidity. This allows entities such as `weather.forecast_home_assistant` to be used as primary or fallback sources without template sensors.
+Изменения RAW наружной температуры записываются в `climate.log` вместе с active source. Переходы active source записываются отдельной строкой и публикуются как `outdoor_temperature_source_changed` в `event.dh_climate_app_event`.
 
-Raw outdoor-temperature changes are written to `climate.log` with the
-active source. Active-source transitions are written as a separate log entry
-and emitted as `outdoor_temperature_source_changed` on
-`event.dh_climate_app_event`.
-
-Temperature uses one processing path for ordinary source noise and provider/
-sensor failover steps:
+Для обычного шума источника и ступеней при provider/sensor failover используется один pipeline:
 
 ```text
-prioritized source
+приоритетный источник
 → RAW temperature
 → EMA filter
-→ public outdoor temperature
-→ one-minute internal samples
-→ rolling 24-hour arithmetic mean
+→ публичная наружная температура
+→ внутренние минутные samples
+→ скользящее 24-часовое арифметическое среднее
 → season
 ```
 
-`outdoor_temperature_ema_minutes` is the EMA time constant and defaults to
-20 minutes. The EMA is advanced at most once per minute. A source change does
-not get a special interpolation mode; its step is handled by the same EMA as
-any other temperature step.
+`outdoor_temperature_ema_minutes` — постоянная времени EMA, по умолчанию 20 минут. EMA продвигается не чаще одного раза в минуту. Переключение источника не имеет специального режима интерполяции: ступень обрабатывается той же EMA, что и любое другое изменение температуры.
 
-The one-minute filtered samples are persisted in SQLite and the 24-hour mean is
-their arithmetic mean. This gives each known minute equal weight and removes
-the previous dependence on irregular provider update frequency. Existing
-pre-EMA temperature history is converted once to the minute EMA history on
-upgrade. Recorder remains an observation/history surface, not the source of
-truth for the climate calculation. Outdoor humidity keeps its separate
-time-weighted 24-hour average. Global season is:
+Минутные filtered samples сохраняются в SQLite, а 24-часовое среднее является их арифметическим средним. Так каждая известная минута получает одинаковый вес и устраняется прежняя зависимость от нерегулярной частоты обновления provider. При upgrade существующая история температуры до EMA один раз преобразуется в minute EMA history. Recorder остаётся поверхностью наблюдения/истории, а не source of truth для климатического расчёта. Наружная влажность сохраняет отдельное time-weighted 24-hour average.
+
+Глобальный season:
 
 ```text
 avg24 < heat_threshold - hysteresis → HEAT
@@ -77,141 +65,101 @@ avg24 > cool_threshold + hysteresis → COOL
 otherwise                           → OFF
 ```
 
-If no live outdoor temperature source is available, season is forced to `OFF`.
+Если ни одного live source наружной температуры нет, season принудительно становится `OFF`.
 
-The season thermostat in Home Assistant is a `heat_cool` climate entity with two targets:
+Season thermostat в Home Assistant — climate entity `heat_cool` с двумя targets:
 
-- lower/red target = heating-season threshold;
-- upper/blue target = cooling-season threshold.
+- lower/red target = порог отопительного сезона;
+- upper/blue target = порог сезона охлаждения.
 
-Changing either target persists it in SQLite.
+Изменение любого target сохраняется в SQLite.
 
-## Rooms
+## Комнаты
 
-Each configured room becomes its own MQTT Device. Assign that device to the matching Home Assistant Area.
+Каждая настроенная комната становится отдельным MQTT Device. Этот Device следует назначить соответствующей Home Assistant Area.
 
-The room thermostat exposes:
+Комнатный термостат публикует:
 
-- current room temperature;
-- current room humidity when configured;
-- the target of the currently active user profile while HEAT or COOL is active;
-- season-native HVAC modes: HEAT exposes only `off / heat`, COOL only
-  `off / cool`, and interseason only `off`;
-- native Home Assistant presets `day / night / away`;
+- текущую температуру комнаты;
+- текущую влажность комнаты, если она настроена;
+- target текущего активного пользовательского профиля, когда активен HEAT или COOL;
+- season-native HVAC modes: HEAT показывает только `off / heat`, COOL — только `off / cool`, межсезонье — только `off`;
+- нативные Home Assistant presets `day / night / away`;
 - HVAC action `heating / cooling / idle / off`.
 
-During interseason (`season: off`) the room thermostat stays available so
-Home Assistant and Apple Home continue to show the current room temperature,
-but the facade is forced to `off` and exposes no seasonal target. Target and
-HVAC commands arriving through the room thermostat are ignored until HEAT or
-COOL becomes active. Persisted profile-target Number entities remain editable
-for installer/advanced configuration.
+В межсезонье (`season: off`) комнатный термостат остаётся доступным, чтобы Home Assistant и Apple Home продолжали показывать текущую комнатную температуру, но facade принудительно находится в `off` и не публикует seasonal target. Команды target и HVAC, пришедшие через room thermostat, игнорируются до появления HEAT или COOL. Persisted Number entities целей профилей остаются доступны для installer/advanced configuration.
 
-Changing the thermostat target always changes the target that is active for
-the user at that moment: `day`, `night`, or `away`. It never edits an
-inactive profile behind the user's back.
+Изменение target на термостате всегда меняет target профиля, который пользователь редактирует в этот момент: `day`, `night` или `away`. Неактивный профиль не редактируется скрытно.
 
-Profiles are published through native `climate.preset_mode`; they are not
-encoded as fan speeds.
+Профили публикуются через нативный `climate.preset_mode`; они не кодируются через fan speed.
 
-Each room exposes separate hidden-by-default configuration `number` entities
-for the persisted profile targets:
+Каждая комната публикует отдельные configuration entities `number`, скрытые по умолчанию, для сохраняемых profile targets:
 
 - Heat day / night / away;
 - Heat antifreeze;
 - Cool day / night / away.
 
-These settings allow an installer or advanced Home Assistant user to prepare,
-for example, the Night target during daytime without changing what the active
-thermostat is currently controlling.
+Эти настройки позволяют инсталлятору или advanced-пользователю Home Assistant, например, подготовить Night target днём, не меняя текущую работу активного термостата.
 
-`antifreeze` remains an internal HEAT protection profile. When a room
-thermostat is Off, the user-facing thermostat keeps its scheduled
-`day / night / away` target while the internal control loop may still use the
-antifreeze target.
+`antifreeze` остаётся внутренним защитным профилем HEAT. Когда комнатный термостат находится в Off, пользовательский thermostat сохраняет свой scheduled target `day / night / away`, а внутренний control loop может использовать antifreeze target.
 
-Multiple room temperature or humidity sensors are averaged from their latest available values.
+Если настроено несколько room temperature или humidity sensors, используются средние их последних доступных значений.
 
-Target identity is:
+Идентичность target:
 
 ```text
 room × season × profile
 ```
 
-The hidden configuration Number entities remain available during interseason,
-so an installer can prepare future seasonal profile targets without exposing
-an inactive room thermostat to normal users.
+Скрытые configuration Number entities остаются доступными и в межсезонье, поэтому инсталлятор может подготовить targets будущего сезона, не показывая обычному пользователю неактивный room thermostat.
 
-## Temperature precision
+## Точность температуры
 
-Climate calculations keep full floating-point precision internally. Every
-temperature value exposed through the public Home Assistant / MQTT / machine
-Event contract is rounded to one decimal place.
+Climate calculations сохраняют полную floating-point precision внутри App. Каждое температурное значение, опубликованное через публичный контракт Home Assistant / MQTT / machine Event, округляется до одного знака.
 
-This includes current temperatures, rolling 24-hour temperature values,
-temperature thresholds and temperature-valued Event fields. Rounding is a
-presentation rule only and does not change season, hysteresis or device-control
-calculations.
+Это касается текущих температур, rolling 24-hour values, temperature thresholds и температурных полей Events. Округление — только правило presentation и не меняет расчёты season, hysteresis или device control.
 
-## Outdoor UI sensors
+## Наружные UI sensors
 
-The system Device exposes dedicated outdoor measurements for dashboards and
-debugging:
+Системный Device публикует отдельные наружные измерения для dashboards и debugging:
 
-- `sensor.dh_climate_app_outdoor_temperature_raw` — selected source value,
-  diagnostic;
-- `sensor.dh_climate_app_outdoor_temperature` — EMA-filtered temperature used
-  by normal climate logic;
-- `sensor.dh_climate_app_outdoor_temperature_avg24` — rolling 24-hour mean of
-  one-minute filtered samples;
+- `sensor.dh_climate_app_outdoor_temperature_raw` — значение выбранного источника, diagnostic;
+- `sensor.dh_climate_app_outdoor_temperature` — EMA-filtered температура, используемая обычной climate logic;
+- `sensor.dh_climate_app_outdoor_temperature_avg24` — rolling 24-hour mean минутных filtered samples;
 - `sensor.dh_climate_app_outdoor_humidity`.
 
-The three temperature sensors use state-only MQTT contracts: no custom dynamic
-attributes are attached to them. Their states are Recorder-friendly. The RAW
-diagnostic facade is rate-limited to at most one publication per minute, while
-the filtered and avg24 values can change only on the same one-minute filter
-grid. Unchanged one-decimal states are additionally suppressed by MQTT payload
-deduplication. Internal RAW truth still reaches hard safety, logs and machine
-events immediately. Source identity remains available through the season
-facade, logs and source-change machine event.
+Три temperature sensors используют state-only MQTT contracts: пользовательские динамические attributes к ним не прикрепляются. Их states подходят для Recorder. RAW diagnostic facade ограничен максимум одной публикацией в минуту, а filtered и avg24 меняются только на той же минутной сетке фильтра. Неизменившиеся значения с одним знаком дополнительно подавляются MQTT payload deduplication.
 
-## Weather precipitation
+Внутренняя RAW truth при этом немедленно поступает в hard safety, logs и machine events. Идентичность источника остаётся доступной через season facade, logs и machine event смены источника.
 
-When at least one configured outdoor source is a `weather.*` entity, the App
-uses the first configured weather entity from the temperature/humidity source
-chains as the precipitation source.
+## Осадки по weather
 
-Current precipitation type comes from the weather entity condition:
+Если хотя бы один настроенный наружный source — `weather.*`, App использует первую настроенную weather entity из temperature/humidity chains как источник осадков.
+
+Текущий precipitation type определяется по condition weather entity:
 
 - `rainy / pouring / lightning-rainy` → `rain`;
 - `snowy` → `snow`;
 - `snowy-rainy` → `mixed`;
 - `hail` → `hail`;
-- other normal conditions → `none`.
+- остальные нормальные conditions → `none`.
 
-The precipitation amount is requested through Home Assistant
-`weather.get_forecasts` with `type: hourly`. The App publishes the amount
-for the current hourly forecast bucket normalized to millimetres. This is
-forecast precipitation for the current hour, not a physical rain-gauge
-measurement.
+Количество осадков запрашивается через Home Assistant `weather.get_forecasts` с `type: hourly`. App публикует количество для текущего hourly forecast bucket, нормализованное в миллиметры. Это прогноз осадков на текущий час, а не физическое измерение дождемером.
 
-The system Device exposes:
+Системный Device публикует:
 
 - `sensor.dh_climate_app_precipitation_type`;
 - `sensor.dh_climate_app_precipitation_amount`.
 
-## Machine events
+## Машинные события
 
-The App exposes one Home Assistant MQTT Event entity:
+App публикует одну MQTT Event entity Home Assistant:
 
 `event.dh_climate_app_event`
 
-Event payloads use schema version 2, QoS 1 and are never retained. The first
-complete runtime observation establishes a baseline and emits no event.
-Reconnect also establishes a fresh baseline, so events are not reconstructed
-for transitions that happened while Home Assistant was unavailable.
+Event payloads используют schema version 2, QoS 1 и никогда не retain. Первое полное runtime observation устанавливает baseline и не создаёт event. Reconnect также устанавливает новый baseline, поэтому transitions, произошедшие пока Home Assistant был недоступен, не реконструируются.
 
-Initial event types:
+Начальные event types:
 
 - `season_changed`;
 - `precipitation_started`;
@@ -222,160 +170,157 @@ Initial event types:
 - `problem_started`;
 - `problem_recovered`.
 
-Events contain machine data only. Human language, formatting and delivery stay
-in the local Home Assistant notification package.
+Events содержат только машинные данные. Человеческий язык, formatting и delivery остаются в локальном notification package Home Assistant.
 
-Unknown/restored window truth is represented by `problem_started` /
-`problem_recovered` with problem code `room_window_state_unknown`, avoiding
-duplicate machine events for the same transition.
+Unknown/restored window truth представляется через `problem_started` / `problem_recovered` с problem code `room_window_state_unknown`, чтобы не создавать дублирующие machine events для одного transition.
 
-Routine thermostat hysteresis cycling is intentionally not an Event; retained
-room state already represents that current fact.
+Обычные циклы гистерезиса термостата намеренно не являются Event; retained room state уже представляет текущий факт.
 
-## Window context
+## Контекст окна
 
-Window contacts are optional per room through `window_sensors`.
+Window contacts опциональны для комнаты через `window_sensors`.
 
-Room window truth follows the previous DH Climate behavior:
+Truth окна комнаты следует прежнему поведению DH Climate:
 
 ```text
-any open contact           → open
-else any unavailable/other → unknown
-otherwise                  → closed
+любой open contact          → open
+иначе любой unavailable     → unknown
+иначе                       → closed
 ```
 
-Window state does **not** change room thermostat demand. It is device context. Put only the actuators that must stop with an open window in `window_off_devices`. Other thermal devices continue according to their normal policy.
+Window state **не** меняет demand комнатного термостата. Это device context. В `window_off_devices` нужно помещать только те actuators, которые действительно должны остановиться при открытом окне. Другие thermal devices продолжают нормальную работу.
 
-An unknown configured window state is surfaced through the aggregate Problem diagnostic.
+Unknown для настроенного window state публикуется через aggregate Problem diagnostic.
 
 ## FAST devices
 
-FAST devices follow room demand.
+FAST devices следуют room demand.
 
-Supported first-release domains:
+Поддерживаемые domains первой реализации:
 
 - `switch`;
 - `climate`.
 
-`fast_heat` and `fast_cool` are comma-separated actuator lists. A `climate` entity may be present in both lists and is then treated as `heat_cool`. A `switch` must appear in only one list.
+`fast_heat` и `fast_cool` — списки actuators через запятую. Одна `climate` entity может находиться в обоих списках и тогда трактуется как `heat_cool`. `switch` может находиться только в одном списке.
 
-A reversible `climate` entity present in both FAST lists also inherits the legacy cold-weather heating protection. Below `ac_min_outdoor_temperature` (default `-10 °C`) the App keeps that device out of heating mode while other allowed heat sources can continue.
+Reversible `climate` entity в обоих FAST lists также получает legacy cold-weather heating protection. Ниже `ac_min_outdoor_temperature` (default `-10 °C`) App не разрешает ей heating mode, при этом другие допустимые heat sources могут продолжать работу.
 
-## Windows
+## Окна
 
-Room window contacts are optional and configured in `window_sensors`.
+Контакты окон комнаты опциональны и настраиваются через `window_sensors`.
 
-Window state is **context**, not thermostat truth: opening a window does not rewrite the room target or HVAC action. Only devices explicitly listed in `window_off_devices` are forced off while any configured window is open. This preserves the legacy per-device window-policy behavior without recreating the old Firewall/Matrix layers.
+Window state — **контекст**, а не thermostat truth: открытие окна не переписывает room target и HVAC action. Только devices, явно перечисленные в `window_off_devices`, принудительно выключаются, пока открыто любое настроенное окно. Так сохраняется legacy per-device window-policy без воссоздания слоёв Firewall/Matrix.
 
-If a configured window contact is unavailable and no other contact is open, the room reports an `unknown` window state through the aggregate problem diagnostic. The App does not invent a closed state.
+Если настроенный window contact unavailable и ни один другой contact не открыт, комната публикует `unknown` через aggregate Problem diagnostic. App не придумывает состояние closed.
 
-## Cold-weather AC protection
+## Защита AC при низкой наружной температуре
 
-A reversible FAST `climate` entity configured in both `fast_heat` and `fast_cool` is treated as the AC/heat-pump class for the legacy low-outdoor-temperature heating limit.
+Reversible FAST `climate` entity, настроенная одновременно в `fast_heat` и `fast_cool`, считается классом AC/heat-pump для legacy low-outdoor-temperature heating limit.
 
-`ac_min_outdoor_temperature` is a global safety threshold. Below it, those reversible devices are inhibited from heating. This hard-safety comparison deliberately uses the selected RAW outdoor temperature rather than the EMA-filtered value, so smoothing cannot delay a low-temperature protection action. Cooling behavior is unaffected. Heating-only switches and SLOW floor thermostats are not implicitly classified as AC devices.
+`ac_min_outdoor_temperature` — глобальный safety threshold. Ниже него heating этих reversible devices блокируется. Hard-safety comparison намеренно использует выбранную RAW наружную температуру, а не EMA-filtered значение, поэтому smoothing не может задержать low-temperature protection action.
+
+Cooling не затрагивается. Heating-only switches и SLOW floor thermostats автоматически не классифицируются как AC devices.
 
 ## SLOW devices
 
-SLOW is intended for underfloor heating or another high-inertia comfort loop with its own local thermostat and probe.
+SLOW предназначен для тёплого пола или другого высокоинерционного comfort loop со своим локальным thermostat и probe.
 
-For safety, v0.1 accepts SLOW devices only as Home Assistant `climate` entities. They are listed in `slow_heat`, and all SLOW thermostats in one room use the room's separate `slow_target`.
+Для безопасности v0.1 принимает SLOW только как Home Assistant `climate` entities. Они перечисляются в `slow_heat`, и все SLOW thermostats одной комнаты используют отдельный `slow_target` комнаты.
 
-During HEAT season:
+В HEAT season:
 
 ```text
 hvac_mode = heat
 target    = configured SLOW target
 ```
 
-During COOL or OFF:
+В COOL или OFF:
 
 ```text
 hvac_mode = off
 ```
 
-The SLOW target is deliberately separate from the room air target.
+SLOW target намеренно отделён от room air target.
 
-## Humidity
+## Влажность
 
-Humidity control is optional per room and can be:
+Humidity control опционален для комнаты и может быть:
 
 - `humidifier`;
 - `dehumidifier`.
 
-The App publishes a native Home Assistant `humidifier` entity containing current humidity and target humidity.
+App публикует нативную Home Assistant entity `humidifier`, содержащую current humidity и target humidity.
 
-Its physical actuator may be a `switch` or an existing Home Assistant `humidifier` entity. Set `humidity_mode` to `off`, `humidifier`, or `dehumidifier`.
+Физический actuator может быть `switch` или существующей Home Assistant entity `humidifier`. `humidity_mode` задаётся как `off`, `humidifier` или `dehumidifier`.
 
-For a `humidifier.*` actuator, the humidity target is applied only while the controller is actively humidifying/dehumidifying. When the controller is inactive, the desired physical state is power-off only, so a device target-range mismatch can never block a shutdown command.
+Для actuator `humidifier.*` humidity target применяется только пока controller активно увлажняет/осушает. Когда controller неактивен, desired physical state содержит только power-off, поэтому mismatch диапазона target устройства никогда не может заблокировать shutdown command.
 
-## Safety and reconciliation
+## Безопасность и reconciliation
 
-The App compares desired and actual physical state before every service call.
+Перед каждым service call App сравнивает desired и actual physical state.
 
-It does not send a command when state already matches. Repeated mismatches are rate-limited, bounded and surfaced through the aggregate diagnostic problem entity.
+Если state уже совпадает, команда не отправляется. Повторяющиеся mismatches ограничены по частоте/количеству и публикуются через aggregate diagnostic Problem entity.
 
-Before sending climate commands, the App checks reported supported HVAC modes and target limits where Home Assistant exposes them.
+Перед отправкой climate commands App проверяет reported supported HVAC modes и target limits там, где Home Assistant их предоставляет.
 
-### Climate diagnostic logging
+### Диагностический climate logging
 
-Climate diagnostics use two independent channels:
+Climate diagnostics используют два независимых канала:
 
-- the App's own Python log is authoritative and is available through Home Assistant App logs;
-- important climate-control transitions are mirrored best-effort to the local Home Assistant service `script.write2climatelog`.
+- собственный Python log App является authoritative и доступен через Home Assistant App logs;
+- важные transitions climate control best-effort зеркалируются в локальный сервис Home Assistant `script.write2climatelog`.
 
-The mirror is asynchronous and serialized through one bounded FIFO queue, so `climate.log` preserves the same decision order as the App log. Failure or absence of `script.write2climatelog` never delays control, never triggers retry pressure and never creates a Climate Problem.
+Mirror асинхронен и сериализован через одну bounded FIFO queue, поэтому `climate.log` сохраняет тот же порядок решений, что и App log. Ошибка или отсутствие `script.write2climatelog` никогда не задерживает управление, не создаёт retry pressure и не вызывает Climate Problem.
 
-FAST/SLOW actuator traces include desired versus actual state, service calls, bounded retries, cooldown entry and command confirmation. Stable `desired == actual` reconciles are deliberately silent, so the 10-second runtime tick does not flood `climate.log`.
+FAST/SLOW actuator traces содержат desired vs actual state, service calls, bounded retries, вход в cooldown и command confirmation. Стабильные reconciles `desired == actual` намеренно не логируются, поэтому 10-second runtime tick не переполняет `climate.log`.
 
-Room control state is logged only when its control signature changes (season/profile/enabled state/control action/internal control target/window state). The internal control target is therefore visible during FAST debugging without logging every unchanged tick.
+Room control state логируется только при изменении control signature (season/profile/enabled state/control action/internal control target/window state). Поэтому internal control target виден при FAST debugging без записи каждого неизменившегося tick.
 
-On Home Assistant disconnect, cached facts are invalidated and App control is suspended until a fresh snapshot is obtained.
+При disconnect Home Assistant cached facts инвалидируются, управление App приостанавливается до получения свежего snapshot.
 
 ## Persistence
 
-Persistent state includes:
+Persistent state включает:
 
 - season thresholds;
 - rolling outdoor samples;
 - room profile targets;
 - room climate-control enable state;
-- previous thermostat action for hysteresis continuity;
-- humidity targets and control state.
+- previous thermostat action для непрерывности hysteresis;
+- humidity targets и control state.
 
-The database does not contain jobs, dispatcher queues or SQL business logic.
+Database не содержит jobs, dispatcher queues или SQL business logic.
 
-## Diagnostics
+## Диагностика
 
-The system MQTT Device exposes:
+Системный MQTT Device публикует:
 
 - Version;
 - Started at;
 - Problem.
 
-`Problem` is an aggregate diagnostic binary sensor with machine-readable problem details in attributes.
-
+`Problem` — агрегированный diagnostic binary sensor с machine-readable details в attributes.
 
 ## Usage telemetry
 
-Telemetry is optional and disabled by default with:
+Telemetry опциональна и по умолчанию отключена:
 
 ```yaml
 telemetry_enabled: false
 ```
 
-When enabled, the App sends the shared DigitalHouses Telemetry Protocol v1 heartbeat. The client payload contains only:
+При включении App отправляет heartbeat общего DigitalHouses Telemetry Protocol v1. Client payload содержит только:
 
 - protocol schema version;
 - telemetry policy version;
-- a random persistent installation UUID;
+- случайный persistent installation UUID;
 - product identifier `digitalhouses_climate_app`;
 - released App version.
 
-Country is derived server-side from network metadata. The App does not send room names, Home Assistant entity IDs, device inventory, climate values, targets, local/WAN addresses, Home Assistant identity or MQTT credentials.
+Страна определяется server-side по network metadata. App не отправляет room names, Home Assistant entity IDs, inventory устройств, climate values, targets, local/WAN addresses, identity Home Assistant или MQTT credentials.
 
-A successful heartbeat is normally sent about once per 24 hours with deterministic jitter. Enabling telemetry or installing a newer released version is eligible for an immediate best-effort heartbeat. Failure uses a persisted one-hour backoff and never changes climate control or product health.
+Успешный heartbeat обычно отправляется примерно раз в 24 часа с deterministic jitter. Включение telemetry или установка новой released version даёт право на немедленный best-effort heartbeat. Failure использует persisted one-hour backoff и никогда не влияет на climate control или product health.
 
-Disabling telemetry stops future heartbeats but does not delete retained server-side data. Use `button.dh_climate_app_delete_telemetry` for authenticated deletion of this installation's retained telemetry.
+Отключение telemetry прекращает будущие heartbeats, но не удаляет уже сохранённые server-side данные. Для authenticated deletion данных этой installation используется `button.dh_climate_app_delete_telemetry`.
 
-Development versions ending in `-local` never send production telemetry.
+Development versions, заканчивающиеся на `-local`, никогда не отправляют production telemetry.
