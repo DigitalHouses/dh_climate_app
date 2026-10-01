@@ -1,419 +1,445 @@
-# DigitalHouses Climate App — Product & Configuration Manifest
+# DigitalHouses Climate App — манифест продукта и конфигурации
 
-**Version:** 0.1  
-**Date:** 2026-09-30  
-**Status:** first normative baseline  
-**Scope:** product boundaries, configuration ownership, Home Assistant UI contract, and the FAST/SLOW thermal model.
+**Версия:** 0.1  
+**Дата:** 2026-09-30  
+**Статус:** первая нормативная база  
+**Область:** границы продукта, владение конфигурацией, контракт UI Home Assistant и тепловая модель FAST/SLOW.
 
-This document freezes the product principles that should guide further dh_climate_app development. It is intentionally smaller than the full architecture specification. It defines **where configuration belongs and what the user should see**, not every control algorithm.
+Этот документ фиксирует продуктовые принципы дальнейшей разработки `dh_climate_app`. Он намеренно компактнее полной архитектурной спецификации. Здесь определяется **где должна находиться конфигурация и что должен видеть пользователь**, а не каждая деталь алгоритма управления.
 
-When implementation details evolve, they should preserve this contract unless this manifest is explicitly revised.
-
----
-
-## 1. Product model
-
-The user-facing abstraction is the **room thermostat**.
-
-A room owns the desired air temperature and presents one native Home Assistant climate entity. Physical devices are executors behind that room abstraction.
-
-The main thermal path is:
-
-    global season
-        ↓
-    effective room profile
-        ↓
-    room target
-        ↓
-    stateful room thermostat
-        ↓
-    FAST device demand
-        ↓
-    device-specific desired state
-        ↓
-    Home Assistant service reconciliation
-
-SLOW heating is a separate seasonal path:
-
-    global season
-        ↓
-    SLOW heating enable / disable
-        ↓
-    local physical thermostat
-
-The compact App must preserve useful climate behavior without recreating the previous PostgreSQL orchestration system.
+Если детали реализации меняются, они должны сохранять этот контракт, пока сам манифест явно не пересмотрен.
 
 ---
 
-## 2. Configuration ownership
+## 1. Модель продукта
 
-The system has three distinct configuration/state layers.
+Пользовательская абстракция — **комнатный термостат**.
 
-### 2.1 App YAML/options = installation topology
+Комната владеет желаемой температурой воздуха и представлена одной нативной Home Assistant entity домена `climate`. Физические устройства являются исполнителями за этой абстракцией.
 
-Home Assistant App options describe **what is installed and where it is connected**.
+Основной тепловой путь:
 
-Typical YAML-owned facts:
+```text
+глобальный сезон
+    ↓
+эффективный профиль комнаты
+    ↓
+target комнаты
+    ↓
+stateful комнатный термостат
+    ↓
+demand устройств FAST
+    ↓
+device-specific desired state
+    ↓
+reconciliation через сервисы Home Assistant
+```
 
-- global Home Assistant fact bindings such as night_mode and we_at_home;
-- outdoor temperature/humidity source bindings;
-- room identity and display name;
-- room temperature/humidity sensor bindings;
-- window-contact bindings;
-- FAST heating actuator bindings;
-- FAST cooling actuator bindings;
-- SLOW heating actuator bindings;
-- exceptional hardware binding/policy that cannot be safely inferred from Home Assistant capabilities.
+SLOW heating идёт отдельным сезонным путём:
 
-YAML must not become the operational settings database.
+```text
+глобальный сезон
+    ↓
+включение / выключение SLOW heating
+    ↓
+локальный физический термостат
+```
 
-A healthy room record should remain close to:
+Компактный App должен сохранять полезное климатическое поведение без воссоздания прежней PostgreSQL-оркестрации.
 
-    rooms:
-      - id: living_room
-        name: Living Room
-        temperature_sensors: sensor.living_room_temperature
-        fast_heat: switch.living_room_convector
-        fast_cool: climate.living_room_ac
-        slow_heat: climate.living_room_floor
+---
 
-Optional bindings are added only when the installation actually requires them.
+## 2. Владение конфигурацией
 
-### 2.2 Home Assistant entities = editable climate policy
+В системе три разных слоя конфигурации/состояния.
 
-Parameters that an owner/installer may change after commissioning should be exposed as native Home Assistant entities, normally through MQTT Discovery.
+### 2.1 YAML/App options = топология установки
 
-Use the native domain matching the value:
+App options Home Assistant описывают **что установлено и к чему подключено**.
 
-- number for numeric settings;
-- select for enumerated policies;
-- switch only for genuine boolean policy choices;
-- climate for normal room thermostat interaction;
-- sensor / binary_sensor for state and diagnostics.
+Типичные факты, которыми владеет YAML:
 
-Examples of editable policy/settings:
+- bindings глобальных HA-фактов, например `night_mode` и `we_at_home`;
+- bindings источников наружной температуры/влажности;
+- идентификатор и отображаемое имя комнаты;
+- bindings комнатных датчиков температуры/влажности;
+- bindings оконных контактов;
+- bindings исполнительных устройств FAST heating;
+- bindings исполнительных устройств FAST cooling;
+- bindings исполнительных устройств SLOW heating;
+- исключительная аппаратная привязка/политика, которую нельзя безопасно определить из capabilities Home Assistant.
+
+YAML не должен становиться базой оперативных параметров.
+
+Нормальная запись комнаты должна оставаться примерно такой:
+
+```yaml
+rooms:
+  - id: living_room
+    name: Living Room
+    temperature_sensors: sensor.living_room_temperature
+    fast_heat: switch.living_room_convector
+    fast_cool: climate.living_room_ac
+    slow_heat: climate.living_room_floor
+```
+
+Опциональные bindings добавляются только если конкретная установка действительно их требует.
+
+### 2.2 Сущности Home Assistant = изменяемая климатическая политика
+
+Параметры, которые владелец/инсталлятор может менять после пусконаладки, должны публиковаться нативными сущностями Home Assistant, обычно через MQTT Discovery.
+
+Используется нативный domain, соответствующий значению:
+
+- `number` — числовые настройки;
+- `select` — перечисляемые политики;
+- `switch` — только настоящие boolean policy choices;
+- `climate` — нормальная работа с комнатным термостатом;
+- `sensor` / `binary_sensor` — состояние и диагностика.
+
+Примеры изменяемых параметров:
 
 - Heat Day / Night / Away targets;
 - Heat Antifreeze target;
 - Cool Day / Night / Away targets;
 - SLOW heating target;
-- device target offsets;
-- fan limits/policies;
-- future window reaction choices;
-- global climate tuning that is meaningful to an installer.
+- offsets целевой температуры конкретного устройства;
+- ограничения/политика вентилятора;
+- будущая реакция на открытое окно;
+- глобальный climate tuning, имеющий смысл для инсталлятора.
 
-These values should not need YAML edits for routine commissioning or later adjustment.
+Для штатной пусконаладки и дальнейшей настройки этих параметров не должно требоваться редактирование YAML.
 
-### 2.3 SQLite = persisted truth
+### 2.3 SQLite = сохраняемая истина
 
-SQLite under /data stores durable App state.
+SQLite в `/data` хранит долговременное состояние App.
 
-For settings represented by MQTT configuration entities:
+Для настроек, представленных MQTT configuration entities:
 
-    HA command
-    → App validation
-    → SQLite
-    → climate recomputation
-    → MQTT state publication
+```text
+HA command
+→ валидация App
+→ SQLite
+→ пересчёт Climate Core
+→ публикация MQTT state
+```
 
-On restart:
+После restart:
 
-    SQLite
-    → App runtime
-    → retained MQTT state
-    → Home Assistant UI
+```text
+SQLite
+→ runtime App
+→ retained MQTT state
+→ UI Home Assistant
+```
 
-**SQLite wins over retained MQTT command/state history.**
+**SQLite имеет приоритет над retained MQTT command/state history.**
 
-Retained MQTT is a transport/UI continuity mechanism, not a competing persistence authority.
-
----
-
-## 3. Defaults and first creation
-
-Built-in product defaults are used only to seed a setting when it does not yet exist.
-
-Example:
-
-    room first appears
-    → setting absent in SQLite
-    → seed product default
-    → persist
-    → publish HA configuration entity
-
-After creation, upgrading or reloading App configuration must not silently replace a user's persisted setting with a new default.
-
-A new setting introduced by a later version may be seeded once during migration.
-
-Defaults should not be repeated per room in YAML.
+Retained MQTT — механизм транспорта и непрерывности UI, а не конкурирующий источник persistence.
 
 ---
 
-## 4. Room thermostat contract
+## 3. Defaults и первое создание
 
-Each configured room exposes one primary MQTT climate entity.
+Встроенные продуктовые defaults используются только при первичном создании отсутствующей настройки.
 
-The room thermostat is the normal client control surface.
+Пример:
 
-It owns:
+```text
+комната появилась впервые
+→ настройки нет в SQLite
+→ seed продуктового default
+→ persist
+→ публикация configuration entity в HA
+```
 
-- current room temperature;
-- current humidity when useful;
-- current season-compatible target;
-- season-compatible HVAC modes;
+После создания upgrade или reload конфигурации App не должны молча заменять сохранённую пользовательскую настройку новым default.
+
+Новая настройка, появившаяся в следующей версии, может быть один раз seeded во время migration.
+
+Defaults не должны повторяться в YAML каждой комнаты.
+
+---
+
+## 4. Контракт комнатного термостата
+
+Каждая настроенная комната публикует одну основную MQTT entity `climate`.
+
+Комнатный термостат — основной клиентский интерфейс.
+
+Он содержит:
+
+- текущую температуру комнаты;
+- текущую влажность, если это полезно;
+- текущий сезонно-допустимый target;
+- HVAC modes, допустимые для сезона;
 - HVAC action;
-- normal target adjustment.
+- обычную регулировку target.
 
-Season capability remains native:
+Сезонные capabilities остаются нативными:
 
-    HEAT → off / heat
-    COOL → off / cool
-    OFF  → off
+```text
+HEAT → off / heat
+COOL → off / cool
+OFF  → off
+```
 
-Opposite-season thermal actions are forbidden.
+Тепловые действия противоположного сезона запрещены.
 
-Internal Day / Night / Away profile targets remain part of the control model, but they are **not normal client-facing controls**.
+Внутренние targets профилей Day / Night / Away остаются частью модели управления, но **не являются обычными клиентскими controls**.
 
-Antifreeze is an internal HEAT protection profile and is not a normal client preset.
+Antifreeze — внутренний защитный профиль HEAT и не является обычным клиентским preset.
 
 ---
 
-## 5. FAST thermal devices
+## 5. Тепловые устройства FAST
 
-FAST means low enough thermal inertia that the device participates in active room-temperature regulation.
+FAST означает достаточно малую тепловую инерцию, чтобы устройство участвовало в активном регулировании температуры комнаты.
 
-Typical examples:
+Типичные примеры:
 
-- radiator;
-- convector;
+- радиатор;
+- конвектор;
 - fan-coil;
-- air conditioner;
-- other responsive room heating/cooling equipment.
+- кондиционер;
+- другое быстро реагирующее комнатное отопительное/охлаждающее оборудование.
 
-FAST devices follow room thermostat demand:
+FAST следует demand комнатного термостата:
 
-    room heating → FAST heat devices active
-    room cooling → FAST cool devices active
-    room idle/off → corresponding FAST devices inactive
+```text
+room heating → FAST heat devices active
+room cooling → FAST cool devices active
+room idle/off → соответствующие FAST devices inactive
+```
 
-The room thermostat decides demand. A FAST device must not independently reinterpret room temperature into a second competing thermostat algorithm.
+Demand определяет комнатный термостат. FAST device не должно самостоятельно превращать room temperature во второй конкурирующий алгоритм термостата.
 
-For smart climate executors, device-specific transformation may later include:
+Для smart `climate` исполнителей device-specific transformation может включать:
 
 - target-temperature offset;
-- device min/max/step normalization;
+- нормализацию min/max/step;
 - fan policy;
-- supported-mode mapping.
+- mapping поддерживаемых режимов.
 
-Those are device execution details, not reasons to move the room target itself into YAML.
-
----
-
-## 6. SLOW thermal devices
-
-SLOW means a high-inertia heating system whose normal operation should not cycle with the room-air thermostat.
-
-Primary case: **hydronic underfloor heating** with its own local thermostat/probe.
-
-Canonical behavior:
-
-    season == HEAT  → SLOW heating enabled
-    season != HEAT  → SLOW heating disabled
-
-A SLOW local climate thermostat receives its own SLOW target. Its local physical thermostat performs the actual cycling.
-
-The SLOW target is separate from the room-air target.
-
-Room hysteresis must not repeatedly switch SLOW heating on and off.
-
-This FAST/SLOW distinction describes thermal control behavior, not a generic framework that must be generalized prematurely.
+Это детали исполнения устройством, а не причина переносить room target в YAML.
 
 ---
 
-## 7. TRV scope
+## 6. Тепловые устройства SLOW
 
-TRVs are **out of scope for the new core climate App**.
+SLOW означает высокоинерционную систему отопления, которую в нормальном режиме не следует циклировать комнатным термостатом по температуре воздуха.
 
-They must not drive additional core device classes, special synchronization logic, or PostgreSQL-era abstractions.
+Основной пример — **водяной тёплый пол** со своим локальным термостатом/датчиком.
 
-If TRVs are required at a site, handle them separately, for example with Home Assistant automation based on the global HEAT season.
+Каноническое поведение:
 
-This decision may be revisited only with a concrete device/use case that justifies bringing TRV behavior into the App.
+```text
+season == HEAT  → SLOW heating enabled
+season != HEAT  → SLOW heating disabled
+```
+
+Локальный SLOW `climate` thermostat получает собственный SLOW target. Физический локальный термостат выполняет реальное циклирование.
+
+SLOW target отделён от room-air target.
+
+Room hysteresis не должен постоянно включать/выключать SLOW heating.
+
+Разделение FAST/SLOW описывает тепловое поведение, а не универсальный framework, который нужно преждевременно обобщать.
 
 ---
 
-## 8. Client UI contract
+## 7. Граница TRV
 
-Client-facing room UI must remain deliberately small.
+TRV **не входят в core нового Climate App**.
 
-Default room surface:
+Они не должны порождать дополнительные core device classes, специальную синхронизацию или PostgreSQL-era abstractions.
 
-1. the room thermostat;
-2. only a small number of additional controls that have a clear everyday meaning to the client.
+Если TRV нужны на конкретном объекте, ими следует управлять отдельно, например автоматизацией Home Assistant на основании глобального сезона HEAT.
 
-Possible client-visible examples:
+Это решение можно пересмотреть только при наличии конкретного устройства/use case, который действительно оправдывает включение TRV в App.
 
-- maximum fan speed;
-- window-open reaction.
+---
 
-A setting is client-facing only when it answers an understandable household question without requiring knowledge of internal climate architecture.
+## 8. Контракт клиентского UI
 
-The following are **not normal client-facing controls**:
+Клиентский UI комнаты должен намеренно оставаться минимальным.
 
-- Heat Day / Night / Away internal targets;
-- Cool Day / Night / Away internal targets;
+Поверхность комнаты по умолчанию:
+
+1. комнатный термостат;
+2. только небольшое число дополнительных controls с понятным бытовым смыслом.
+
+Возможные клиентские параметры:
+
+- максимальная скорость вентилятора;
+- реакция на открытое окно.
+
+Параметр является клиентским только если он отвечает на понятный бытовой вопрос без знания внутренней архитектуры климатической системы.
+
+Следующее **не является обычными клиентскими controls**:
+
+- внутренние targets Heat Day / Night / Away;
+- внутренние targets Cool Day / Night / Away;
 - antifreeze target;
 - hysteresis;
 - EMA/filter parameters;
 - device target offsets;
-- SLOW engineering target unless deliberately exposed for a particular product UX;
+- инженерный SLOW target, если он специально не включён в продуктовый UX конкретного объекта;
 - fan boost threshold;
 - device capability mappings;
-- low-level safety thresholds.
+- низкоуровневые safety thresholds.
 
-The user interacts primarily with the thermostat. Automation profiles remain under the hood.
-
----
-
-## 9. Admin UI contract
-
-Engineering/system parameters remain available in Home Assistant for commissioning, debugging, and maintenance.
-
-They are rendered on a separate **DH Climate Admin** dashboard.
-
-Configuration entities should normally use:
-
-    entity_category = config
-
-and belong to the most appropriate MQTT Device:
-
-- system-wide setting → DigitalHouses Climate system Device;
-- room setting → room MQTT Device;
-- device-specific setting → the owning room Device unless a stronger future device model is justified.
-
-The Admin dashboard should be generated as automatically as practical, for example through Auto-Entities, so newly introduced configuration entities do not require manual dashboard edits.
-
-Do not add metadata solely to build an elaborate UI framework. Start with native Home Assistant properties and add only minimal stable metadata when a real filtering/sorting need appears.
+Пользователь в основном работает с термостатом. Автоматические профили остаются под капотом.
 
 ---
 
-## 10. UI discoverability metadata
+## 9. Контракт административного UI
 
-Initial rule:
+Инженерные/системные параметры остаются доступны в Home Assistant для пусконаладки, отладки и обслуживания.
 
-- native Home Assistant device ownership;
-- native entity_category: config;
-- stable DigitalHouses entity IDs / unique IDs.
+Они отображаются на отдельном dashboard **DH Climate Admin**.
 
-If client/admin filtering cannot be expressed reliably with native Home Assistant metadata, add **one minimal stable UI classification attribute** rather than a large presentation schema.
+Configuration entities обычно должны иметь:
 
-Potential future value:
+```text
+entity_category = config
+```
 
-    dh_climate_ui = client | admin
+и принадлежать наиболее подходящему MQTT Device:
 
-Do not add section/order/device metadata until the dashboard implementation demonstrates a real need.
+- system-wide setting → системный Device DigitalHouses Climate;
+- room setting → MQTT Device комнаты;
+- device-specific setting → Device соответствующей комнаты, пока более сильная модель устройства реально не понадобится.
 
----
+Admin dashboard должен собираться максимально автоматически, например через Auto-Entities, чтобы появление новых configuration entities не требовало ручного изменения dashboard.
 
-## 11. Recorder discipline
-
-Operational configuration entities are not high-frequency telemetry.
-
-Time-series sensor entities should remain lean and avoid dynamic attribute churn.
-
-Configuration metadata may contain a small number of stable attributes where needed for UI discovery, because these entities are not intended as high-frequency measurements.
-
-Do not attach rapidly changing diagnostic payloads to configuration entities.
+Не следует добавлять metadata только ради построения сложного UI framework. Сначала использовать нативные свойства Home Assistant и добавлять лишь минимальную стабильную metadata при доказанной необходимости фильтрации/сортировки.
 
 ---
 
-## 12. Device capabilities
+## 10. Metadata для обнаружения сущностей в UI
 
-The App should use Home Assistant device/entity capabilities wherever they are trustworthy, including:
+Начальное правило:
+
+- нативное владение Home Assistant Device;
+- нативный `entity_category: config`;
+- стабильные DigitalHouses entity IDs / unique IDs.
+
+Если client/admin filtering нельзя надёжно выразить нативными metadata Home Assistant, добавляется **один минимальный стабильный UI classification attribute**, а не большая presentation schema.
+
+Возможный будущий атрибут:
+
+```text
+dh_climate_ui = client | admin
+```
+
+Не добавлять section/order/device metadata, пока реализация dashboard не покажет реальную необходимость.
+
+---
+
+## 11. Дисциплина Recorder
+
+Operational configuration entities не являются высокочастотной телеметрией.
+
+Time-series sensor entities должны оставаться компактными и не создавать динамический attribute churn.
+
+Configuration metadata может содержать небольшое число стабильных attributes, если это нужно для UI discovery, поскольку эти сущности не предназначены для высокочастотных измерений.
+
+Не прикреплять к configuration entities быстро меняющиеся diagnostic payloads.
+
+---
+
+## 12. Capabilities устройств
+
+App должен использовать capabilities сущностей Home Assistant там, где они надёжны, включая:
 
 - supported HVAC modes;
 - min/max target temperature;
 - target temperature step;
 - supported fan modes.
 
-Do not duplicate discoverable capabilities into YAML without a demonstrated compatibility need.
+Не дублировать обнаруживаемые capabilities в YAML без доказанной необходимости совместимости.
 
-Hardware-specific overrides may exist when Home Assistant cannot expose the required truth reliably.
-
----
-
-## 13. Window policy
-
-Window state is device context, not room thermostat truth.
-
-Opening a window must not rewrite the room target or invent a different thermostat state.
-
-A device may be inhibited by an explicit window policy.
-
-The exact client-facing window reaction control is still subject to product design. The initial principle is:
-
-- internal policy is configurable;
-- only a simple understandable reaction, if any, is exposed to the client;
-- detailed policy remains on the Admin side.
+Hardware-specific overrides допустимы, если Home Assistant не может надёжно предоставить требуемую истину.
 
 ---
 
-## 14. Fan policy
+## 13. Политика окна
 
-The exact dynamic fan algorithm is not frozen by this manifest.
+Window state — контекст устройства, а не truth комнатного термостата.
 
-Current direction:
+Открытие окна не должно переписывать room target или придумывать другое thermostat state.
 
-    room temperature error
-    → requested fan level
-    → profile/client maximum fan constraint
-    → device-supported fan mapping
-    → desired device command
+Конкретное устройство может быть inhibited явной window policy.
 
-A large temperature error may request maximum fan, while a Night or client maximum may cap the result.
+Точная клиентская настройка реакции на окно пока остаётся продуктовым вопросом. Исходный принцип:
 
-The eventual policy should remain compact and must not create repeated per-room YAML fields.
+- внутренняя policy настраиваема;
+- клиенту, если вообще нужно, показывается только простая понятная реакция;
+- детальная policy остаётся на стороне Admin.
 
 ---
 
-## 15. Device target transformation
+## 14. Политика вентилятора
 
-Room target and physical device target are separate concepts.
+Точный динамический fan algorithm этим манифестом пока не фиксируется.
 
-Example:
+Текущее направление:
 
-    room target = 24 °C
-    device cool offset = -3 °C
-    → raw device target = 21 °C
+```text
+ошибка температуры комнаты
+→ requested fan level
+→ ограничение максимума по profile/client
+→ mapping на fan modes устройства
+→ desired device command
+```
 
-The device target is then normalized against physical device capabilities.
+Большая температурная ошибка может запрашивать maximum fan, но Night или client maximum могут ограничить результат.
 
-Target offsets are commissioning/device settings and should normally be editable through Home Assistant configuration entities and persisted in SQLite, not repeated as operational YAML values.
+Итоговая policy должна оставаться компактной и не создавать повторяющиеся per-room YAML fields.
 
 ---
 
-## 16. Safety and unresolved HEAT fallback
+## 15. Преобразование device target
 
-HEAT season has a protection requirement: the building must not freeze merely because normal room control is disabled.
+Room target и target физического устройства — разные понятия.
 
-However, loss of room-temperature truth must not cause an unsafe unconditional ON command to a dumb actuator.
+Пример:
 
-The exact fail-safe policy for missing room temperature remains intentionally open and must be resolved by actuator control authority/capability.
+```text
+room target = 24 °C
+device cool offset = -3 °C
+→ raw device target = 21 °C
+```
 
-Examples to evaluate later:
+После этого device target нормализуется по физическим capabilities устройства.
 
-- local thermostatic climate device with valid internal regulation;
-- simple binary relay without independent temperature safety;
+Target offsets относятся к commissioning/device settings и обычно должны редактироваться через HA configuration entities и сохраняться в SQLite, а не повторяться как operational YAML values.
+
+---
+
+## 16. Безопасность и нерешённый HEAT fallback
+
+В HEAT season действует защитное требование: здание не должно замёрзнуть только потому, что обычное комнатное управление отключено.
+
+Однако потеря достоверной room temperature не должна приводить к небезопасной безусловной команде ON для простого actuator.
+
+Точная fail-safe policy при отсутствии room temperature намеренно оставлена открытой и должна зависеть от control authority/capability исполнителя.
+
+Примеры, которые нужно отдельно рассмотреть:
+
+- локальное thermostatic `climate` device с собственной валидной регулировкой;
+- простой binary relay без независимой температурной защиты;
 - fallback room sensor;
-- separately configured safety thermostat.
+- отдельно настроенный safety thermostat.
 
-This question must be resolved explicitly before declaring the HEAT fail-safe complete.
+Этот вопрос должен быть явно решён до признания HEAT fail-safe завершённым.
 
 ---
 
-## 17. Generalized logical-device model
+## 17. Обобщённая модель логического устройства
 
-The existing architecture document explores future properties such as:
+Существующий архитектурный документ исследует будущие свойства:
 
 - roles;
 - inertia;
@@ -422,64 +448,66 @@ The existing architecture document explores future properties such as:
 - scope;
 - equipment ID.
 
-These concepts may remain useful for future ventilation or more complex installations, but they are **not a requirement for the current thermal App**.
+Эти концепции могут пригодиться для будущей вентиляции или сложных объектов, но **не являются требованием текущего thermal App**.
 
-Current implementation should prefer the smallest model that correctly expresses:
+Текущая реализация должна предпочитать минимальную модель, которая правильно выражает:
 
-    FAST heat
-    FAST cool
-    SLOW heat
+```text
+FAST heat
+FAST cool
+SLOW heat
+```
 
-Do not introduce a generic device framework merely because one can be designed.
+Не вводить generic device framework только потому, что его можно спроектировать.
 
 ---
 
-## 18. Explicit non-goals
+## 18. Явные non-goals
 
-The following must not return through this refactor:
+Через этот рефактор не должны вернуться:
 
-- PostgreSQL as business engine;
+- PostgreSQL как business engine;
 - SQL job orchestration;
-- Matrix/Firewall/Dispatcher/UC/Confirmator as literal runtime layers;
-- per-room YAML copies of operational targets;
+- Matrix/Firewall/Dispatcher/UC/Confirmator как буквальные runtime layers;
+- per-room YAML-копии operational targets;
 - TRV-specific core complexity;
-- UI exposing every internal parameter to the client;
-- duplicate sources of truth between YAML, MQTT retained state, and SQLite;
-- generic abstraction layers without a demonstrated current use case.
+- UI, показывающий клиенту каждый внутренний параметр;
+- конкурирующие sources of truth между YAML, MQTT retained state и SQLite;
+- generic abstraction layers без доказанного текущего use case.
 
 ---
 
-## 19. Target ownership summary
+## 19. Сводка владения
 
-| Concern | Owner |
+| Область | Владелец |
 | --- | --- |
-| Physical entity binding | App YAML/options |
-| Room sensor binding | App YAML/options |
-| FAST/SLOW membership | App YAML/options |
+| Привязка физических сущностей | App YAML/options |
+| Привязка room sensors | App YAML/options |
+| Принадлежность FAST/SLOW | App YAML/options |
 | Day/Night/Away/Antifreeze targets | SQLite + HA config entities |
 | SLOW target | SQLite + HA config entity |
 | Device target offset | SQLite + HA config entity |
 | Fan tuning/policy | SQLite + HA config entities |
-| Room thermostat target interaction | HA climate facade → SQLite |
+| Работа с room thermostat target | HA climate facade → SQLite |
 | Persistent runtime truth | SQLite |
-| MQTT retained state | UI/transport continuity |
-| Client dashboard | thermostat + minimal understandable controls |
-| Admin dashboard | complete commissioning/system controls |
+| MQTT retained state | непрерывность UI/transport |
+| Client dashboard | thermostat + минимальные понятные controls |
+| Admin dashboard | полные commissioning/system controls |
 
 ---
 
-## 20. Change rule
+## 20. Правило изменения
 
-A new configuration field should pass this test before being added to YAML:
+Перед добавлением нового поля в YAML нужно ответить:
 
-> Does this field describe **what is physically installed or how it is bound to Home Assistant**?
+> Описывает ли это поле **что физически установлено или как оно привязано к Home Assistant**?
 
-If no, it should normally be a persisted Home Assistant configuration entity instead.
+Если нет — обычно это должна быть persisted Home Assistant configuration entity.
 
-A new client-facing entity should pass this test:
+Перед добавлением новой клиентской entity нужно ответить:
 
-> Does this control answer a normal household question without exposing implementation details?
+> Отвечает ли этот control на обычный бытовой вопрос без раскрытия деталей реализации?
 
-If no, it belongs on the Admin side.
+Если нет — он относится к Admin UI.
 
-These two tests are the default guardrails against configuration and UI bloat.
+Эти два теста являются базовой защитой от разрастания конфигурации и UI.
