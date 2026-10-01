@@ -1,64 +1,56 @@
-# DigitalHouses Climate App 0.1.17 — HAOS acceptance
+# DigitalHouses Climate App 0.1.17 — приёмочное тестирование HAOS
 
-Date: 2026-09-27
+Дата: 2026-09-27
 
-## Scope
+## Область проверки
 
-Version `0.1.17` was validated on a real Home Assistant OS installation using
-the bundled acceptance harness and deterministic MQTT fixtures for physical
-actuators.
+Версия `0.1.17` проверена на реальной установке Home Assistant OS с bundled acceptance harness и детерминированными MQTT fixtures для физических actuators.
 
-The live gate covered the native room Climate UI introduced after 0.1.15 and
-re-ran the existing actuator/safety/durability acceptance set.
+Live gate покрывал нативный комнатный Climate UI, появившийся после 0.1.15, и повторно прогонял существующий набор acceptance для actuators/safety/durability.
 
-## Native room Climate result
+## Результат нативного комнатного Climate
 
-The room thermostat passed the complete native Climate sequence:
+Комнатный термостат прошёл полный нативный Climate-сценарий:
 
-- HEAT season publishes room state `heat`;
-- actual heating demand reports `hvac_action=heating`;
-- effective profile is exposed through native Climate presets;
-- selecting `night` exposes the Night target for editing;
-- selecting Home Assistant's reserved `none` returns to the automatically
-  effective profile;
-- COOL season publishes room state `cool` and `hvac_action=cooling`;
-- interseason publishes room state `off`;
-- MQTT Climate capabilities remain stable as `off / heat / cool` across the
-  season transitions so Home Assistant does not rebuild the Climate entity.
+- HEAT season публикует room state `heat`;
+- фактический heating demand показывает `hvac_action=heating`;
+- effective profile публикуется через native Climate presets;
+- выбор `night` показывает Night target для редактирования;
+- выбор зарезервированного Home Assistant `none` возвращает автоматически effective profile;
+- COOL season публикует room state `cool` и `hvac_action=cooling`;
+- межсезонье публикует room state `off`;
+- MQTT Climate capabilities остаются стабильными `off / heat / cool` при смене сезонов, чтобы Home Assistant не пересоздавал Climate entity.
 
-## Safety and actuator result
+## Результат safety и actuators
 
-The same run passed:
+Тот же run прошёл:
 
-- `device_target_out_of_range` start and recovery;
-- bounded `device_no_confirmation` retry through RETRY 2/3, RETRY 3/3 and
-  COOLDOWN 300s, followed by recovery;
-- SLOW heat floor behavior and shutdown outside HEAT season;
-- window context with selective `window_off_devices` inhibition;
-- reversible climate low-temperature heating protection without blocking COOL;
-- humidity active control, range-problem reproduction and safe power-off while
-  the stored target is outside the physical humidifier range.
+- начало и recovery `device_target_out_of_range`;
+- bounded `device_no_confirmation` retry через RETRY 2/3, RETRY 3/3 и COOLDOWN 300s с последующим recovery;
+- поведение SLOW heat floor и shutdown вне HEAT season;
+- window context с selective inhibition через `window_off_devices`;
+- low-temperature heating protection reversible climate без блокировки COOL;
+- активное humidity control, воспроизведение range-problem и безопасное power-off при target вне физического диапазона humidifier.
 
-## Durability result
+## Результат durability
 
-A Climate-App-only Supervisor backup was created before the test configuration
-was applied. The backup was restored successfully after all behavioral gates.
+До применения acceptance-конфигурации был создан Supervisor backup только Climate App. После всех behavioral gates backup успешно восстановлен.
 
-The restore preserved:
+Restore сохранил:
 
 - App options;
 - persisted room targets;
 - season thresholds;
 - App version `0.1.17`.
 
-The final runtime returned to a clean baseline with:
+Финальный runtime вернулся к чистому baseline:
 
 - room state `heat`;
 - room control action `idle`;
 - aggregate Problem `off`;
 - Problem count `0`.
 
-## Runtime acceptance result
+## Итог runtime acceptance
 
 ```text
 repository CI = green
@@ -78,11 +70,11 @@ final clean baseline = green
 runtime acceptance = PASS
 ```
 
-## Release status
+## Статус релиза
 
-Runtime acceptance and immutable publication are complete.
+Runtime acceptance и immutable publication завершены.
 
-Published release:
+Опубликованный релиз:
 
 - tag: `digitalhouses_climate_app-v0.1.17`;
 - release commit: `a346d46e990b1355fbbcc1c46ebc7d15431f66a8`;
@@ -90,8 +82,6 @@ Published release:
 - manifest digest: `sha256:641367437f7d8b1bb2796c0fee983080183cf760217a09661be80baf1b229f3d`;
 - release workflow run: `36275409307`.
 
-The release workflow validated the canonical tag, verified that the immutable
-destination was unused, published the multi-architecture GHCR image, and
-created the GitHub Release.
+Release workflow проверил canonical tag, убедился, что immutable destination не занят, опубликовал multi-architecture GHCR image и создал GitHub Release.
 
-No published immutable image version may be overwritten with different content.
+Опубликованная immutable image version не может быть перезаписана другим содержимым.
