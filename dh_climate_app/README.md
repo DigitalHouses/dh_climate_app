@@ -1,24 +1,24 @@
 # DigitalHouses Climate App
 
-`dh_climate_app` is the compact Home Assistant App for whole-house climate control.
+`dh_climate_app` — компактное приложение Home Assistant для управления климатом всего дома.
 
-It preserves the useful **behavior contract** of the previous PostgreSQL DH Climate 5 system while replacing PostgreSQL orchestration, SQL jobs, Matrix/Dispatcher/UC and related runtime machinery with a small Python control core.
+Оно сохраняет полезный **контракт поведения** предыдущей системы DH Climate 5 на PostgreSQL, но заменяет PostgreSQL-оркестрацию, SQL jobs, Matrix/Dispatcher/UC и связанную runtime-инфраструктуру компактным управляющим ядром на Python.
 
-## Architecture
+## Архитектура
 
 ```text
-Home Assistant states
+Состояния Home Assistant
         ↓
 Python Climate Core
- ├─ outdoor priority + rolling avg24
- ├─ global HEAT / COOL / OFF season
- ├─ room thermostat + profiles
- ├─ humidity control
- └─ FAST / SLOW + safety policy
+ ├─ приоритет наружных источников + скользящее avg24
+ ├─ глобальный сезон HEAT / COOL / OFF
+ ├─ комнатный термостат + профили
+ ├─ управление влажностью
+ └─ FAST / SLOW + политика безопасности
         ↓
-desired physical state
+желаемое физическое состояние
         ↓
-Home Assistant services
+сервисы Home Assistant
         ↓
 climate / switch / humidifier
 
@@ -26,82 +26,83 @@ Python Climate Core
         ↓
 MQTT Discovery
         ↓
-Home Assistant facades
+интерфейсы Home Assistant
 ```
 
-SQLite under `/data/dh_climate.db` stores only durable installation state. It is not a business-rule or orchestration engine.
+SQLite в `/data/dh_climate.db` хранит только долговременное состояние установки. SQLite не является движком бизнес-правил или оркестрации.
 
-## Implemented behavior
+## Реализованное поведение
 
-- prioritized outdoor temperature and humidity fallback chains, with active outdoor-temperature source logging and source-switch Events;
-- dedicated RAW diagnostic, EMA-filtered outdoor temperature, 24-hour average outdoor temperature, and current outdoor humidity sensors for UI/debugging;
-- Recorder-friendly MQTT facade publishing: no per-tick timestamps in entity attributes, split outdoor/weather attribute topics, and no republish when public state is unchanged;
-- one-decimal public temperature presentation while retaining full internal calculation precision;
-- weather-condition precipitation typing plus current-hour forecast amount in mm;
-- one schema-v2 MQTT Event stream for weather, season, window and Problem transitions;
-- one-minute EMA outdoor-temperature pipeline with a configurable 20-minute default time constant; the 24-hour mean uses persisted equal-cadence filtered samples while humidity retains its time-weighted rolling average;
-- global `HEAT / COOL / OFF` season;
-- writable two-threshold `heat_cool` season thermostat;
-- one MQTT Device and one room thermostat per configured room;
-- season-native room thermostat: HEAT exposes only `off / heat`, COOL only `off / cool`, and interseason only `off`; native `day / night / away` presets survive season-driven MQTT Discovery updates, while HVAC action remains explicit as `heating / cooling / idle / off`;
-- hidden configuration numbers for Heat/Cool Day/Night/Away targets plus internal Heat antifreeze target;
-- one house-wide temperature hysteresis;
-- persisted stateful room hysteresis;
-- FAST heat/cool actuators;
-- SLOW local floor thermostats with a separate comfort target;
-- optional humidifier/dehumidifier control;
-- optional room window context with per-device open-window shutdown;
-- legacy cold-weather protection for reversible heat/cool climate devices;
-- direct idempotent Home Assistant service reconciliation with delayed event-driven HA-state verification;
-- bounded retry and aggregate Problem diagnostic;
-- safe Home Assistant reconnect/snapshot handling;
-- Version and Started at diagnostics;
-- optional DigitalHouses Telemetry Protocol v1 support;
-- canonical multi-architecture GHCR publication workflow; registry-backed Supervisor delivery remains a standards-alignment gate for the Experimental channel.
+- приоритетные цепочки основных/резервных источников наружной температуры и влажности с журналированием активного источника температуры и Events при переключении источника;
+- отдельный RAW-диагностический сенсор, наружная температура после EMA-фильтра, средняя наружная температура за 24 часа и текущая наружная влажность для UI/отладки;
+- публикация MQTT-фасадов, дружественная к Recorder: без timestamp на каждом runtime tick в атрибутах сущностей, раздельные topics наружных/weather-атрибутов и отсутствие повторной публикации при неизменном публичном состоянии;
+- отображение публичных температур с точностью до одного знака при сохранении полной внутренней точности вычислений;
+- классификация типа осадков по weather condition и прогнозируемое количество осадков текущего часа в мм;
+- один MQTT Event schema v2 для переходов погоды, сезона, окон и Problem;
+- минутный pipeline наружной температуры через EMA с настраиваемой постоянной времени 20 минут по умолчанию; 24-часовое среднее строится по сохранённым отфильтрованным отсчётам с одинаковым шагом, влажность сохраняет отдельное средневзвешенное по времени avg24;
+- глобальный сезон `HEAT / COOL / OFF`;
+- изменяемый двухпороговый сезонный термостат `heat_cool`;
+- один MQTT Device и один комнатный термостат на каждую настроенную комнату;
+- сезонно-нативный комнатный термостат: HEAT показывает только `off / heat`, COOL — только `off / cool`, межсезонье — только `off`; нативные presets `day / night / away` сохраняются при сезонных обновлениях MQTT Discovery, а HVAC action явно показывает `heating / cooling / idle / off`;
+- скрытые конфигурационные Number для целей Heat/Cool Day/Night/Away и внутренней Heat antifreeze;
+- единый гистерезис температуры для дома;
+- сохраняемый stateful-гистерезис комнат;
+- исполнительные устройства FAST heat/cool;
+- локальные SLOW-термостаты тёплого пола с отдельной комфортной целью;
+- опциональное управление увлажнителем/осушителем;
+- опциональный контекст окон комнаты с отключением выбранных устройств при открытом окне;
+- унаследованная защита реверсивных heat/cool climate-устройств от отопления при слишком низкой наружной температуре;
+- прямое идемпотентное согласование через сервисы Home Assistant с отложенной event-driven проверкой состояния HA;
+- ограниченные повторы и агрегированная диагностика Problem;
+- безопасное восстановление соединения Home Assistant со свежим snapshot;
+- диагностики Version и Started at;
+- поддержка DigitalHouses Telemetry Protocol v1;
+- канонический multi-architecture workflow публикации GHCR; доставка Supervisor из registry пока остаётся отдельным gate выравнивания со стандартами Experimental-канала.
 
-## Configuration
+## Конфигурация
 
-Home Assistant App option schemas have limited nesting depth, so the external configuration is intentionally flat:
+Схемы опций Home Assistant App имеют ограниченную глубину вложенности, поэтому внешний конфиг намеренно плоский:
 
-- global scalar options at the top level;
-- comma-separated entity lists;
-- one flat record per room.
+- глобальные скалярные параметры верхнего уровня;
+- списки сущностей через запятую;
+- одна плоская запись на комнату.
 
-See [docs/CONFIG_EXAMPLE.yaml](docs/CONFIG_EXAMPLE.yaml) and [DOCS.md](DOCS.md).
+Полный пример см. в [docs/CONFIG_EXAMPLE.yaml](docs/CONFIG_EXAMPLE.yaml) и [DOCS.md](DOCS.md).
 
-## Documentation
+## Документация
 
-Development of this standalone Climate App follows the normative DigitalHouses
-application-development contracts maintained in
-[DigitalHouses/home-assistant-apps](https://github.com/DigitalHouses/home-assistant-apps/tree/main/docs/standards).
-Existing compatibility-sensitive Climate identities are not renamed implicitly;
-any such change requires a controlled migration.
+Разработка отдельного Climate App следует нормативным контрактам разработки приложений DigitalHouses из репозитория [DigitalHouses/home-assistant-apps](https://github.com/DigitalHouses/home-assistant-apps/tree/main/docs/standards).
 
-- [Product & configuration manifest](docs/PRODUCT_CONFIGURATION_MANIFEST.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Legacy behavior contract](docs/LEGACY_BEHAVIOR.md)
-- [Configuration example](docs/CONFIG_EXAMPLE.yaml)
-- [Machine events](docs/EVENTS.md)
-- [Implementation plan](docs/IMPLEMENTATION_PLAN.md)
-- [HAOS acceptance plan](HAOS_TEST_PLAN.md)
-- [Experimental update runbook](docs/EXPERIMENTAL_UPDATE_RUNBOOK.md)
+Совместимые идентификаторы Climate не переименовываются неявно; такие изменения требуют контролируемой миграции.
 
-## Experimental updates
+Документация этого проекта ведётся на русском языке.
 
-For the current source-build channel, refresh Home Assistant Store with:
+- [Манифест продукта и конфигурации](docs/PRODUCT_CONFIGURATION_MANIFEST.md)
+- [Архитектура](docs/ARCHITECTURE.md)
+- [Контракт поведения legacy-системы](docs/LEGACY_BEHAVIOR.md)
+- [Пример конфигурации](docs/CONFIG_EXAMPLE.yaml)
+- [Машинные события](docs/EVENTS.md)
+- [План реализации](docs/IMPLEMENTATION_PLAN.md)
+- [План приёмочного тестирования HAOS](HAOS_TEST_PLAN.md)
+- [Инструкция по обновлению Experimental](docs/EXPERIMENTAL_UPDATE_RUNBOOK.md)
+
+## Обновление Experimental
+
+Для текущего канала со сборкой из исходников обновите Store Home Assistant:
 
 ```bash
 ha store reload
 ```
 
-Then update the App normally. Do not use `ha store repair` as a routine
-refresh command; see [Experimental update runbook](docs/EXPERIMENTAL_UPDATE_RUNBOOK.md).
+После этого обновляйте App обычным способом. Не используйте `ha store repair` как штатную команду обновления; см. [инструкцию по обновлению Experimental](docs/EXPERIMENTAL_UPDATE_RUNBOOK.md).
 
-## Release status
+## Статус релиза
 
-Version `0.1.21` has passed bundled runtime acceptance on a real Home Assistant OS installation and has a canonical multi-architecture GHCR artifact with recorded digest provenance. The current App package still omits `image:` and therefore remains source-build delivered; registry-backed Supervisor delivery is not yet considered complete. Acceptance includes the Recorder churn guard, stable outdoor facade `last_updated` across an idle runtime tick, outdoor source failover/recovery, and the complete existing room climate, actuator safety, and App-only backup/restore regression suite. Deterministic actuator fixtures were used instead of commandeering physical HVAC equipment. See [0.1.21 HAOS acceptance](docs/ACCEPTANCE_0.1.21.md).
+Версия `0.1.21` прошла bundled runtime acceptance на реальной установке Home Assistant OS и имеет канонический multi-architecture артефакт GHCR с зафиксированным происхождением digest. Текущий пакет App всё ещё не содержит `image:`, поэтому доставляется через сборку из исходников; доставка Supervisor напрямую из registry пока не считается завершённой.
 
-Canonical release identity:
+Acceptance включает защиту Recorder от лишней записи, стабильный `last_updated` наружных фасадов между idle runtime tick, переключение/восстановление наружных источников и полный существующий регрессионный набор для комнатного климата, безопасности исполнительных устройств и backup/restore только Climate App. Для детерминированных тестов исполнительных устройств использовались fixtures вместо управления реальным HVAC. См. [HAOS acceptance 0.1.21](docs/ACCEPTANCE_0.1.21.md).
+
+Канонический идентификатор релиза:
 
 ```text
 digitalhouses_climate_app-v<version>
@@ -113,8 +114,4 @@ Production images:
 ghcr.io/digitalhouses/digitalhouses_climate_app:<version>
 ```
 
-Release publication is repo-controlled. `dh_climate_app/RELEASE` must contain
-the exact canonical tag for the version in `config.yaml`. A reviewed merge to
-`main` validates the dated changelog, creates the canonical tag, verifies that
-the immutable GHCR version tag and GitHub Release do not already exist, then
-publishes the multi-architecture image and GitHub Release.
+Публикация релиза контролируется репозиторием. `dh_climate_app/RELEASE` должен содержать точный канонический tag для версии из `config.yaml`. После проверенного merge в `main` workflow валидирует датированный changelog, создаёт канонический tag, проверяет отсутствие уже существующих immutable GHCR version tag и GitHub Release, затем публикует multi-architecture image и GitHub Release.
