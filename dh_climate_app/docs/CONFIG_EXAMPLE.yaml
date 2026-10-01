@@ -1,7 +1,8 @@
-# DigitalHouses Climate App options example.
+# Пример options DigitalHouses Climate App.
 #
-# Entity lists are comma-separated because Home Assistant App configuration
-# schemas support only limited nesting depth. Order is priority where noted.
+# Списки сущностей задаются через запятую, потому что схема конфигурации
+# Home Assistant App поддерживает ограниченную глубину вложенности.
+# Где это указано, порядок определяет приоритет.
 
 hysteresis: 0.5
 humidity_hysteresis: 3.0
@@ -12,20 +13,21 @@ we_at_home: input_boolean.we_at_home
 heat_threshold_default: 12.0
 cool_threshold_default: 20.0
 
-# Reversible climate devices configured in both FAST lists are treated as
-# AC/heat-pump devices for the legacy cold-weather heating protection.
+# Реверсивные climate-устройства, присутствующие одновременно в обоих FAST-
+# списках, считаются AC/heat-pump устройствами для legacy-защиты отопления
+# при низкой наружной температуре.
 ac_min_outdoor_temperature: -10.0
 
-# Ordered priority chain: first currently valid entity wins.
-# sensor.* uses its numeric state; weather.* uses the current temperature
-# attribute. Source changes are logged and emitted as a machine Event.
+# Упорядоченная priority-цепочка: используется первый текущий валидный источник.
+# sensor.* читается из numeric state; weather.* — из текущего атрибута temperature.
+# Переключения источника журналируются и публикуются как machine Event.
 outdoor_temperature_sources: >-
   sensor.outdoor_temperature,
   weather.primary_provider,
   weather.forecast_home_assistant
 
-# Humidity priority is independent from temperature priority.
-# weather.* uses the entity's current humidity attribute.
+# Приоритет влажности независим от приоритета температуры.
+# Для weather.* используется текущий атрибут humidity.
 outdoor_humidity_sources: >-
   sensor.outdoor_humidity,
   weather.forecast_home_assistant
@@ -34,22 +36,25 @@ rooms:
   - id: living_room
     name: Living room
 
-    # Multiple room sensors are averaged.
+    # Несколько комнатных датчиков температуры усредняются.
     temperature_sensors: >-
       sensor.living_room_temperature
 
     humidity_sensors: >-
       sensor.living_room_humidity
 
-    # Optional window contacts. Any open contact makes the room window state open.
+    # Опциональные оконные контакты. Любой открытый контакт делает window state комнаты open.
     window_sensors: >-
       binary_sensor.living_room_window
 
-    # Only listed thermal devices are forced off while a window is open.
+    # Только перечисленные тепловые устройства принудительно выключаются
+    # при открытом окне.
     window_off_devices: >-
       climate.living_room_ac
 
-    # Room air targets: room × season × profile.
+    # Цели температуры воздуха комнаты: room × season × profile.
+    # Эти поля отражают текущую v0.1-схему. По продуктовому манифесту
+    # operational targets должны быть перенесены из YAML в persisted HA config entities.
     heat_day: 23.0
     heat_night: 22.0
     heat_away: 18.0
@@ -59,8 +64,9 @@ rooms:
     cool_night: 24.0
     cool_away: 28.0
 
-    # FAST devices follow room thermostat demand.
-    # A climate entity may appear in both lists and becomes heat_cool.
+    # FAST-устройства следуют demand комнатного термостата.
+    # Одна climate entity может присутствовать в обоих списках и тогда
+    # считается heat_cool.
     fast_heat: >-
       switch.living_room_radiator,
       climate.living_room_ac
@@ -68,8 +74,10 @@ rooms:
     fast_cool: >-
       climate.living_room_ac
 
-    # SLOW accepts local climate thermostats only.
-    # All SLOW thermostats in this room use the separate floor/comfort target.
+    # SLOW принимает только локальные climate-термостаты.
+    # Все SLOW-термостаты комнаты используют отдельный floor/comfort target.
+    # По продуктовому манифесту slow_target в дальнейшем должен стать
+    # persisted HA config entity, а не operational YAML-параметром.
     slow_heat: >-
       climate.living_room_floor
 
