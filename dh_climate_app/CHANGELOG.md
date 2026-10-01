@@ -1,194 +1,193 @@
-# Changelog
+# История изменений
 
-## 0.1.26 — development
+## 0.1.26 — разработка
 
-- Added one outdoor-temperature processing path for both normal source noise and provider/sensor failover steps: selected RAW temperature → one-minute EMA → public filtered temperature → rolling avg24 → season.
-- Added configurable `outdoor_temperature_ema_minutes` with a 20-minute default and a hard one-minute minimum filter/sample cadence.
-- Added diagnostic `sensor.dh_climate_app_outdoor_temperature_raw` for debugging; RAW, filtered and avg24 temperature sensors use state-only MQTT contracts without custom dynamic attributes.
-- Rate-limited the RAW diagnostic MQTT sensor to at most one publication per minute; internal RAW temperature remains immediate for low-temperature safety, logs and source-change events.
-- Changed avg24 to the arithmetic mean of persisted one-minute filtered samples, removing dependence on irregular weather-provider update frequency. Existing pre-EMA temperature history is converted once through the EMA on upgrade.
-- Preserved hard low-temperature AC heating protection on the selected RAW temperature so smoothing cannot delay `ac_min_outdoor_temperature` safety behavior.
-- Removed Recorder history as a climate-calculation dependency; Recorder remains the observation/history surface for the public RAW, filtered and avg24 sensors.
-- Aligned the change with the normative DigitalHouses application-development standards maintained in `DigitalHouses/home-assistant-apps`.
+- Добавлен единый pipeline обработки наружной температуры и для обычного шума источника, и для ступеней при provider/sensor failover: выбранная RAW temperature → минутная EMA → публичная filtered temperature → rolling avg24 → season.
+- Добавлен настраиваемый `outdoor_temperature_ema_minutes` с default 20 минут и жёсткой минимальной cadence фильтра/samples в одну минуту.
+- Добавлен диагностический `sensor.dh_climate_app_outdoor_temperature_raw`; RAW, filtered и avg24 temperature sensors используют state-only MQTT contracts без custom dynamic attributes.
+- Публикация RAW diagnostic MQTT sensor ограничена максимум одним разом в минуту; внутренняя RAW temperature остаётся мгновенной для low-temperature safety, logs и source-change events.
+- Avg24 изменён на арифметическое среднее persisted минутных filtered samples, устраняя зависимость от нерегулярной частоты обновления weather provider. Существующая pre-EMA history при upgrade один раз преобразуется через EMA.
+- Hard low-temperature AC heating protection сохранена на выбранной RAW temperature, поэтому smoothing не может задержать safety behavior `ac_min_outdoor_temperature`.
+- Recorder history удалена из зависимостей климатического расчёта; Recorder остаётся поверхностью наблюдения/истории для публичных RAW, filtered и avg24 sensors.
+- Изменение выровнено с нормативными стандартами разработки DigitalHouses из `DigitalHouses/home-assistant-apps`.
 
-## 0.1.25 — development
+## 0.1.25 — разработка
 
-- Align Recorder bootstrap filtering with native Home Assistant Statistics: request only significant/state changes from History instead of forcing `significant_changes_only=0`.
-- This excludes Recorder rows where the outdoor-temperature state is unchanged and only attributes changed, preventing duplicate equal-valued samples from biasing the 24-hour arithmetic mean.
-- Keep the 0.1.24 startup deduplication, empty-history bootstrap, runtime sampling and humidity behavior unchanged.
-- Retain `sensor.avg_outdoor_temperature_24_temp` as the live acceptance oracle; the App avg24 must match it to one decimal after restart.
+- Bootstrap filtering Recorder выровнен с нативным Home Assistant Statistics: из History запрашиваются только significant/state changes вместо принудительного `significant_changes_only=0`.
+- Это исключает Recorder rows, где state наружной температуры не менялся, а менялись только attributes, предотвращая bias 24-hour arithmetic mean из-за повторных одинаковых samples.
+- Startup deduplication 0.1.24, bootstrap для пустой history, runtime sampling и поведение humidity оставлены без изменений.
+- `sensor.avg_outdoor_temperature_24_temp` сохранён как live acceptance oracle; после restart App avg24 должен совпадать с ним до 0.1 °C.
 
-## 0.1.24 — development
+## 0.1.24 — разработка
 
-- Fix the remaining Home Assistant Statistics parity gap on App startup: when Recorder history already contains the current canonical outdoor-temperature value, the startup snapshot no longer inserts that same value a second time into the 24-hour mean.
-- Seed the runtime transition baseline from the newest restored Recorder sample, so a genuinely different live temperature is still appended immediately while an identical startup value is deduplicated.
-- Keep the empty-history contract unchanged: the first live outdoor temperature becomes the initial `avg24` sample.
-- Add regression coverage for both startup deduplication and a real live transition immediately after Recorder bootstrap.
+- Исправлен оставшийся gap совместимости с Home Assistant Statistics при startup App: если Recorder history уже содержит текущее canonical outdoor-temperature value, startup snapshot больше не вставляет то же значение второй раз в 24-hour mean.
+- Runtime transition baseline инициализируется самым новым restored Recorder sample, поэтому действительно новое live temperature всё ещё добавляется немедленно, а идентичное startup value дедуплицируется.
+- Контракт пустой history не изменён: первая live outdoor temperature становится первым sample avg24.
+- Добавлено regression coverage для startup deduplication и настоящего live transition сразу после Recorder bootstrap.
 
-## 0.1.23 — development
+## 0.1.23 — разработка
 
-- Make outdoor temperature `avg24` follow Home Assistant Statistics `state_characteristic: mean` / `max_age: 24h` startup semantics instead of relying only on the App's private SQLite sample history.
-- On each Home Assistant snapshot/reconnect, rebuild the temperature sample window from Recorder history of `sensor.dh_climate_app_outdoor_temperature`, excluding any pre-window baseline exactly like Statistics.
-- If Recorder has no usable history, bootstrap the mean from the current live outdoor temperature; no historical value is fabricated.
-- During runtime, sample the same one-decimal public outdoor temperature transitions that Home Assistant sees, so raw source precision or source-only switches cannot skew the mean away from the Statistics oracle.
-- Keep outdoor humidity on its existing time-weighted path; season thresholds and hysteresis semantics are unchanged.
-- Extend unit/live acceptance so the temporary `sensor.avg_outdoor_temperature_24_temp` can be used as an optional 0.1 °C oracle on HAOS.
+- Outdoor temperature `avg24` приведён к startup semantics Home Assistant Statistics `state_characteristic: mean` / `max_age: 24h` вместо опоры только на private SQLite sample history App.
+- При каждом Home Assistant snapshot/reconnect temperature sample window перестраивается из Recorder history `sensor.dh_climate_app_outdoor_temperature`, исключая pre-window baseline так же, как Statistics.
+- Если Recorder не содержит пригодной history, mean bootstrap выполняется от текущей live outdoor temperature; искусственное historical value не создаётся.
+- Во время runtime sample берутся те же переходы публичной наружной температуры с одним знаком, которые видит Home Assistant, поэтому raw source precision или source-only switches не могут смещать mean относительно Statistics oracle.
+- Outdoor humidity сохраняет существующий time-weighted путь; semantics season thresholds и hysteresis не меняются.
+- Unit/live acceptance расширен так, чтобы временный `sensor.avg_outdoor_temperature_24_temp` можно было использовать как опциональный oracle 0.1 °C на HAOS.
 
-## 0.1.22 — development
+## 0.1.22 — разработка
 
-- Changed outdoor temperature `avg24` to match Home Assistant Statistics `state_characteristic: mean`: a simple arithmetic mean of persisted temperature samples inside the rolling 24-hour window.
-- Removed the pre-window baseline sample from the temperature mean so values older than 24 hours cannot influence season selection.
-- Kept outdoor humidity on the existing time-weighted rolling average; season thresholds, hysteresis and `decide_season()` semantics are unchanged.
-- Added regression coverage for irregular sample spacing, 24-hour window exclusion, SQLite restart durability and season transition from the new mean.
+- Outdoor temperature `avg24` изменён в соответствии с Home Assistant Statistics `state_characteristic: mean`: простое арифметическое среднее persisted temperature samples внутри rolling 24-hour window.
+- Pre-window baseline sample удалён из temperature mean, поэтому значения старше 24 часов не могут влиять на выбор season.
+- Outdoor humidity оставлена на существующем time-weighted rolling average; season thresholds, hysteresis и semantics `decide_season()` не изменены.
+- Добавлено regression coverage для irregular sample spacing, исключения за пределами 24-hour window, SQLite restart durability и season transition по новому mean.
 
 ## 0.1.21 — 2026-09-27
 
-- Reduced Home Assistant Recorder churn from Climate App MQTT facades by removing per-recalculation `observed_at` timestamps from entity attributes.
-- Split outdoor temperature and humidity attribute topics so one source/value change no longer updates unrelated outdoor entities; the avg24 sensor no longer carries dynamic JSON attributes.
-- Split precipitation type and precipitation amount attribute topics so weather-condition changes and hourly amount metadata no longer rewrite both entities together.
-- Rounded public season humidity attributes to one decimal, matching the existing public temperature precision and preventing insignificant floating-point drift from becoming Recorder rows.
-- Added regression coverage proving that a 10-second observation-clock advance with unchanged public climate/weather data produces zero second MQTT publication.
-- Passed bundled live HAOS acceptance on 2026-09-27, including the Recorder churn guard: stable outdoor temperature/humidity facades retained identical `last_updated` values across a runtime tick while the full source-failover, room-climate, safety, backup/restore and clean-baseline suite remained green.
+- Уменьшен Home Assistant Recorder churn от MQTT facades Climate App за счёт удаления per-recalculation timestamp `observed_at` из entity attributes.
+- Topics attributes наружной температуры и влажности разделены, поэтому изменение одного source/value больше не обновляет несвязанные outdoor entities; avg24 sensor больше не содержит dynamic JSON attributes.
+- Topics attributes precipitation type и precipitation amount разделены, поэтому weather-condition changes и hourly amount metadata больше не переписывают обе entities одновременно.
+- Public season humidity attributes округляются до одного знака, как и public temperature precision, чтобы незначимый floating-point drift не превращался в Recorder rows.
+- Добавлено regression coverage, доказывающее, что продвижение observation clock на 10 секунд при неизменных публичных climate/weather data не создаёт второй MQTT publication.
+- Bundled live HAOS acceptance успешно пройден 2026-09-27, включая Recorder churn guard: стабильные facades наружной температуры/влажности сохранили одинаковые `last_updated` между runtime ticks, при этом полный suite source failover, room climate, safety, backup/restore и clean baseline остался green.
 
 ## 0.1.20 — 2026-09-27
 
-- Added outdoor-temperature source observability: every public one-decimal temperature change is logged with the currently active source.
-- Added explicit source-switch logging and the machine Event `outdoor_temperature_source_changed` with previous/current source and temperature values.
-- Confirmed and documented the existing ordered fallback contract: `outdoor_temperature_sources` accepts mixed comma-separated `sensor.*` and `weather.*` entities; the first currently valid source wins and the preferred source is restored automatically when it recovers.
-- Extended HAOS acceptance with deterministic primary/backup outdoor sources, failover, preferred-source recovery, log assertions, and source-change Event assertions.
-- Passed bundled live HAOS acceptance on 2026-09-27, including primary→backup failover, preferred-source recovery, temperature-change logging, source-switch logging/Event payloads, the existing room-climate/safety suite, App-only backup/restore, and final clean baseline.
+- Добавлена наблюдаемость источника наружной температуры: каждое публичное изменение температуры до одного знака логируется вместе с текущим active source.
+- Добавлены явный source-switch log и machine Event `outdoor_temperature_source_changed` с previous/current source и temperature values.
+- Подтверждён и документирован существующий ordered fallback contract: `outdoor_temperature_sources` принимает смешанный список `sensor.*` и `weather.*` через запятую; побеждает первый текущий валидный source, preferred source автоматически возвращается после recovery.
+- HAOS acceptance расширен deterministic primary/backup outdoor sources, failover, preferred-source recovery, assertions логов и source-change Event.
+- Bundled live HAOS acceptance успешно пройден 2026-09-27, включая primary→backup failover, preferred-source recovery, temperature-change logging, source-switch logging/Event payloads, существующий room-climate/safety suite, App-only backup/restore и final clean baseline.
 
 ## 0.1.19 — 2026-09-27
 
-- Added a dedicated `sensor.dh_climate_app_outdoor_temperature_avg24` entity for the App's existing time-weighted 24-hour outdoor temperature average.
-- The sensor reuses the same persisted Climate Core rolling average, publishes one-decimal °C values, and does not introduce a second calculation path.
-- Passed bundled live HAOS acceptance on 2026-09-27; the new avg24 sensor matched the season facade `avg_24h_temperature` value and the full existing safety/backup suite remained green.
+- Добавлена отдельная entity `sensor.dh_climate_app_outdoor_temperature_avg24` для существующего time-weighted 24-hour average наружной температуры App.
+- Sensor использует тот же persisted rolling average Climate Core, публикует °C с точностью до одного знака и не создаёт второй calculation path.
+- Bundled live HAOS acceptance успешно пройден 2026-09-27; новый avg24 sensor совпал со значением `avg_24h_temperature` season facade, полный существующий safety/backup suite остался green.
 
 ## 0.1.18 — 2026-09-27
 
-- Restored season-specific room Climate capabilities: HEAT exposes only `off / heat`, COOL exposes only `off / cool`, and interseason exposes only `off`.
-- Preserved native `day / night / away` presets across those MQTT Discovery updates by using season-scoped retained preset-state topics and publishing the authoritative preset before the Discovery payload.
-- Removed the user-visible opposite-season HVAC mode from the room thermostat while retaining runtime rejection of invalid opposite-season commands.
-- Passed bundled live HAOS acceptance on 2026-09-27, including exact seasonal `hvac_modes`, native preset preservation across HEAT → COOL → OFF, target-range safety, bounded no-confirmation retry/cooldown, SLOW, window context, cold-weather reversible protection, humidity safe shutdown, App-only backup/restore, and final clean baseline.
+- Восстановлены season-specific capabilities room Climate: HEAT показывает только `off / heat`, COOL — только `off / cool`, interseason — только `off`.
+- Нативные presets `day / night / away` сохраняются между MQTT Discovery updates благодаря season-scoped retained preset-state topics и публикации authoritative preset до Discovery payload.
+- Из room thermostat удалён видимый пользователю HVAC mode противоположного сезона, при этом runtime rejection невалидных opposite-season commands сохранён.
+- Bundled live HAOS acceptance успешно пройден 2026-09-27, включая точные seasonal `hvac_modes`, сохранение native presets при HEAT → COOL → OFF, target-range safety, bounded no-confirmation retry/cooldown, SLOW, window context, cold-weather reversible protection, humidity safe shutdown, App-only backup/restore и final clean baseline.
 
 ## 0.1.17 — 2026-09-27
 
-- Restored native room thermostat semantics: the room state is `heat` in HEAT season, `cool` in COOL season, and `off` in interseason.
-- Restored native Climate presets for `day / night / away` instead of misusing fan-speed semantics; Home Assistant's reserved `none` command clears the temporary profile-edit overlay.
-- Restored the short-lived profile-edit overlay so an inactive profile target can be selected and edited from the room thermostat without changing the automatic day/night/away control source.
-- Kept `hvac_action` independent from HVAC mode, exposing the actual current action as `heating / cooling / idle / off`.
-- Kept room MQTT Climate capabilities stable as `off / heat / cool` across season transitions so Home Assistant does not rebuild the Climate entity and reset native preset state to `none`.
-- Hardened the HAOS acceptance harness to wait for numeric room-target and season baseline values after App update before creating the baseline backup.
-- Passed bundled live HAOS acceptance on 2026-09-27, including native room heat/cool/off state, day/night/away presets, preset reset, target range protection, bounded no-confirmation retry/cooldown, SLOW, window context, cold-weather reversible protection, humidity safe shutdown, and App-only backup/restore.
+- Восстановлена нативная семантика room thermostat: room state `heat` в HEAT season, `cool` в COOL season и `off` в interseason.
+- Восстановлены native Climate presets `day / night / away` вместо misuse fan-speed semantics; зарезервированная команда Home Assistant `none` очищает временный profile-edit overlay.
+- Восстановлен короткоживущий profile-edit overlay, позволяющий выбрать и редактировать target неактивного profile через room thermostat без изменения автоматического day/night/away control source.
+- `hvac_action` оставлен независимым от HVAC mode и показывает фактическое действие `heating / cooling / idle / off`.
+- MQTT Climate capabilities комнаты оставлены стабильными `off / heat / cool` при season transitions, чтобы Home Assistant не пересоздавал Climate entity и не сбрасывал native preset state в `none`.
+- HAOS acceptance harness усилен ожиданием numeric room-target и season baseline после App update до создания baseline backup.
+- Bundled live HAOS acceptance успешно пройден 2026-09-27, включая native room heat/cool/off state, day/night/away presets, preset reset, target range protection, bounded no-confirmation retry/cooldown, SLOW, window context, cold-weather reversible protection, humidity safe shutdown и App-only backup/restore.
 
-## 0.1.16 — unpublished candidate
+## 0.1.16 — неопубликованный кандидат
 
-- Intermediate HAOS validation candidate for the native room Climate UI. Superseded by 0.1.17 before immutable publication.
+- Промежуточный кандидат HAOS validation для native room Climate UI. Заменён 0.1.17 до immutable publication.
 
 ## 0.1.15 — 2026-09-27
 
-- Fixed humidifier shutdown safety: inactive `humidifier.*` actuators no longer carry a target-humidity command, so an out-of-range target cannot block `turn_off`.
-- Added cross-module humidity safety coverage for active target application, independent humidity disable, and inactive-device shutdown.
-- Added cold `/data` durability coverage for season thresholds, room targets/control state, humidity targets/control state, hysteresis continuity, and telemetry installation identity.
-- Added bundled actuator/safety acceptance coverage for SLOW floor behavior, window inhibition, cold-weather reversible climate protection, target range blocking, and retry/cooldown recovery.
-- Passed bundled live HAOS runtime acceptance on 2026-09-27, including target range blocking, bounded no-confirmation retry/cooldown recovery, SLOW, window context, cold-weather protection, humidity safe shutdown, and Climate-App-only Supervisor backup/restore.
-## 0.1.14 — development
+- Исправлена безопасность shutdown humidifier: неактивные `humidifier.*` actuators больше не несут target-humidity command, поэтому out-of-range target не может заблокировать `turn_off`.
+- Добавлено cross-module humidity safety coverage для active target application, независимого отключения humidity и shutdown неактивного device.
+- Добавлено cold `/data` durability coverage для season thresholds, room targets/control state, humidity targets/control state, hysteresis continuity и telemetry installation identity.
+- Добавлено bundled actuator/safety acceptance coverage для SLOW floor, window inhibition, cold-weather reversible climate protection, target range blocking и retry/cooldown recovery.
+- Bundled live HAOS runtime acceptance успешно пройден 2026-09-27, включая target range blocking, bounded no-confirmation retry/cooldown recovery, SLOW, window context, cold-weather protection, humidity safe shutdown и Supervisor backup/restore только Climate App.
 
-- Separated Home Assistant service-call success from device-state verification: successful calls now log `SENT`, never `CONFIRMED`.
-- Added event-driven delayed HA-state verification: post-command `state_changed` starts a settle window and only the later matching state becomes `VERIFIED_HA`.
-- Added delayed drift detection for a previously stable actuator state before corrective commands are sent.
-- Kept a bounded no-event watchdog/retry path and gave the final retry attempt its full confirmation window before entering cooldown.
-- Reset transient verification evidence across Home Assistant disconnects.
+## 0.1.14 — разработка
 
-## 0.1.13 — development
+- Успешный Home Assistant service call отделён от verification device state: успешные calls теперь логируются как `SENT`, никогда как `CONFIRMED`.
+- Добавлен event-driven delayed HA-state verification: post-command `state_changed` запускает settle window, и только последующий matching state становится `VERIFIED_HA`.
+- Добавлен delayed drift detection для ранее стабильного actuator state до отправки corrective commands.
+- Сохранён bounded no-event watchdog/retry path; последняя попытка retry получает полное confirmation window до перехода в cooldown.
+- Transient verification evidence сбрасывается при disconnect Home Assistant.
 
-- Serialized the best-effort `script.write2climatelog` mirror through one asynchronous queue so `climate.log` preserves decision order.
-- The authoritative App log remains immediate and climate control remains non-blocking.
-- Added a bounded mirror queue to prevent an unavailable local log script from creating unbounded memory growth.
+## 0.1.13 — разработка
 
-## 0.1.12 — development
+- Best-effort mirror `script.write2climatelog` сериализован через одну asynchronous queue, чтобы `climate.log` сохранял порядок решений.
+- Authoritative App log остаётся мгновенным, climate control — non-blocking.
+- Добавлена bounded mirror queue, предотвращающая неограниченный рост памяти при недоступном local log script.
 
-- Fixed season range updates from the Home Assistant `heat_cool` thermostat: paired lower/upper MQTT commands are now coalesced and validated atomically.
-- The order of `target_temp_low` / `target_temp_high` messages no longer matters.
-- Single-threshold edits remain supported and invalid final ranges are still rejected.
+## 0.1.12 — разработка
 
-## 0.1.11 — development
+- Исправлены обновления season range из Home Assistant thermostat `heat_cool`: paired lower/upper MQTT commands теперь coalesced и валидируются атомарно.
+- Порядок сообщений `target_temp_low` / `target_temp_high` больше не важен.
+- Single-threshold edits остаются поддержанными, invalid final ranges по-прежнему отклоняются.
 
-- Added dual-channel Climate diagnostic logging: authoritative App log plus asynchronous best-effort mirroring to local `script.write2climatelog`.
-- Added transition-based room control logging and FAST/SLOW execution traces for desired/actual state, service calls, bounded retries, cooldown and confirmation without per-tick already-correct spam.
-- Climate-log mirror failures are isolated from climate control, retries and Problem state.
-- Actuator Problems now preserve `room_id` where applicable, so existing `problem_started` / `problem_recovered` events have enough room context for future local notifications.
+## 0.1.11 — разработка
 
-## 0.1.10 — development
+- Добавлен dual-channel Climate diagnostic logging: authoritative App log + asynchronous best-effort mirror в локальный `script.write2climatelog`.
+- Добавлено transition-based room control logging и FAST/SLOW execution traces для desired/actual state, service calls, bounded retries, cooldown и confirmation без per-tick already-correct spam.
+- Ошибки climate-log mirror изолированы от climate control, retries и Problem state.
+- Actuator Problems сохраняют `room_id`, где применимо, поэтому существующие events `problem_started` / `problem_recovered` содержат достаточно room context для будущих local notifications.
 
-- Standardized every public App temperature value to one decimal place.
-- Internal climate calculations retain full precision; rounding is applied only at Home Assistant, MQTT and machine-event presentation boundaries.
-- Rounded current/avg24 outdoor temperature, season thresholds and temperature fields in semantic events.
+## 0.1.10 — разработка
 
-## 0.1.9 — development
+- Все публичные temperature values App стандартизированы до одного знака.
+- Внутренние climate calculations сохраняют полную precision; округление применяется только на границах presentation Home Assistant, MQTT и machine events.
+- Округляются current/avg24 outdoor temperature, season thresholds и temperature fields semantic events.
 
-- Added dedicated UI sensors for current outdoor temperature and humidity.
-- Outdoor UI sensors use the same prioritized/fallback sources as Climate Core and never replace current values with avg24 values.
-- Added source and avg24 context as sensor attributes.
+## 0.1.9 — разработка
 
-## 0.1.8 — development
+- Добавлены отдельные UI sensors для current outdoor temperature и humidity.
+- Outdoor UI sensors используют те же priority/fallback sources, что Climate Core, и никогда не заменяют current values значениями avg24.
+- Source и avg24 context добавлены в sensor attributes.
 
-- Changed interseason room climate behavior from unavailable to readable-Off: current room temperature remains visible, no seasonal target is exposed, and room thermostat commands are ignored while season is OFF.
-- Added normalized precipitation state from configured `weather.*` sources: current precipitation type plus current-hour forecast precipitation amount in millimetres.
-- Added one schema-v2 MQTT Event entity for semantic Climate transitions, initially covering season, precipitation, windows and aggregate Problem start/recovery; events use QoS 1, retain=false and are not replayed after reconnect.
-- Added explicit rain/snow/mixed/hail classification and rain↔snow transition events without generating routine thermostat-cycle event noise.
+## 0.1.8 — разработка
 
-## 0.1.7 — development
+- Поведение room climate в interseason изменено с unavailable на readable-Off: current room temperature остаётся видимой, seasonal target не публикуется, а room thermostat commands игнорируются при season OFF.
+- Добавлено normalized precipitation state из настроенных `weather.*` sources: current precipitation type + forecast precipitation amount текущего часа в миллиметрах.
+- Добавлена одна MQTT Event entity schema v2 для semantic Climate transitions, первоначально season, precipitation, windows и aggregate Problem start/recovery; events используют QoS 1, retain=false и не replay после reconnect.
+- Добавлена явная классификация rain/snow/mixed/hail и events переходов rain↔snow без генерации шума обычных thermostat cycles.
 
-- Fixed migration of profile target Number availability after the 0.1.6 interseason change. Existing MQTT Discovery entities now explicitly replace the old room-dependent availability list with system-only availability, so target settings remain editable while room thermostats are unavailable between seasons.
+## 0.1.7 — разработка
 
-## 0.1.6 — development
+- Исправлена migration availability profile target Number после interseason-изменения 0.1.6. Существующие MQTT Discovery entities теперь явно заменяют старый room-dependent availability list на system-only availability, поэтому target settings остаются редактируемыми, пока room thermostats unavailable между сезонами.
 
-- Room thermostats are now deliberately unavailable while global season is `OFF`, preventing users from changing an inactive thermostat during interseason.
-- Profile target configuration Number entities remain available independently so seasonal targets can still be prepared in advance.
+## 0.1.6 — разработка
 
-## 0.1.5 — development
+- Room thermostats намеренно unavailable при global season `OFF`, чтобы пользователи не меняли неактивный thermostat в межсезонье.
+- Profile target configuration Number entities остаются доступны независимо, чтобы seasonal targets можно было подготовить заранее.
 
-- Reworked room climate facade for Apple Home/HomeKit: stable `off / auto` HVAC modes, no fan or preset semantics, and the thermostat target always edits the currently active `day / night / away` profile.
-- Separated the user-facing scheduled target from the internal HEAT antifreeze control target, so turning a room Off does not expose the antifreeze setpoint as the normal thermostat target.
-- Replaced the temporary Profile select with hidden-by-default configuration Number entities for Heat/Cool Day/Night/Away targets and Heat antifreeze target; the old retained select Discovery entry is removed automatically on upgrade.
+## 0.1.5 — разработка
 
-## 0.1.4 — development
+- Room climate facade переработан для Apple Home/HomeKit: стабильные HVAC modes `off / auto`, без fan/preset semantics; thermostat target всегда редактирует текущий активный profile `day / night / away`.
+- User-facing scheduled target отделён от internal HEAT antifreeze control target, поэтому выключение комнаты не показывает antifreeze setpoint как normal thermostat target.
+- Временный Profile select заменён hidden-by-default configuration Number entities для Heat/Cool Day/Night/Away targets и Heat antifreeze target; старая retained select Discovery entry автоматически удаляется при upgrade.
 
-- Removed room profiles from MQTT Climate presets entirely. Each room now exposes a separate `select` Profile entity with exactly `day / night / away`, so the thermostat remains a plain native climate entity and Home Assistant no longer injects the reserved `none` preset into its UI.
+## 0.1.4 — разработка
 
-## 0.1.3 — development
+- Room profiles полностью удалены из MQTT Climate presets. Каждая комната публикует отдельную entity `select` Profile ровно с `day / night / away`, чтобы thermostat оставался обычной native climate entity и Home Assistant больше не добавлял reserved preset `none` в UI.
 
-- Treat Home Assistant's reserved MQTT climate preset `none` as a reset of the temporary room profile overlay, returning to the automatically selected `day / night / away` profile.
+## 0.1.3 — разработка
 
-## 0.1.2 — development
+- Reserved MQTT climate preset `none` Home Assistant трактуется как reset временного room profile overlay с возвратом к автоматически выбранному profile `day / night / away`.
 
-- Replaced room thermostat `fan_modes` with native climate `preset_modes` (`day / night / away`) so Apple Home and other thermostat consumers keep native thermostat semantics; `antifreeze` remains internal protection.
+## 0.1.2 — разработка
 
-- Added direct `weather.*` support for outdoor temperature and humidity sources using current weather attributes.
-
-- Established the compact Python architecture derived from DH Climate 5 behavior without PostgreSQL orchestration, Matrix, Dispatcher, UC, Confirmator or SQL business logic.
-- Added Home Assistant Supervisor REST/WebSocket input adapter with subscribe-before-snapshot reconnect handling and stale-event protection.
-- Added MQTT reconnect recovery that restores subscriptions, retained Discovery/state and online availability after broker restarts.
-- Fixed the MQTT startup/reconnect subscription-set race observed on real HAOS.
-- Enabled the Supervisor API permission required by the startup timezone lookup.
-- Added independent prioritized outdoor temperature and humidity source chains.
-- Added persisted, time-weighted rolling 24-hour outdoor averages and global `HEAT / COOL / OFF` season calculation.
-- Added MQTT Discovery two-threshold `heat_cool` season thermostat with persisted heating/cooling season thresholds.
-- Added one MQTT Device and room `climate` facade per configured room.
-- Added `day / night / away / antifreeze` target profiles and the legacy short-lived profile-edit overlay.
-- Added one house-wide temperature hysteresis and persisted stateful room thermostat action.
-- Added direct FAST heat/cool actuator policy for Home Assistant `switch` and `climate` entities.
-- Added SLOW floor/comfort control through local `climate` thermostats with a separate SLOW target.
-- Added optional per-room humidifier/dehumidifier facade and direct actuator control with separate humidity hysteresis.
-- Added optional room window-contact aggregation and per-device open-window shutdown policy.
-- Added legacy cold-weather heating protection for reversible FAST climate devices, defaulting to `-10 °C`.
-- Added idempotent Home Assistant service reconciliation, capability/range checks, bounded retry and cooldown.
-- Added aggregate `Problem` diagnostic plus `Version` and `Started at` diagnostics.
-- Added fail-safe behavior for unavailable outdoor temperature, room sensors, Home Assistant disconnects and unavailable presence input.
-- Added lightweight SQLite persistence for season thresholds, outdoor samples, room targets, humidity targets and hysteresis continuity.
-- Added opt-in DigitalHouses Telemetry Protocol v1 client with persistent installation credentials, daily jittered heartbeat, one-hour failure backoff and authenticated deletion.
-- Added flat Supervisor-compatible App configuration, English/Russian translations and user documentation.
-- Added immutable multi-architecture GHCR delivery workflow and canonical release-tag validation.
-- Added architecture-specific Home Assistant image labels so amd64 and aarch64 manifest variants report the canonical HA architecture names.
-- Added automated unit, contract, shell, Python compile and container-build CI validation.
+- `fan_modes` room thermostat заменены на native climate `preset_modes` (`day / night / away`), чтобы Apple Home и другие thermostat consumers сохраняли native thermostat semantics; `antifreeze` остаётся внутренней защитой.
+- Добавлена прямая поддержка `weather.*` как sources наружной температуры и влажности через current weather attributes.
+- Создана компактная Python architecture на основе поведения DH Climate 5 без PostgreSQL orchestration, Matrix, Dispatcher, UC, Confirmator и SQL business logic.
+- Добавлен входной адаптер Home Assistant Supervisor REST/WebSocket с reconnect по subscribe-before-snapshot и защитой от stale events.
+- Добавлено recovery MQTT reconnect с восстановлением subscriptions, retained Discovery/state и online availability после restart broker.
+- Исправлена race condition startup/reconnect MQTT subscription set, наблюдавшаяся на реальном HAOS.
+- Включено Supervisor API permission, необходимое для startup timezone lookup.
+- Добавлены независимые priority chains sources наружной температуры и влажности.
+- Добавлены persisted rolling 24-hour outdoor averages и расчёт глобального season `HEAT / COOL / OFF`.
+- Добавлен MQTT Discovery season thermostat `heat_cool` с двумя thresholds и persisted thresholds сезонов heating/cooling.
+- Добавлены отдельный MQTT Device и room `climate` facade для каждой настроенной комнаты.
+- Добавлены target profiles `day / night / away / antifreeze` и legacy short-lived profile-edit overlay.
+- Добавлен один общий temperature hysteresis дома и persisted stateful room thermostat action.
+- Добавлена прямая FAST heat/cool policy для Home Assistant `switch` и `climate` entities.
+- Добавлен SLOW floor/comfort control через local `climate` thermostats с отдельным SLOW target.
+- Добавлены optional per-room humidifier/dehumidifier facade и direct actuator control с отдельным humidity hysteresis.
+- Добавлены optional aggregation window contacts комнаты и per-device open-window shutdown policy.
+- Добавлена legacy cold-weather heating protection для reversible FAST climate devices с default `-10 °C`.
+- Добавлены idempotent Home Assistant service reconciliation, capability/range checks, bounded retry и cooldown.
+- Добавлены aggregate `Problem` diagnostic, а также diagnostics `Version` и `Started at`.
+- Добавлено fail-safe поведение для unavailable outdoor temperature, room sensors, disconnect Home Assistant и unavailable presence input.
+- Добавлена lightweight SQLite persistence для season thresholds, outdoor samples, room targets, humidity targets и hysteresis continuity.
+- Добавлен client DigitalHouses Telemetry Protocol v1 с persistent installation credentials, daily jittered heartbeat, one-hour failure backoff и authenticated deletion.
+- Добавлены плоская Supervisor-compatible App configuration, английская/русская локализация UI и пользовательская документация.
+- Добавлен immutable multi-architecture GHCR delivery workflow и validation canonical release tag.
+- Добавлены architecture-specific Home Assistant image labels, чтобы manifest variants amd64 и aarch64 публиковали canonical HA architecture names.
+- Добавлена автоматическая CI validation unit, contract, shell, Python compile и container build.
