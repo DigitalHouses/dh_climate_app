@@ -1,64 +1,57 @@
-# DigitalHouses Climate App 0.1.21 — HAOS acceptance
+# DigitalHouses Climate App 0.1.21 — приёмочное тестирование HAOS
 
-Date: 2026-09-27
+Дата: 2026-09-27
 
-## Scope
+## Область проверки
 
-Version `0.1.21` was validated on a real Home Assistant OS installation using
-the bundled acceptance harness.
+Версия `0.1.21` проверена на реальной установке Home Assistant OS с bundled acceptance harness.
 
-This release reduces Home Assistant Recorder churn from MQTT facade entities
-without disabling useful history.
+Этот релиз уменьшает лишние записи Home Assistant Recorder от MQTT facade entities, не отключая полезную историю.
 
-## Recorder churn result
+## Результат Recorder churn
 
-The live run confirmed:
+Live run подтвердил:
 
-- `climate.dh_climate_app_season` no longer exposes a per-recalculation
-  `observed_at` attribute;
-- outdoor temperature and humidity facades expose stable source attributes;
-- with unchanged values and sources, both outdoor facade entities retained
-  exactly the same Home Assistant `last_updated` values across a runtime tick;
-- the new acceptance gate reported:
+- `climate.dh_climate_app_season` больше не содержит per-recalculation атрибут `observed_at`;
+- facades наружной температуры и влажности содержат стабильные source attributes;
+- при неизменных values и sources обе outdoor facade entities сохранили ровно те же `last_updated` Home Assistant между runtime ticks;
+- новый acceptance gate сообщил:
   `PASS stable outdoor facades do not update every runtime tick`;
-- source failover and source recovery still update the facades when they
-  actually change;
-- avg24, room climate and actuator behavior are unaffected.
+- source failover и source recovery продолжают обновлять facades, когда данные действительно меняются;
+- avg24, room climate и поведение actuators не затронуты.
 
-The repository regression suite also proves that advancing only the internal
-observation clock by ten seconds causes zero second MQTT publication for both
-outdoor/season state and weather precipitation state.
+Regression suite репозитория также доказывает, что продвижение только внутреннего observation clock на десять секунд при неизменных публичных climate/weather данных не создаёт второй MQTT publication ни для outdoor/season state, ни для weather precipitation state.
 
-## MQTT contract changes
+## Изменения MQTT contract
 
-The release removes synthetic state churn by:
+Релиз устраняет синтетический state churn:
 
-- removing `observed_at` from season, outdoor and weather entity attributes;
-- splitting outdoor temperature and humidity attribute topics;
-- removing dynamic JSON attributes from the avg24 sensor;
-- splitting precipitation type and amount attribute topics;
-- rounding public season humidity attributes to one decimal;
-- clearing the legacy shared retained attribute topics during startup.
+- удалён `observed_at` из attributes season, outdoor и weather entities;
+- topics attributes температуры и влажности разделены;
+- из avg24 sensor удалены dynamic JSON attributes;
+- topics attributes precipitation type и amount разделены;
+- public season humidity attributes округляются до одного знака;
+- legacy shared retained attribute topics очищаются на startup.
 
-## Regression result
+## Результат регрессии
 
-The bundled live run also passed:
+Bundled live run также прошёл:
 
-- dedicated outdoor temperature avg24 sensor;
-- outdoor primary/backup failover and preferred-source recovery;
-- outdoor temperature/source logging and source-change Event;
-- native room HEAT / COOL / OFF semantics;
-- native day / night / away presets;
+- отдельный outdoor temperature avg24 sensor;
+- failover primary/backup и preferred-source recovery;
+- logging outdoor temperature/source и source-change Event;
+- нативную семантику room HEAT / COOL / OFF;
+- native presets day / night / away;
 - target-range safety;
 - bounded no-confirmation retry/cooldown recovery;
 - SLOW floor control;
-- window context and selective inhibition;
-- cold-weather reversible climate protection;
-- humidity active path and safe shutdown;
-- Climate-App-only Supervisor backup/restore;
-- final clean baseline with aggregate Problem off.
+- window context и selective inhibition;
+- cold-weather protection reversible climate;
+- активный humidity path и safe shutdown;
+- Supervisor backup/restore только Climate App;
+- финальный clean baseline с aggregate Problem off.
 
-## Runtime acceptance result
+## Итог runtime acceptance
 
 ```text
 repository CI = green
@@ -73,11 +66,11 @@ final clean baseline = green
 runtime acceptance = PASS
 ```
 
-## Release status
+## Статус релиза
 
-Runtime acceptance and immutable publication are complete.
+Runtime acceptance и immutable publication завершены.
 
-Published release:
+Опубликованный релиз:
 
 - tag: `digitalhouses_climate_app-v0.1.21`;
 - release commit: `0c53d1ffb11d205daffd08ee9ae836ecaa508a01`;
@@ -85,4 +78,4 @@ Published release:
 - manifest digest: `sha256:5870a9e2791fadc76165f2a5c604cf7d1f84d7448de5e5401721be2a63045349`;
 - release workflow run: `36282433114`.
 
-No published immutable image version may be overwritten with different content.
+Опубликованная immutable image version не может быть перезаписана другим содержимым.
