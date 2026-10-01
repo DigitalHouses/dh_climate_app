@@ -1,68 +1,66 @@
-# DH Climate 5 → DH Climate App migration matrix
+# Матрица миграции DH Climate 5 → DH Climate App
 
-Status: architecture audit  
+Статус: архитектурный аудит  
 Legacy source: `DigitalHouses/dh_climate_1`  
 New source: `DigitalHouses/dh_climate_app`
 
-The migration rule is **behavioral compatibility at the Home Assistant boundary**, not source-code or database compatibility.
+Правило миграции — **совместимость поведения на границе Home Assistant**, а не совместимость исходного кода или базы данных.
 
-## Architectural mapping
+## Архитектурное соответствие
 
-| Legacy PostgreSQL Climate 5 | New Climate App | Decision |
+| Legacy PostgreSQL Climate 5 | Новый Climate App | Решение |
 | --- | --- | --- |
-| PostgreSQL business engine | Python domain core | Replace |
-| `t_system_settings` business/UI settings | App options + small SQLite runtime state | Simplify |
-| append-only room/outdoor truth tables | current HA state cache + only required rolling/persistent state | Simplify |
-| system jobs | direct event-driven recomputation | Remove |
-| handlers | Python domain methods | Replace |
-| Matrix | deterministic device-policy compiler | Replace |
-| Firewall | explicit device safety predicates | Replace |
-| Decision plan/history | desired device state | Replace |
-| Dispatcher | direct reconcile loop | Replace |
-| UC command queue | bounded idempotent service calls | Remove |
-| Universal Controller | `DeviceExecutor` | Replace |
-| Confirmator | HA state reconciliation + retry/cooldown | Replace |
-| UC Supervisor | runtime health + Problem diagnostic | Replace |
-| SQL runtime sessions/component status | Version / Started at / Problem | Simplify |
-| PostgreSQL admin/business procedures | App configuration + native HA controls | Remove |
-| HA MQTT facade workers | MQTT Discovery facade | Preserve behavior |
+| PostgreSQL business engine | доменное ядро Python | заменить |
+| `t_system_settings` business/UI settings | App options + компактное runtime state в SQLite | упростить |
+| append-only room/outdoor truth tables | текущий HA state cache + только необходимое rolling/persistent state | упростить |
+| system jobs | прямой event-driven пересчёт | удалить |
+| handlers | доменные методы Python | заменить |
+| Matrix | детерминированный компилятор device policy | заменить |
+| Firewall | явные device safety predicates | заменить |
+| Decision plan/history | desired device state | заменить |
+| Dispatcher | прямой reconcile loop | заменить |
+| UC command queue | ограниченные идемпотентные service calls | удалить |
+| Universal Controller | `DeviceExecutor` | заменить |
+| Confirmator | сверка HA state + retry/cooldown | заменить |
+| UC Supervisor | runtime health + диагностика Problem | заменить |
+| SQL runtime sessions/component status | Version / Started at / Problem | упростить |
+| PostgreSQL admin/business procedures | App configuration + нативные HA controls | удалить |
+| HA MQTT facade workers | MQTT Discovery facade | сохранить поведение |
 
-## Outdoor contour
+## Наружный контур
 
-| Legacy behavior | New implementation |
+| Legacy-поведение | Новая реализация |
 | --- | --- |
-| provider priority | ordered `outdoor_temperature_sources` / `outdoor_humidity_sources` |
-| temperature/humidity selection | independent first-valid-source selection |
-| current outdoor truth | selected live source |
-| avg24 | time-weighted rolling 24h stored in SQLite |
+| приоритет provider | упорядоченные `outdoor_temperature_sources` / `outdoor_humidity_sources` |
+| выбор temperature/humidity | независимый выбор первого валидного источника |
+| текущая наружная truth | выбранный live source |
+| avg24 | текущий утверждённый rolling 24h алгоритм с сохранением состояния |
 | season | `HEAT / COOL / OFF` |
-| season thresholds | persisted lower/upper targets |
-| outdoor thermostat | MQTT `climate` `heat_cool` facade |
-| source unavailable | fallback; if all live temperature sources fail, force season OFF |
+| season thresholds | сохраняемые нижний/верхний targets |
+| outdoor thermostat | MQTT `climate` facade `heat_cool` |
+| source unavailable | fallback; если все live temperature sources недоступны — season OFF |
 
-The new App intentionally makes the rolling average time-weighted so sensor update frequency cannot bias the result.
+## Комнатный контур
 
-## Room contour
-
-| Legacy behavior | New implementation |
+| Legacy-поведение | Новая реализация |
 | --- | --- |
-| latest values from enabled room sensors | latest HA state of configured sensors |
-| room temperature | mean of currently valid configured temperature sensors |
-| room humidity | mean of currently valid configured humidity sensors |
-| global season constrains room mode | retained |
-| day/night/away/antifreeze | retained |
-| room target by season/profile | retained in SQLite |
-| HEAT + room off → internal antifreeze | retained |
-| COOL + room off → true off | retained |
-| profile-edit overlay | retained with idle timeout |
-| thermostat facade | one MQTT `climate` entity per room |
-| all rooms under one legacy device | changed: one MQTT Device per room for HA Area assignment |
+| последние значения включённых room sensors | последние HA states настроенных sensors |
+| room temperature | среднее текущих валидных настроенных temperature sensors |
+| room humidity | среднее текущих валидных настроенных humidity sensors |
+| global season ограничивает room mode | сохранено |
+| day/night/away/antifreeze | сохранено |
+| room target по season/profile | сохраняется в SQLite |
+| HEAT + room off → internal antifreeze | сохранено |
+| COOL + room off → настоящий off | сохранено |
+| profile-edit overlay | сохранён с idle timeout |
+| thermostat facade | одна MQTT `climate` entity на комнату |
+| все комнаты под одним legacy device | изменено: один MQTT Device на комнату для назначения HA Area |
 
-## Hysteresis
+## Гистерезис
 
-Legacy storage contained separate room and outdoor hysteresis settings. Current product decision intentionally replaces them with one house-wide temperature hysteresis.
+Legacy storage содержал отдельные room и outdoor hysteresis. Текущее продуктовое решение намеренно использует один общий гистерезис температуры дома.
 
-Room thermostat behavior is stateful and symmetric:
+Поведение комнатного термостата stateful и симметрично:
 
 ```text
 HEAT
@@ -76,11 +74,11 @@ T <= target - h  -> idle
 inside band       -> keep previous state
 ```
 
-The previous room action is persisted so restart does not collapse the deadband state.
+Предыдущее действие комнаты сохраняется, чтобы restart не сбрасывал состояние внутри deadband.
 
-## Window context
+## Контекст окна
 
-Legacy room window truth:
+Legacy truth окна комнаты:
 
 ```text
 any configured contact open             -> open
@@ -88,7 +86,7 @@ else any configured contact unavailable -> unknown
 otherwise                                -> closed
 ```
 
-Legacy Matrix applied device-type window policies. The new App keeps the useful `turn_off` behavior without a Matrix subsystem:
+Legacy Matrix применяла политики окна по типам устройств. Новый App сохраняет полезное поведение `turn_off` без отдельной Matrix:
 
 ```text
 room window=open
@@ -96,64 +94,64 @@ room window=open
 -> actuator desired state=off
 ```
 
-Window state does not rewrite room thermostat demand.
+Состояние окна не переписывает demand комнатного термостата.
 
-## Device execution
+## Управление устройствами
 
 ### FAST
 
-Legacy Matrix/Decision/Dispatcher/UC selection and command lifecycle becomes:
+Legacy-цепочка Matrix/Decision/Dispatcher/UC заменяется:
 
 ```text
 room action
--> device function match
+-> совпадение функции устройства
 -> safety predicates
 -> desired state
--> compare with actual HA state
--> service call only when different
+-> сравнение с actual HA state
+-> service call только при различии
 ```
 
-Supported domains: `switch`, `climate`.
+Поддерживаемые домены: `switch`, `climate`.
 
-A climate entity present in both `fast_heat` and `fast_cool` is a reversible heat/cool device.
+Climate entity, присутствующая одновременно в `fast_heat` и `fast_cool`, считается реверсивным heat/cool устройством.
 
 ### SLOW
 
-The new product requirement adds an explicit high-inertia class.
+Новое продуктовое требование добавляет явный класс с высокой тепловой инерцией.
 
-SLOW v0.1 accepts only local physical `climate` thermostats:
+SLOW v0.1 принимает только локальные физические `climate`-термостаты:
 
 ```text
 HEAT -> mode=heat, target=slow_target
 COOL/OFF -> mode=off
 ```
 
-The local thermostat and its own floor/slab probe remain the final cycling and safety loop. SLOW does not follow room-air thermostat cycling.
+Локальный термостат и его собственный floor/slab probe остаются финальным контуром циклирования и безопасности. SLOW не следует циклам комнатного термостата по температуре воздуха.
 
-## Cold-weather AC heating protection
+## Защита AC-отопления при низкой наружной температуре
 
-Legacy Firewall prohibited AC heating below `ac_min_outdoor_temperature`, default `-10 °C`.
+Legacy Firewall запрещал AC heating ниже `ac_min_outdoor_temperature`, по умолчанию `-10 °C`.
 
-New mapping:
+Новое соответствие:
 
-- reversible FAST `climate` = same entity in both `fast_heat` and `fast_cool`;
-- during heating, if live outdoor temperature is below `ac_min_outdoor_temperature`, that device is held off;
-- other eligible heat sources are unaffected.
+- reversible FAST `climate` = одна и та же entity в `fast_heat` и `fast_cool`;
+- при heating, если live outdoor temperature ниже `ac_min_outdoor_temperature`, это устройство удерживается off;
+- остальные допустимые heat sources не затрагиваются.
 
-## Humidity
+## Влажность
 
-Humidity control in the new App is intentionally simpler and native to HA:
+Управление влажностью в новом App намеренно проще и нативно для HA:
 
-- optional per room;
-- `humidifier` or `dehumidifier`;
-- native MQTT `humidifier` facade;
-- persisted target;
-- separate RH hysteresis;
-- direct `switch` or `humidifier` actuator execution.
+- опционально для каждой комнаты;
+- `humidifier` или `dehumidifier`;
+- нативный MQTT `humidifier` facade;
+- сохраняемый target;
+- отдельный RH hysteresis;
+- прямое управление actuator `switch` или `humidifier`.
 
-## Persistence boundary
+## Граница persistence
 
-SQLite stores only state that must survive restart:
+SQLite хранит только состояние, которое должно переживать restart:
 
 - season thresholds;
 - rolling outdoor samples;
@@ -162,32 +160,32 @@ SQLite stores only state that must survive restart:
 - previous room HVAC action;
 - humidity target/control state.
 
-It does **not** contain jobs, dispatcher queues, command lifecycle tables, Matrix candidates, Firewall results, SQL procedures, or business orchestration.
+В SQLite **нет** jobs, dispatcher queues, command lifecycle tables, Matrix candidates, Firewall results, SQL procedures или business orchestration.
 
-## Reliability mapping
+## Соответствие механизмов надёжности
 
-| Legacy mechanism | New mechanism |
+| Legacy-механизм | Новый механизм |
 | --- | --- |
-| event/job append chain | HA websocket state events |
-| current SQL views | timestamp-protected state cache |
+| event/job append chain | HA WebSocket state events |
+| current SQL views | state cache с защитой timestamp |
 | UC retries | bounded executor retry |
 | Confirmator | desired-vs-actual reconciliation |
-| Supervisor | reconnect loop + Problem diagnostic |
-| runtime session reconstruction | fresh HA snapshot after reconnect |
-| historical command replay | explicitly not performed |
+| Supervisor | reconnect loop + диагностика Problem |
+| runtime session reconstruction | свежий HA snapshot после reconnect |
+| historical command replay | явно не выполняется |
 
-Reconnect invariant:
+Инвариант reconnect:
 
 ```text
-subscribe first
--> obtain current snapshot
--> reject older buffered events by timestamp
--> resume decisions
+сначала subscribe
+-> получить current snapshot
+-> отбросить более старые buffered events по timestamp
+-> возобновить decisions
 ```
 
-## HA facade compatibility boundary
+## Граница совместимости HA facade
 
-The migration is accepted when the same user intent produces equivalent externally meaningful behavior:
+Миграция считается принятой, когда тот же пользовательский intent даёт эквивалентное внешне значимое поведение:
 
 ```text
 season thresholds
@@ -200,21 +198,21 @@ cold-weather safety
 humidity target
 ```
 
-Internal SQL table shape, worker count and command-history topology are explicitly **not** compatibility requirements.
+Внутренняя структура SQL tables, количество workers и топология command history явно **не являются** требованиями совместимости.
 
-## Deliberate non-ports
+## Что намеренно не переносится
 
-The following legacy infrastructure must not reappear unless a future requirement proves a concrete need:
+Следующая legacy-инфраструктура не должна возвращаться без конкретного будущего требования:
 
 - PostgreSQL orchestration;
-- Matrix as a subsystem;
-- Firewall as a subsystem;
+- Matrix как subsystem;
+- Firewall как subsystem;
 - Dispatcher;
 - UC queue;
-- Universal Controller lifecycle;
-- Confirmator lifecycle;
+- lifecycle Universal Controller;
+- lifecycle Confirmator;
 - SQL jobs/handlers;
 - runtime session tables;
-- append-only operational history for every state transition.
+- append-only operational history каждого перехода состояния.
 
-The compact App should add complexity only where it protects a defined user-visible behavior or safety invariant.
+Компактный App должен добавлять сложность только тогда, когда она защищает определённое пользовательское поведение или safety invariant.
