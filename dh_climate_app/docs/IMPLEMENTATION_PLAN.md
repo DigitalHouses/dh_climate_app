@@ -1,123 +1,114 @@
-# Implementation plan
+# План реализации
 
-Status: implementation-complete for the first HAOS acceptance cycle.
+Статус: реализация завершена для первого цикла приёмочного тестирования HAOS.
 
-## Phase 0 — architecture baseline ✅
+## Этап 0 — базовая архитектура ✅
 
-- behavior contract extracted from the legacy PostgreSQL project;
-- current product decisions separated from legacy implementation detail;
-- pure Python domain core;
-- automated coverage for season, profiles, hysteresis, source priority and FAST/SLOW rules.
+- контракт поведения извлечён из legacy-проекта на PostgreSQL;
+- текущие продуктовые решения отделены от деталей legacy-реализации;
+- чистое доменное ядро на Python;
+- автоматическое покрытие правил сезона, профилей, гистерезиса, приоритета источников и FAST/SLOW.
 
-## Phase 1 — configuration + persistence ✅
+## Этап 1 — конфигурация + хранение состояния ✅
 
-- flat Supervisor-compatible App options;
-- stable room IDs and entity-domain validation;
-- SQLite state under `/data`;
-- persisted season thresholds;
-- persisted room target matrix;
-- persisted thermostat action for hysteresis continuity;
-- persisted humidity targets/control;
-- rolling outdoor sample persistence and pruning with left-edge baseline preservation.
+- плоские App options, совместимые с Supervisor;
+- стабильные ID комнат и проверка доменов сущностей;
+- SQLite-состояние в `/data`;
+- сохраняемые пороги сезонов;
+- сохраняемая матрица целевых температур комнат;
+- сохранение действия термостата для непрерывности гистерезиса;
+- сохраняемые цели/состояние управления влажностью;
+- сохранение и очистка скользящих наружных выборок с сохранением левой граничной базовой точки.
 
-## Phase 2 — Home Assistant input adapter ✅
+## Этап 2 — входной адаптер Home Assistant ✅
 
-- Supervisor REST client;
-- Home Assistant WebSocket client;
-- subscribe-before-snapshot reconnect;
-- configured-entity allowlist;
-- timestamp-protected state cache;
-- current snapshot before control resumes after reconnect.
+- REST-клиент Supervisor;
+- WebSocket-клиент Home Assistant;
+- reconnect по принципу subscribe-before-snapshot;
+- allowlist настроенных сущностей;
+- state cache с защитой по timestamp;
+- получение актуального snapshot перед возобновлением управления после reconnect.
 
-## Phase 3 — outdoor + season facade ✅
+## Этап 3 — наружный контур + фасад сезона ✅
 
-- independent priority/fallback chains for temperature and humidity;
-- time-weighted rolling avg24;
-- live-source fail-safe;
-- periodic rolling-window recalculation;
-- global `HEAT / COOL / OFF`;
-- MQTT two-threshold `heat_cool` climate facade;
-- persisted lower/upper season threshold commands.
+- независимые priority/fallback-цепочки температуры и влажности;
+- скользящее avg24;
+- fail-safe при потере live-источника;
+- периодический пересчёт скользящего окна;
+- глобальный `HEAT / COOL / OFF`;
+- MQTT climate-фасад `heat_cool` с двумя порогами;
+- сохраняемые команды нижнего/верхнего порога сезона.
 
-## Phase 4 — room thermostat facade ✅
+## Этап 4 — фасад комнатного термостата ✅
 
-- room temperature/humidity canonicalization;
-- `day / night / away / antifreeze` profile resolution;
-- target matrix;
-- stateful room hysteresis;
-- one MQTT Device per room;
-- room climate entity;
-- target/profile/mode commands;
-- short-lived legacy profile editing overlay.
+- канонизация комнатной температуры/влажности;
+- выбор профиля `day / night / away / antifreeze`;
+- матрица целей;
+- stateful-гистерезис комнаты;
+- один MQTT Device на комнату;
+- комнатная climate-сущность;
+- команды target/profile/mode;
+- короткоживущий legacy overlay редактирования профиля.
 
-## Phase 5 — direct equipment execution ✅
+## Этап 5 — прямое управление оборудованием ✅
 
-- desired-state compiler;
-- FAST heat/cool execution;
-- SLOW local-thermostat season execution;
-- switch/climate service adapters;
-- idempotent reconciliation;
-- capability/range validation;
-- bounded retry/cooldown;
-- aggregate problems;
-- optional open-window per-device inhibition;
-- legacy low-outdoor-temperature protection for reversible climate heating.
+- компилятор desired state;
+- управление FAST heat/cool;
+- сезонное управление SLOW через локальные термостаты;
+- service adapters для switch/climate;
+- идемпотентное согласование;
+- проверка capabilities/range;
+- ограниченные retry/cooldown;
+- агрегированные Problems;
+- опциональное per-device отключение при открытом окне;
+- legacy-защита реверсивного climate от отопления при низкой наружной температуре.
 
-## Phase 6 — humidity ✅
+## Этап 6 — влажность ✅
 
-- optional humidifier/dehumidifier entity;
-- humidity target persistence;
-- stateful humidity hysteresis;
-- switch/humidifier actuator execution.
+- опциональная сущность humidifier/dehumidifier;
+- сохранение target влажности;
+- stateful-гистерезис влажности;
+- управление switch/humidifier actuator.
 
-## Phase 7 — product shell ✅
+## Этап 7 — продуктовая оболочка ✅
 
-- HAOS App packaging;
-- system/season/room MQTT device topology;
-- Version + Started at + Problem diagnostics;
-- opt-in DigitalHouses telemetry with authenticated deletion;
-- English/Russian translations;
-- immutable GHCR release workflow;
-- unit/contract/compile/shell/container CI;
-- product and architecture documentation.
+- упаковка HAOS App;
+- топология MQTT Device для system/season/room;
+- диагностики Version + Started at + Problem;
+- DigitalHouses telemetry с аутентифицированным удалением;
+- английская/русская локализация интерфейса;
+- immutable workflow релизов GHCR;
+- CI для unit/contract/compile/shell/container;
+- документация продукта и архитектуры.
 
-## Future device-model refactor — documented, not implemented
+## Будущий рефактор модели устройств — описан, но не реализован
 
-The architecture now reserves a generalized logical-device model without
-expanding the current v0.1 option schema:
+Архитектура резервирует обобщённую модель логического устройства без расширения текущей схемы options v0.1:
 
-- reusable `Control Profile` definitions (starting with `control_standart`)
-  describe ordered command sets only;
-- device `roles` describe heat, cool, ventilation supply/exhaust,
-  humidification and dehumidification functions;
-- `inertia` is an independent `fast / medium / slow` property;
-- `control_source` identifies normalized demand from season, room thermostat,
-  CO₂ or humidity controllers;
-- `scope` allows room- and house-level devices;
-- optional `equipment_id` groups multiple logical HA entities belonging to one
-  physical installation;
-- Command Plans support ordered multi-step execution, optional per-step
-  verification, final desired-state verification, superseding and drift
-  detection.
+- переиспользуемые определения `Control Profile` (начиная с `control_standart`) описывают только упорядоченные наборы команд;
+- `roles` устройства описывают функции heat, cool, ventilation supply/exhaust, humidification и dehumidification;
+- `inertia` — независимое свойство `fast / medium / slow`;
+- `control_source` указывает нормализованный demand от season, room thermostat, CO₂ или humidity controller;
+- `scope` позволяет room- и house-level устройства;
+- опциональный `equipment_id` группирует несколько логических HA-сущностей одного физического оборудования;
+- Command Plans поддерживают упорядоченное многошаговое выполнение, опциональную проверку по шагам, финальную проверку desired state, superseding и drift detection.
 
-This is a compatibility direction, not part of the current acceptance scope.
-The existing FAST/SLOW configuration remains authoritative until a dedicated
-migration is designed and tested.
+Это направление совместимости, а не часть текущего acceptance scope. Существующая FAST/SLOW-конфигурация остаётся авторитетной, пока не спроектирована и не протестирована отдельная миграция.
 
-## Phase 8 — real HAOS acceptance ⏳
+## Этап 8 — реальное приёмочное тестирование HAOS ⏳
 
-This is the remaining release gate and cannot be proven only inside repository CI.
+Это оставшийся release gate, который нельзя доказать только CI репозитория.
 
-Execute [HAOS_TEST_PLAN.md](../HAOS_TEST_PLAN.md) against a real Home Assistant OS installation and real configured entities.
+Нужно выполнить [HAOS_TEST_PLAN.md](../HAOS_TEST_PLAN.md) на реальной установке Home Assistant OS и реальных настроенных сущностях.
 
-Required minimum before calling `0.1.0` a completed release:
+Минимум перед признанием релиза завершённым:
 
-- versioned image installed successfully;
-- MQTT season facade verified;
-- one real room MQTT Device verified;
-- FAST heating and cooling paths verified;
-- SLOW physical thermostat path verified;
-- restart/reconnect verified;
-- backup/restore verified.
+- versioned image успешно установлен;
+- MQTT-фасад сезона проверен;
+- проверен один реальный MQTT Device комнаты;
+- проверены FAST heating и cooling;
+- проверен путь физического SLOW-термостата;
+- проверены restart/reconnect;
+- проверены backup/restore.
 
-Any defect found in this phase is fixed with a new immutable version once a version has already been published.
+Любой дефект, найденный на этом этапе, исправляется новой immutable-версией, если предыдущая версия уже была опубликована.
