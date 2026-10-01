@@ -34,7 +34,7 @@ outdoor_humidity_sources: >-
 
 rooms:
   - id: living_room
-    name: Living room
+    name: Гостиная
 
     # Несколько комнатных датчиков температуры усредняются.
     temperature_sensors: >-
