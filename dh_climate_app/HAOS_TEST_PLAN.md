@@ -1,238 +1,218 @@
-# DH Climate App — HAOS acceptance plan
+# DH Climate App — план приёмочного тестирования HAOS
 
-Status: historical bundled runtime acceptance for `0.1.21` passed on real HAOS on 2026-09-27 and its canonical GHCR artifact provenance is recorded. Current `main` (`0.1.26` development) requires fresh HAOS acceptance. Registry-backed Supervisor delivery is still pending because the App package does not yet declare `image:`.
+Статус: исторический bundled runtime acceptance для `0.1.21` успешно пройден на реальном HAOS 2026-09-27, происхождение канонического GHCR-артефакта зафиксировано. Текущий `main` (`0.1.26` development) требует нового полного HAOS acceptance. Registry-backed delivery через Supervisor всё ещё не завершён, поскольку пакет App пока не содержит `image:`.
 
-The unit test suite proves deterministic business rules. This plan proves the boundaries that only a real Home Assistant OS installation can verify: Supervisor configuration, MQTT Discovery, entity UI behavior, service execution, persistence, backup and restore.
+Unit test suite доказывает детерминированные бизнес-правила. Этот план проверяет границы, которые можно доказать только на реальной установке Home Assistant OS: конфигурацию Supervisor, MQTT Discovery, поведение сущностей в UI, выполнение сервисов, persistence, backup и restore.
 
-For Experimental source-build installation/update problems, use [docs/EXPERIMENTAL_UPDATE_RUNBOOK.md](docs/EXPERIMENTAL_UPDATE_RUNBOOK.md). Routine updates use `ha store reload`; repository repair is reserved for an explicitly corrupt Supervisor git checkout and must not be used as a refresh command.
+Для проблем установки/обновления Experimental-канала со сборкой из исходников используйте [docs/EXPERIMENTAL_UPDATE_RUNBOOK.md](docs/EXPERIMENTAL_UPDATE_RUNBOOK.md). Штатные обновления выполняются через `ha store reload`; repository repair предназначен только для явно повреждённого git checkout Supervisor и не должен использоваться как команда refresh.
 
-## 1. Installation and startup
-
-Acceptance:
-
-- App installs from the versioned GHCR image for the target architecture.
-- Empty first-start configuration is allowed.
-- App starts without PostgreSQL or any external database.
-- System MQTT Device appears as `DigitalHouses Climate`.
-- `Version`, `Started at`, `Problem` and telemetry-delete diagnostics are attached to the system device.
-- With no outdoor source configured, climate control remains safely unavailable/OFF rather than generating commands.
-
-## 2. Outdoor sources and season facade
-
-Configure at least two temperature sources and, if available, two humidity sources.
+## 1. Установка и запуск
 
 Acceptance:
 
-- `outdoor_temperature_sources` accepts an ordered mixed chain of
-  `sensor.*` and `weather.*` entities;
-- first valid temperature source wins;
-- first valid humidity source wins independently;
-- every public one-decimal outdoor temperature change is logged with the active
-  source;
-- primary unavailable -> fallback source is selected;
-- source selection emits `outdoor_temperature_source_changed` with
-  previous/current source and temperature values;
-- primary restored -> primary becomes current source again and emits the reverse
-  source transition;
-- startup/reconnect establishes a baseline and does not emit a false source
-  transition;
-- current source/value is visible in season attributes;
-- MQTT facade attributes do not expose a per-recalculation `observed_at` timestamp;
-- with stable outdoor temperature/humidity values and sources, their Home Assistant `last_updated` values remain unchanged across at least one 10-second runtime tick;
-- `sensor.dh_climate_app_outdoor_temperature_raw` exposes the selected RAW source value but publishes no more than once per minute;
-- hard low-temperature safety still uses the immediate selected RAW value internally and is not delayed by the Recorder-facing RAW publication cadence;
-- `sensor.dh_climate_app_outdoor_temperature` exposes the one-minute EMA-filtered outdoor temperature;
-- `sensor.dh_climate_app_outdoor_temperature_avg24` exposes the arithmetic mean of persisted one-minute filtered samples inside the rolling 24-hour window;
-- `sensor.dh_climate_app_outdoor_humidity` exposes the current selected outdoor humidity;
-- RAW, filtered and avg24 temperature remain separate state-only UI entities without dynamic custom attributes;
-- rolling avg24 survives App restart from the App's persistent SQLite sample window and does not depend on Recorder history for climate calculation;
-- when `sensor.avg_outdoor_temperature_24_temp` exists, it may be used as an observation oracle, but Recorder/Statistics is not the App's source of truth;
-- no live outdoor temperature -> season becomes OFF even if old avg24 exists;
-- lower/red slider persists the heating-season threshold;
-- upper/blue slider persists the cooling-season threshold;
-- avg24 below lower threshold minus hysteresis -> HEAT;
-- avg24 above upper threshold plus hysteresis -> COOL;
-- between thresholds -> OFF.
+- App устанавливается из versioned GHCR image для целевой архитектуры.
+- Разрешён первый запуск с пустой конфигурацией.
+- App запускается без PostgreSQL и любой внешней базы данных.
+- Системный MQTT Device появляется как `DigitalHouses Climate`.
+- Диагностики `Version`, `Started at`, `Problem` и telemetry-delete прикреплены к системному Device.
+- Если наружный источник не настроен, climate control остаётся безопасно unavailable/OFF и не генерирует команды.
 
-## 2.1 Weather precipitation and events
+## 2. Наружные источники и фасад сезона
 
-When a `weather.*` source is configured:
-
-- current condition classifies rain/snow/mixed/hail/none correctly;
-- hourly forecast precipitation is exposed in millimetres;
-- rain → snow (and snow → rain) emits `precipitation_type_changed`;
-- dry → precipitation emits `precipitation_started`;
-- precipitation → dry emits `precipitation_stopped`;
-- the MQTT Event payload is QoS 1 and non-retained;
-- initial startup/reconnect establishes a baseline and does not replay a false
-  transition;
-- season, window and Problem transitions use the same
-  `event.dh_climate_app_event` contract.
-
-## 3. Room MQTT device
-
-Create one test room.
+Настроить минимум два источника температуры и, если возможно, два источника влажности.
 
 Acceptance:
 
-- room appears as a separate MQTT Device;
-- device can be assigned manually to the correct Home Assistant Area;
-- room exposes one `climate` entity;
-- no redundant temperature/humidity sensor entities are created merely to duplicate thermostat values;
-- multiple configured room temperature sensors are averaged;
-- unavailable room temperature makes the room climate facade unavailable;
-- room climate capabilities follow the global season exactly:
+- `outdoor_temperature_sources` принимает упорядоченную смешанную цепочку entities `sensor.*` и `weather.*`;
+- используется первый валидный источник температуры;
+- первый валидный источник влажности выбирается независимо;
+- каждое публичное изменение наружной температуры с точностью до одного знака логируется вместе с active source;
+- primary unavailable -> выбирается fallback source;
+- переключение источника публикует `outdoor_temperature_source_changed` с previous/current source и temperature values;
+- после восстановления primary снова становится current source и публикует обратный transition;
+- startup/reconnect устанавливает baseline и не создаёт ложный source transition;
+- current source/value видимы в season attributes;
+- MQTT facade attributes не содержат per-recalculation timestamp `observed_at`;
+- при стабильных outdoor temperature/humidity values и sources их `last_updated` в Home Assistant не меняется минимум в течение одного 10-second runtime tick;
+- `sensor.dh_climate_app_outdoor_temperature_raw` показывает selected RAW source value, но публикуется не чаще одного раза в минуту;
+- hard low-temperature safety продолжает использовать мгновенное выбранное RAW value внутри App и не задерживается Recorder-facing cadence RAW publication;
+- `sensor.dh_climate_app_outdoor_temperature` показывает минутную EMA-filtered наружную температуру;
+- `sensor.dh_climate_app_outdoor_temperature_avg24` показывает арифметическое среднее persisted минутных filtered samples внутри rolling 24-hour window;
+- `sensor.dh_climate_app_outdoor_humidity` показывает текущую выбранную наружную влажность;
+- RAW, filtered и avg24 остаются отдельными state-only UI entities без dynamic custom attributes;
+- rolling avg24 переживает restart App благодаря persistent sample window и не зависит от Recorder history как источника truth для climate calculation;
+- если существует `sensor.avg_outdoor_temperature_24_temp`, его можно использовать как observation oracle, но Recorder/Statistics не является source of truth App;
+- отсутствие live outdoor temperature переводит season в OFF, даже если старое avg24 существует;
+- lower/red slider сохраняет threshold отопительного сезона;
+- upper/blue slider сохраняет threshold сезона охлаждения;
+- avg24 ниже lower threshold минус hysteresis -> HEAT;
+- avg24 выше upper threshold плюс hysteresis -> COOL;
+- между thresholds -> OFF.
+
+## 2.1 Осадки и weather events
+
+Если настроен источник `weather.*`:
+
+- current condition правильно классифицирует rain/snow/mixed/hail/none;
+- hourly forecast precipitation публикуется в миллиметрах;
+- rain → snow и snow → rain публикуют `precipitation_type_changed`;
+- dry → precipitation публикует `precipitation_started`;
+- precipitation → dry публикует `precipitation_stopped`;
+- MQTT Event payload использует QoS 1 и non-retained;
+- initial startup/reconnect устанавливает baseline и не воспроизводит ложный transition;
+- transitions season, window и Problem используют тот же контракт `event.dh_climate_app_event`.
+
+## 3. MQTT Device комнаты
+
+Создать одну тестовую комнату.
+
+Acceptance:
+
+- комната появляется как отдельный MQTT Device;
+- Device можно вручную назначить правильной Home Assistant Area;
+- комната публикует одну `climate` entity;
+- не создаются избыточные temperature/humidity sensors только ради дублирования данных термостата;
+- несколько настроенных room temperature sensors усредняются;
+- unavailable room temperature делает room climate facade unavailable;
+- room climate capabilities точно следуют глобальному сезону:
   HEAT -> `off/heat`, COOL -> `off/cool`, OFF -> `off`;
-- changing season updates MQTT Discovery without losing the native
-  `day/night/away` preset; the new season-scoped retained preset topic is
-  consumed when Home Assistant resubscribes after the Discovery update;
-- an enabled room publishes state `heat` in HEAT season and state `cool`
-  in COOL season; interseason publishes state `off`;
-- HVAC action independently exposes the current room action:
+- смена сезона обновляет MQTT Discovery без потери native preset `day/night/away`; новый season-scoped retained preset topic считывается Home Assistant после переподписки на Discovery update;
+- включённая комната публикует state `heat` в HEAT season и state `cool` в COOL season; межсезонье публикует `off`;
+- HVAC action независимо показывает текущее действие комнаты:
   `heating / cooling / idle / off`;
-- OFF season keeps the climate entity available when room temperature is valid,
-  publishes HVAC mode `off`, exposes current temperature, and no seasonal
-  target;
-- target/HVAC commands sent to the room thermostat during OFF season do not
-  modify persisted room control state.
+- OFF season оставляет climate entity доступной при валидной room temperature, публикует HVAC mode `off`, показывает current temperature и не показывает seasonal target;
+- target/HVAC commands, отправленные room thermostat во время OFF season, не меняют persisted room control state.
 
-## 4. Room profiles and hysteresis
+## 4. Профили комнаты и гистерезис
 
 Acceptance:
 
-- day target is used normally;
-- `night_mode=on` selects night;
-- `we_at_home=off` selects away;
-- unavailable configured presence input resolves to away;
-- turning room climate off during HEAT exposes HVAC off but internally uses antifreeze target;
-- turning room climate off during COOL produces true off;
-- profile selection in the thermostat is a temporary edit overlay;
-- changing the target while another profile is selected writes that profile's target;
-- profile edit overlay returns to the effective profile after its idle timeout;
-- targets survive App restart;
-- inside the hysteresis band the previous active/idle action survives both recalculation and App restart.
+- day target используется в обычном режиме;
+- `night_mode=on` выбирает night;
+- `we_at_home=off` выбирает away;
+- unavailable настроенный presence input трактуется как away;
+- выключение room climate в HEAT показывает HVAC off, но внутренне использует antifreeze target;
+- выключение room climate в COOL даёт настоящий off;
+- выбор profile в thermostat работает как временный edit overlay;
+- изменение target при выбранном другом profile записывает target этого profile;
+- profile edit overlay возвращается к effective profile после idle timeout;
+- targets переживают restart App;
+- внутри hysteresis band предыдущее active/idle action переживает и recalculation, и restart App.
 
-## 5. FAST execution
+## 5. Выполнение FAST
 
-Test both a switch and a climate actuator where available.
-
-Acceptance:
-
-- heating demand turns on a FAST heat switch;
-- idle/off turns it off;
-- cooling demand activates only configured FAST cooling devices;
-- FAST climate receives the correct HVAC mode and room air target;
-- an already-correct physical state produces no duplicate service call;
-- unsupported HVAC mode or out-of-range target is not blindly sent;
-- unavailable physical entity produces a Problem diagnostic instead of a tight retry loop;
-- App log shows FAST desired/actual, CALL, SENT, retry/cooldown, VERIFIED_HA and delayed DRIFT transitions; no executor CONFIRMED line is emitted;
-- local `climate.log` receives the same selected traces through `script.write2climatelog` in App decision order;
-- repeated already-correct reconciles do not create log spam;
-- failure of the local climate-log mirror does not change actuator control or Problem state.
-
-## 6. SLOW floor execution
-
-Use a physical wall/floor thermostat with its own local floor or slab probe.
+По возможности проверить и switch, и climate actuator.
 
 Acceptance:
 
-- HEAT season sets the physical thermostat to `heat`;
-- App sends the configured `slow_target`, not the room air target;
-- room thermostat cycling does not repeatedly switch SLOW heat on/off;
-- physical thermostat locally cycles its relay using its own probe;
-- COOL/OFF season sets the SLOW thermostat to `off`;
-- loss/restart of the App leaves the physical thermostat able to regulate at its last local setpoint until Home Assistant control resumes.
+- heating demand включает FAST heat switch;
+- idle/off выключает его;
+- cooling demand активирует только настроенные FAST cooling devices;
+- FAST climate получает правильные HVAC mode и room air target;
+- уже корректное physical state не создаёт дублирующий service call;
+- unsupported HVAC mode или target вне range не отправляются вслепую;
+- unavailable physical entity создаёт Problem diagnostic вместо tight retry loop;
+- App log показывает FAST desired/actual, CALL, SENT, retry/cooldown, VERIFIED_HA и delayed DRIFT transitions; строка executor CONFIRMED не создаётся;
+- локальный `climate.log` получает те же выбранные traces через `script.write2climatelog` в порядке решений App;
+- повторные already-correct reconciles не создают log spam;
+- ошибка локального climate-log mirror не меняет actuator control или Problem state.
 
-## 7. Window context
+## 6. Выполнение SLOW тёплого пола
 
-Configure at least two window contacts if available.
-
-Acceptance:
-
-- any open contact -> room `window_state=open`;
-- all contacts closed -> `closed`;
-- none open and one unavailable -> `unknown`;
-- window state does not change room thermostat HVAC demand;
-- only actuators listed in `window_off_devices` are forced off while a window is open;
-- other actuators continue their normal policy;
-- unknown configured window state produces a warning Problem.
-
-## 8. Cold-weather reversible climate protection
-
-Use a reversible `climate` entity in both `fast_heat` and `fast_cool`.
+Использовать физический wall/floor thermostat с собственным локальным floor или slab probe.
 
 Acceptance:
 
-- above `ac_min_outdoor_temperature`, heating demand may use the reversible climate device;
-- below the threshold, that device is held off for heating;
-- another allowed heat source can continue;
-- cooling behavior is not blocked by the heating-only low-temperature rule.
+- HEAT season переводит физический thermostat в `heat`;
+- App отправляет настроенный `slow_target`, а не room air target;
+- циклирование room thermostat не переключает SLOW heat постоянно on/off;
+- физический thermostat локально циклирует relay по собственному probe;
+- COOL/OFF переводит SLOW thermostat в `off`;
+- потеря/restart App оставляет физическому thermostat возможность регулировать по последнему локальному setpoint до восстановления Home Assistant control.
 
-## 9. Humidity
+## 7. Контекст окна
 
-For a room with humidity control:
-
-- MQTT `humidifier` entity appears on the same room Device;
-- current and target humidity are correct;
-- humidifier/dehumidifier direction follows configuration;
-- humidity hysteresis prevents chatter;
-- target changes survive restart;
-- humidity control can be turned off independently of thermal season;
-- no humidity-control entity is created for rooms where it is not configured.
-
-## 10. Disconnect and recovery
+Если возможно, настроить минимум два window contacts.
 
 Acceptance:
 
-- stopping Home Assistant connectivity marks climate facades unavailable;
-- cached sensor truth is discarded;
-- no physical commands are issued while HA truth is disconnected;
-- reconnect performs a fresh snapshot before normal control resumes;
-- old buffered events cannot overwrite newer snapshot state;
-- MQTT reconnect restores subscriptions and retained facade state;
-- stale retained command messages do not alter runtime settings after restart.
+- любой open contact -> room `window_state=open`;
+- все contacts closed -> `closed`;
+- ни один не open и один unavailable -> `unknown`;
+- window state не меняет HVAC demand комнатного термостата;
+- при open окне принудительно off переводятся только actuators из `window_off_devices`;
+- остальные actuators продолжают нормальную policy;
+- unknown настроенного window state создаёт warning Problem.
+
+## 8. Защита reversible climate при холоде
+
+Использовать reversible `climate` entity одновременно в `fast_heat` и `fast_cool`.
+
+Acceptance:
+
+- выше `ac_min_outdoor_temperature` heating demand может использовать reversible climate device;
+- ниже threshold это устройство удерживается off для heating;
+- другой разрешённый heat source продолжает работу;
+- cooling не блокируется heating-only low-temperature rule.
+
+## 9. Влажность
+
+Для комнаты с humidity control:
+
+- MQTT entity `humidifier` появляется на том же room Device;
+- current и target humidity корректны;
+- направление humidifier/dehumidifier соответствует config;
+- humidity hysteresis предотвращает chatter;
+- target changes переживают restart;
+- humidity control можно отключить независимо от thermal season;
+- если humidity control не настроен, соответствующая entity не создаётся.
+
+## 10. Disconnect и recovery
+
+Acceptance:
+
+- потеря Home Assistant connectivity помечает climate facades unavailable;
+- cached sensor truth отбрасывается;
+- пока HA truth disconnected, физические команды не отправляются;
+- reconnect получает fresh snapshot до возобновления нормального control;
+- старые buffered events не могут перезаписать более новый snapshot state;
+- MQTT reconnect восстанавливает subscriptions и retained facade state;
+- stale retained command messages после restart не меняют runtime settings.
 
 ## 11. Telemetry
 
-Current `0.1.26` development code is still the policy-v1 baseline. Do not
-declare policy v2 release-ready until the production
-`telemetry.digitalhouses.vip` deployment is independently confirmed as
-DigitalHouses Stats `0.4.1+`.
+Текущий development-код `0.1.26` всё ещё является baseline policy v1. Нельзя объявлять policy v2 release-ready, пока production deployment `telemetry.digitalhouses.vip` независимо не подтверждён как DigitalHouses Stats `0.4.1+`.
 
-Final policy-v2 acceptance must verify:
+Финальный acceptance policy v2 должен проверить:
 
-- there is no user-facing `telemetry_enabled` opt-out;
-- wire schema remains `1` and `telemetry_policy_version=2`;
-- payload contains only schema, policy version, persistent UUIDv4,
-  `digitalhouses_climate_app` and the released App version;
-- country is absent from the client payload and derived only server-side;
-- UUID/token survive restart, upgrade and supported backup/restore;
-- normal cadence is about 24h ±30 minutes, with non-aggressive failure retry;
-- a fresh install and a new released version may send one immediate best-effort heartbeat;
-- development/local builds never contribute production statistics;
-- telemetry-server/DNS/firewall failure never affects climate runtime or Problem health;
-- authenticated Delete removes server history, rotates the local UUID/token,
-  and continued product use later resumes reporting under the new identity.
+- отсутствует пользовательский opt-out `telemetry_enabled`;
+- wire schema остаётся `1`, а `telemetry_policy_version=2`;
+- payload содержит только schema, policy version, persistent UUIDv4, `digitalhouses_climate_app` и released App version;
+- country отсутствует в client payload и определяется только server-side;
+- UUID/token переживают restart, upgrade и поддерживаемый backup/restore;
+- нормальная cadence около 24h ±30 минут с неагрессивным failure retry;
+- fresh install и новая released version могут отправить один immediate best-effort heartbeat;
+- development/local builds никогда не попадают в production statistics;
+- failure telemetry-server/DNS/firewall никогда не влияет на climate runtime или Problem health;
+- authenticated Delete удаляет server history, ротирует локальные UUID/token, после чего дальнейшее использование продукта возобновляет reporting под новой identity.
 
-## 12. Backup and immutable delivery
+## 12. Backup и immutable delivery
 
-Acceptance after registry-backed App delivery is wired into `config.yaml`:
+Acceptance после подключения registry-backed delivery в `config.yaml`:
 
-- the installed App uses `ghcr.io/digitalhouses/digitalhouses_climate_app:<version>`;
-- a Supervisor backup containing the Climate App (full or App-only partial) contains persistent `/data` state;
-- restored App preserves season thresholds, room targets, humidity targets and telemetry installation identity;
-- backup does not embed a locally built application image;
-- restore of the supported current production release retrieves the required published registry image.
+- установленный App использует `ghcr.io/digitalhouses/digitalhouses_climate_app:<version>`;
+- Supervisor backup с Climate App, полный или App-only partial, содержит persistent state `/data`;
+- restored App сохраняет season thresholds, room targets, humidity targets и telemetry installation identity;
+- backup не включает локально собранный application image;
+- restore поддерживаемого текущего production release получает требуемый опубликованный registry image.
 
-Historical-version restore after a newer release exists is not a general
-immutable-delivery acceptance requirement; test downgrade/rollback only when a
-specific migration or recovery plan requires it.
+Restore исторической версии после выхода более нового релиза не является общим требованием immutable-delivery acceptance. Downgrade/rollback проверяется только если конкретный migration/recovery plan этого требует.
 
-## 13. Release decision
+## 13. Решение о релизе
 
-The block below is the historical acceptance record for released `0.1.21`; it must not be interpreted as acceptance of current `0.1.26` development code.
+Блок ниже — историческая запись acceptance опубликованного `0.1.21`; он не означает acceptance текущего development-кода `0.1.26`.
 
-Last completed released runtime acceptance (`0.1.21`):
+Последний завершённый released runtime acceptance (`0.1.21`):
 
 ```text
 repository CI = green
@@ -263,8 +243,8 @@ final clean baseline = green
 immutable release publication = green
 ```
 
-See [docs/ACCEPTANCE_0.1.21.md](docs/ACCEPTANCE_0.1.21.md) for the recorded live acceptance result.
+Зафиксированный live acceptance см. в [docs/ACCEPTANCE_0.1.21.md](docs/ACCEPTANCE_0.1.21.md).
 
-Published artifact: `digitalhouses_climate_app-v0.1.21` / `ghcr.io/digitalhouses/digitalhouses_climate_app:0.1.21` / `sha256:5870a9e2791fadc76165f2a5c604cf7d1f84d7448de5e5401721be2a63045349`.
+Опубликованный артефакт: `digitalhouses_climate_app-v0.1.21` / `ghcr.io/digitalhouses/digitalhouses_climate_app:0.1.21` / `sha256:5870a9e2791fadc76165f2a5c604cf7d1f84d7448de5e5401721be2a63045349`.
 
-This record does not waive the remaining registry-delivery gap: `config.yaml` still omits `image:`. Current `0.1.26` development changes require a new full HAOS acceptance before any release. Failures found in HAOS acceptance are fixed in a new commit/version; a published immutable image version is never overwritten with different content.
+Эта запись не закрывает оставшийся registry-delivery gap: в `config.yaml` всё ещё отсутствует `image:`. Текущие development-изменения `0.1.26` требуют нового полного HAOS acceptance до любого релиза. Дефекты, найденные в HAOS acceptance, исправляются новым commit/version; опубликованная immutable image version никогда не перезаписывается другим содержимым.
