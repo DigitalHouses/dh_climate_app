@@ -71,10 +71,10 @@ Acceptance harness выполнялся на реальных границах H
 Опубликованный релиз:
 
 - tag: `digitalhouses_climate_app-v0.1.15`;
-- release commit: `cfbcc28b856a6d34f6e5892fa7b6aa9f477334a3`;
+- commit релиза: `cfbcc28b856a6d34f6e5892fa7b6aa9f477334a3`;
 - image: `ghcr.io/digitalhouses/digitalhouses_climate_app:0.1.15`;
 - manifest digest: `sha256:2ce86ebdd1a788ca3fbd9357ec0ae4ddef66818008c684559a58192770481997`;
-- release workflow run: `36267401820`.
+- run release workflow: `36267401820`.
 
 Канонический tag создан из проверенного release commit в `main`. Release workflow проверил, что versioned GHCR destination и GitHub Release ещё не использовались, до публикации.
 
