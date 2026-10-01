@@ -1,19 +1,19 @@
-# DH Climate App — Architecture v0.1
+# DH Climate App — архитектура v0.1
 
-**Status:** implementation baseline  
-**Date:** 2026-09-25  
-**Source of behavior:** current product decisions + `DigitalHouses/dh_climate_1` PostgreSQL implementation.
+**Статус:** базовая реализация  
+**Дата:** 2026-09-25  
+**Источник поведения:** текущие продуктовые решения + PostgreSQL-реализация `DigitalHouses/dh_climate_1`.
 
-## 1. Goal
+## 1. Цель
 
-`dh_climate_app` is a Home Assistant App that owns climate decision logic for the house and exposes native Home Assistant entities through MQTT Discovery.
+`dh_climate_app` — приложение Home Assistant, которое владеет климатическими решениями для дома и публикует нативные сущности Home Assistant через MQTT Discovery.
 
-The new App preserves the useful **behavior** of DH Climate 5, not its PostgreSQL implementation.
+Новый App сохраняет полезное **поведение** DH Climate 5, а не его PostgreSQL-реализацию.
 
 ```text
-Home Assistant states
+Состояния Home Assistant
         ↓
-HA input adapter
+входной адаптер HA
         ↓
 Climate Core
  ├─ Outdoor / avg24 / season
@@ -34,97 +34,89 @@ MQTT Discovery facade
 Home Assistant UI
 ```
 
-PostgreSQL, SQL jobs, Dispatcher, Matrix, UC queue, Confirmator and Supervisor are not ported.
+PostgreSQL, SQL jobs, Dispatcher, Matrix, UC queue, Confirmator и Supervisor не переносятся.
 
-## 2. Architectural rules
+## 2. Архитектурные правила
 
-1. **Python owns business logic.** SQL is never a business execution engine.
-2. **State is truth; events are hints.** HA events trigger recomputation, but reconnect always starts from a current-state snapshot.
-3. **Idempotent execution.** The App computes desired state and only sends a HA service command when actual state differs.
-4. **Minimal HA entity count.** Values already represented by a functional entity are not duplicated as separate room sensors.
-5. **One room = one MQTT Device.** Every room receives a stable MQTT device identifier and can be assigned by the user to a Home Assistant Area.
-6. **One global season.** Rooms do not choose HEAT/COOL independently.
-7. **One house-wide temperature hysteresis.** The compact App intentionally collapses the legacy room and outdoor hysteresis settings into one configured value.
-8. **Persistent configuration vs runtime settings are separate.**
-   - App options bind external HA entities and device topology.
-   - User-adjusted thermostat targets and season thresholds are runtime state persisted under `/data`.
-9. **No site-specific entity names in source code.** All HA bindings are configuration.
-10. **Machine events only.** If notifications are added later, the App publishes machine events; local HA owns text and delivery.
+1. **Бизнес-логикой владеет Python.** SQL никогда не является движком выполнения бизнес-правил.
+2. **State — истина, events — подсказки.** HA events запускают пересчёт, но reconnect всегда начинается с актуального snapshot состояний.
+3. **Идемпотентное выполнение.** App рассчитывает desired state и отправляет HA service command только если actual state отличается.
+4. **Минимальное число HA entities.** Значения, уже представленные функциональной entity, не дублируются отдельными room sensors.
+5. **Одна комната = один MQTT Device.** Каждая комната получает стабильный MQTT device identifier и может быть назначена пользователем соответствующей Home Assistant Area.
+6. **Один глобальный season.** Комнаты не выбирают HEAT/COOL независимо.
+7. **Один общий температурный hysteresis дома.** Компактный App намеренно объединяет legacy-настройки room/outdoor hysteresis в одно настроенное значение.
+8. **Persistent configuration отделена от runtime settings.**
+   - App options задают bindings внешних HA entities и device topology.
+   - Изменяемые пользователем targets термостатов и thresholds сезона являются runtime state и сохраняются в `/data`.
+9. **В исходном коде нет site-specific entity names.** Все HA bindings задаются конфигурацией.
+10. **Только machine events.** Если позже появятся notifications, App публикует машинные события; текстом и доставкой владеет локальный HA.
 
-## 3. Inputs
+## 3. Входные данные
 
-### 3.1 Global HA facts
+### 3.1 Глобальные HA-факты
 
-Optional global profile inputs:
+Опциональные глобальные входы профилей:
 
 - `night_mode`
 - `we_at_home`
 
-Legacy effective profile precedence is retained:
+Сохраняется legacy-приоритет effective profile:
 
 ```text
 HEAT + climate control OFF → antifreeze
-else not at home           → away
-else night mode            → night
-else                       → day
+иначе not at home          → away
+иначе night mode           → night
+иначе                      → day
 ```
 
-### 3.2 Outdoor sources
+### 3.2 Наружные источники
 
-The App configuration contains two independent ordered lists:
+Конфигурация App содержит два независимых упорядоченных списка:
 
 - `outdoor_temperature_sources`;
 - `outdoor_humidity_sources`.
 
-The first currently valid numeric entity in each list is selected. Temperature and humidity therefore fail over independently.
+В каждом списке выбирается первая текущая валидная numeric entity. Поэтому temperature и humidity переключаются на fallback независимо.
 
-`unknown`, `unavailable`, empty and non-numeric states are invalid and cause fallback to the next entity.
+`unknown`, `unavailable`, пустые и non-numeric states считаются невалидными и приводят к переходу к следующему источнику.
 
-Temperature is required for live season control. If every live outdoor temperature source is unavailable, the App forces season to `OFF` even if historical avg24 data still exists.
+Для live season control требуется температура. Если все live sources наружной температуры unavailable, App принудительно переводит season в `OFF`, даже если исторический avg24 ещё существует.
 
-### 3.3 Room sensors
+### 3.3 Комнатные sensors
 
-Each room may define one or more:
+Для каждой комнаты можно определить один или несколько:
 
 - temperature sensors;
 - humidity sensors;
-- optional window contact sensors.
+- опциональных window contact sensors.
 
-Window contacts are aggregated with legacy semantics: any open contact wins; otherwise any unavailable/unknown contact yields `unknown`; otherwise the room window state is `closed`. Window state is device context and does not change room `hvac_action`.
+Window contacts агрегируются по legacy-семантике: любой open contact имеет приоритет; если открытых нет, но хотя бы один contact unavailable/unknown, state комнаты становится `unknown`; иначе — `closed`. Window state является device context и не меняет room `hvac_action`.
 
-For room temperature/humidity the legacy room behavior is retained: use the mean of the latest valid readings from all configured available sensors of that kind.
+Для room temperature/humidity сохраняется legacy-поведение: используется среднее последних валидных показаний всех настроенных доступных sensors соответствующего типа.
 
-If no valid room temperature exists, FAST thermostat demand is inhibited and the room thermostat facade becomes unavailable.
+Если валидной room temperature нет, FAST thermostat demand блокируется, а facade комнатного термостата становится unavailable.
 
-## 4. Outdoor calculation
+## 4. Расчёт наружной температуры
 
-The App uses one temperature-normalization pipeline:
+App использует единый pipeline нормализации температуры:
 
 ```text
 prioritized source
-→ raw selected temperature
+→ выбранная RAW temperature
 → EMA low-pass filter
-→ filtered public outdoor temperature
-→ one-minute persisted samples
+→ публичная filtered outdoor temperature
+→ persisted samples с шагом одна минута
 → rolling 24-hour arithmetic mean
 → season
 ```
 
-The EMA time constant is configured by `outdoor_temperature_ema_minutes`
-(default 20 minutes). It advances no more frequently than once per minute.
-Provider/sensor failover is not a separate smoothing mode: a source step enters
-the same EMA path as an ordinary temperature step. The internal RAW value is
-available immediately for hard safety, logging and events, while its diagnostic
-MQTT sensor is published no more than once per minute to bound Recorder churn.
+Постоянная времени EMA задаётся через `outdoor_temperature_ema_minutes` (по умолчанию 20 минут). EMA продвигается не чаще одного раза в минуту.
 
-Temperature `avg_outdoor_24` is the arithmetic mean of the persisted
-one-minute filtered samples inside the rolling 24-hour window. This equal
-sampling cadence prevents provider update frequency from changing sample
-weight. The minute history lives in SQLite and survives App restart. Legacy
-pre-EMA temperature history is migrated once by replaying it through the same
-EMA. Outdoor humidity retains the existing time-weighted rolling average.
+Failover provider/sensor не имеет отдельного режима smoothing: ступень при смене source проходит через ту же EMA, что и обычное изменение температуры. Внутреннее RAW value доступно немедленно для hard safety, logging и events, а его diagnostic MQTT sensor публикуется не чаще одного раза в минуту, чтобы ограничить Recorder churn.
 
-The global season is:
+Temperature `avg_outdoor_24` — арифметическое среднее persisted минутных filtered samples внутри rolling 24-hour window. Равномерный sample cadence не позволяет частоте обновления provider менять вес samples. Минутная history хранится в SQLite и переживает restart App. Legacy pre-EMA temperature history один раз мигрируется путём повторного пропуска через ту же EMA. Наружная humidity сохраняет существующий time-weighted rolling average.
+
+Глобальный season:
 
 ```text
 avg24 < heat_threshold - hysteresis → HEAT
@@ -132,36 +124,36 @@ avg24 > cool_threshold + hysteresis → COOL
 otherwise                           → OFF
 ```
 
-`OFF` is interseason.
+`OFF` — межсезонье.
 
-The season facade repeats DH Climate 5 behavior:
+Season facade повторяет поведение DH Climate 5:
 
 - Home Assistant domain: `climate`;
 - mode: `heat_cool`;
 - current temperature: `avg_outdoor_24`;
-- current humidity: rolling 24h humidity when available;
-- lower target: heating-season threshold;
-- upper target: cooling-season threshold;
+- current humidity: rolling 24h humidity, когда доступна;
+- lower target: threshold отопительного сезона;
+- upper target: threshold сезона охлаждения;
 - action:
   - HEAT → `heating`
   - COOL → `cooling`
   - OFF → `idle`
 
-The two threshold sliders are writable and persisted.
+Оба threshold sliders изменяемы и сохраняются.
 
-## 5. Room thermostat
+## 5. Комнатный термостат
 
-Each configured room exposes one MQTT `climate` entity.
+Каждая настроенная комната публикует одну MQTT `climate` entity.
 
-The room thermostat contains:
+Комнатный термостат содержит:
 
 - current room temperature;
 - target room temperature;
-- HVAC mode determined by global season;
-- HVAC action determined by room demand;
-- profile presented through the same user-facing behavior as legacy DH Climate.
+- HVAC mode, определяемый глобальным season;
+- HVAC action, определяемый room demand;
+- profile с тем же пользовательским смыслом, что и в legacy DH Climate.
 
-The published MQTT Climate capability list follows the global season:
+Публикуемый список capabilities MQTT Climate следует глобальному season:
 
 ```text
 HEAT → off, heat
@@ -169,7 +161,7 @@ COOL → off, cool
 OFF  → off
 ```
 
-The **current HVAC state** follows the same season contract:
+**Текущее HVAC state** следует тому же season contract:
 
 ```text
 HEAT → heat
@@ -177,49 +169,38 @@ COOL → cool
 OFF  → off
 ```
 
-Opposite-season commands are rejected by the App runtime.
+Команды противоположного season отклоняются runtime App.
 
-Home Assistant resets MQTT Climate `preset_mode` to `none` while processing
-a Discovery update. To preserve the authoritative `day/night/away` profile,
-the App uses a season-scoped preset state topic
-(`.../climate/profile/heat|cool|off`). The retained preset is published before
-the season-specific Discovery payload. Because the preset state topic changes,
-Home Assistant resubscribes and immediately consumes that retained value.
+Во время обработки Discovery update Home Assistant сбрасывает MQTT Climate `preset_mode` в `none`. Чтобы сохранить authoritative profile `day/night/away`, App использует season-scoped preset state topic (`.../climate/profile/heat|cool|off`). Retained preset публикуется до season-specific Discovery payload. Поскольку preset state topic меняется, Home Assistant переподписывается и сразу получает retained value.
 
-The target matrix remains:
+Матрица targets:
 
 ```text
 room × season × profile → target temperature
 ```
 
-Native Home Assistant Climate presets:
+Нативные Home Assistant Climate presets:
 
 - `day`
 - `night`
 - `away`
 
-Home Assistant MQTT Climate also exposes its reserved `none` preset. In this
-App, selecting `none` means "clear the temporary profile-edit overlay and
-return to the automatically effective profile".
+Home Assistant MQTT Climate также публикует зарезервированный preset `none`. В App выбор `none` означает «очистить временный profile-edit overlay и вернуться к автоматически effective profile».
 
-`antifreeze` is an internal HEAT protection profile and is never exposed as a
-user-selectable preset.
+`antifreeze` — внутренний защитный профиль HEAT и никогда не публикуется как user-selectable preset.
 
-Changing target temperature in the room thermostat updates the currently
-selected edit-overlay profile, or the automatically effective profile when no
-overlay is active. The edit overlay expires after its idle timeout and does not
-change the automatic presence/night profile source.
+Изменение target temperature на room thermostat обновляет выбранный edit-overlay profile или automatically effective profile, если overlay отсутствует. Edit overlay истекает после idle timeout и не меняет автоматический source presence/night profile.
 
-### 5.1 Stateful thermostat hysteresis
+### 5.1 Stateful hysteresis термостата
 
-The new App uses real stateful symmetric hysteresis:
+Новый App использует настоящий stateful симметричный hysteresis.
 
 HEAT:
 
 ```text
 T <= target - h → heating
 T >= target + h → idle
-inside band      → retain previous heating/idle state
+inside band      → сохранить предыдущее heating/idle state
 ```
 
 COOL:
@@ -227,103 +208,103 @@ COOL:
 ```text
 T >= target + h → cooling
 T <= target - h → idle
-inside band      → retain previous cooling/idle state
+inside band      → сохранить предыдущее cooling/idle state
 ```
 
-This state is persisted so an App restart does not collapse the hysteresis band.
+Это состояние сохраняется, поэтому restart App не схлопывает hysteresis band.
 
-## 6. Room MQTT device model
+## 6. Модель MQTT Device комнаты
 
-Every room is a separate MQTT Device.
+Каждая комната — отдельный MQTT Device.
 
-Stable identifier:
+Стабильный identifier:
 
 ```text
 dh_climate_app_room_<room_id>
 ```
 
-Example:
+Пример:
 
 ```text
 dh_climate_app_room_living_room
 ```
 
-The user assigns this device to the appropriate Home Assistant Area after discovery.
+После Discovery пользователь назначает Device соответствующей Home Assistant Area.
 
-Default entities on the room device are intentionally minimal:
+Default entities room device намеренно минимальны:
 
 1. `climate` — room thermostat.
-2. optional `humidifier` — only when humidity control is configured.
+2. опциональный `humidifier` — только если настроен humidity control.
 
-No duplicate room `sensor.temperature` or `sensor.humidity` entities are created merely to repeat values already visible in these functional entities.
+Не создаются дублирующие room `sensor.temperature` или `sensor.humidity` только ради повторения значений, уже видимых в функциональных entities.
 
-## 7. Humidity control
+## 7. Управление влажностью
 
-Humidity control is optional per room.
+Humidity control опционален для каждой комнаты.
 
-Room configuration chooses exactly one controller type:
+Room configuration выбирает ровно один controller type:
 
 ```text
 humidifier
 dehumidifier
 ```
 
-The entity is published in the Home Assistant `humidifier` domain.
+Entity публикуется в Home Assistant domain `humidifier`.
 
-- humidifier: normal humidifier device class/behavior;
+- humidifier: обычный humidifier device class/behavior;
 - dehumidifier: `device_class: dehumidifier`.
 
-The entity contains:
+Entity содержит:
 
 - current humidity;
 - target humidity.
 
-If humidity control is not configured, no humidity-control entity is published.
+Если humidity control не настроен, соответствующая entity не публикуется.
 
-Humidity control is independent of HEAT/COOL season.
+Humidity control независим от season HEAT/COOL.
 
-A separate global humidity hysteresis will be used by the humidity controller because percent RH and °C cannot share one numeric deadband.
+Для humidity controller используется отдельный глобальный humidity hysteresis, потому что %RH и °C не могут использовать один numeric deadband.
 
-## 8. Device classes
+## 8. Классы устройств
 
-Room actuator configuration introduces two thermal classes.
+Room actuator configuration вводит два тепловых класса.
 
 ### 8.1 FAST
 
-Examples:
+Примеры:
 
-- radiator;
-- convector;
+- радиатор;
+- конвектор;
 - fan-coil;
-- air conditioner.
+- кондиционер.
 
-FAST devices follow room thermostat demand.
+FAST devices следуют demand комнатного термостата.
 
 ```text
-room heating → configured FAST heat devices active
-room cooling → configured FAST cool devices active
+room heating → настроенные FAST heat devices active
+room cooling → настроенные FAST cool devices active
 room idle/off → FAST devices inactive
 ```
 
-Supported HA execution domains in the first implementation:
+Поддерживаемые HA execution domains в первой реализации:
 
 - `switch`;
 - `climate`.
 
-For a FAST climate device, the App sets the required HVAC mode and room target temperature. For a FAST switch, the App uses `turn_on` / `turn_off`.
+Для FAST climate device App задаёт требуемый HVAC mode и room target temperature. Для FAST switch используются `turn_on` / `turn_off`.
 
 ### 8.2 SLOW
 
-Primary case: underfloor heating with its own local physical thermostat and floor probe.
+Основной случай: тёплый пол с собственным локальным физическим thermostat и floor probe.
 
-SLOW devices do **not** follow room thermostat cycling.
+SLOW devices **не** следуют циклам room thermostat.
 
 ```text
 season HEAT → SLOW device enabled
 season COOL/OFF → SLOW device disabled
 ```
 
-For a SLOW `climate` device:
+Для SLOW `climate` device:
 
 ```text
 HEAT:
@@ -331,50 +312,47 @@ HEAT:
   target_temperature = slow target configured for that device
 ```
 
-The local physical thermostat then cycles the heating locally using its own probe.
+После этого локальный физический thermostat сам циклирует heating по собственному probe.
 
-The SLOW target is deliberately separate from room air target. A floor probe measures floor/screed temperature, not room air temperature.
+SLOW target намеренно отделён от room air target. Floor probe измеряет floor/screed temperature, а не температуру воздуха комнаты.
 
-A SLOW plain `switch` is rejected in v0.1. SLOW control requires a local HA `climate` thermostat so the physical floor/slab probe remains the final local safety and cycling loop.
+Обычный SLOW `switch` в v0.1 запрещён. SLOW control требует локальный HA `climate` thermostat, чтобы физический floor/slab probe оставался финальным локальным контуром safety и cycling.
 
-### 8.3 Window and cold-weather safety
+### 8.3 Окна и cold-weather safety
 
-The old Firewall/Matrix restrictions are represented directly as deterministic device policy rather than separate subsystems.
+Legacy-ограничения Firewall/Matrix представлены напрямую как deterministic device policy, а не отдельные subsystems.
 
 Window behavior:
 
 ```text
-room thermostat action stays unchanged
+room thermostat action остаётся неизменным
 +
 room window is open
 +
-device is listed in window_off_devices
-→ desired state for that device = off
+device находится в window_off_devices
+→ desired state этого device = off
 ```
 
-This preserves the legacy rule that a window is context for device applicability, not an input to thermostat demand.
+Так сохраняется legacy-правило: окно — контекст применимости device, а не input thermostat demand.
 
-Cold-weather reversible-climate protection:
+Cold-weather protection reversible climate:
 
 ```text
-FAST climate entity appears in both fast_heat and fast_cool
+FAST climate entity находится и в fast_heat, и в fast_cool
 +
 room requests heating
 +
 RAW selected outdoor temperature < ac_min_outdoor_temperature
-→ that reversible climate device = off
+→ reversible climate device = off
 ```
 
-The default threshold is `-10 °C`, matching the legacy PostgreSQL setting. Other heat sources remain independently eligible.
+Default threshold — `-10 °C`, как в legacy PostgreSQL setting. Другие heat sources остаются независимо доступными.
 
-### 8.4 Target logical device model (planned)
+### 8.4 Целевая модель логического устройства (план)
 
-The current v0.1 configuration keeps the implemented FAST/SLOW lists. The
-following model is the target for the next device-policy refactor; it is
-documented now so ventilation, humidity and more complex equipment can be
-added without changing the basic control architecture.
+Текущая конфигурация v0.1 сохраняет реализованные FAST/SLOW lists. Следующая модель описана как возможное направление будущего device-policy refactor, чтобы вентиляцию, humidity и более сложное оборудование можно было добавлять без изменения базовой control architecture.
 
-A logical controllable device is described by independent properties:
+Логическое управляемое устройство описывается независимыми свойствами:
 
 ```text
 DEVICE
@@ -386,11 +364,9 @@ DEVICE
 └─ equipment_id (optional)
 ```
 
-These properties answer different questions and must not be collapsed into one
-device type.
+Эти свойства отвечают на разные вопросы и не должны схлопываться в один device type.
 
-**roles** describe what the logical device can do for climate control, not how
-Home Assistant exposes it. Initial role vocabulary:
+**roles** описывают, что логическое device может делать для climate control, а не то, как Home Assistant его публикует. Начальный словарь roles:
 
 ```text
 heat
@@ -401,11 +377,9 @@ humidify
 dehumidify
 ```
 
-One logical device may expose more than one role. A reversible climate unit is
-therefore one device with `roles: [heat, cool]`, not two competing logical
-owners of the same HA entity.
+Одно логическое device может иметь несколько roles. Поэтому reversible climate unit — одно device с `roles: [heat, cool]`, а не два конкурирующих logical owners одной HA entity.
 
-**inertia** describes the response character of the device:
+**inertia** описывает характер отклика device:
 
 ```text
 fast
@@ -413,12 +387,9 @@ medium
 slow
 ```
 
-It is intentionally independent from the role and from the source of control.
-For example, a slow heating device and a fast heating device may both have the
-`heat` role but require different control behavior.
+Она намеренно независима от role и control source. Например, slow heating device и fast heating device могут иметь одну role `heat`, но требовать разного control behavior.
 
-**control_source** identifies the controller/demand source that governs the
-device. It is not the raw sensor itself. Planned sources include:
+**control_source** определяет controller/demand source, управляющий device. Это не сам raw sensor. Возможные источники:
 
 ```text
 season
@@ -427,35 +398,26 @@ co2
 humidity
 ```
 
-Examples:
+Примеры:
 
-- underfloor heating can follow `season` and stay enabled through HEAT while
-  its own local thermostat performs physical cycling;
-- an air conditioner can follow `room_thermostat` and react to room
-  heating/cooling/idle demand;
-- supply/exhaust ventilation can follow a CO₂ controller;
-- humidifiers and dehumidifiers can follow the humidity controller.
+- underfloor heating может следовать `season` и оставаться enabled весь HEAT, пока собственный local thermostat выполняет physical cycling;
+- air conditioner может следовать `room_thermostat` и реагировать на room heating/cooling/idle demand;
+- supply/exhaust ventilation может следовать CO₂ controller;
+- humidifiers/dehumidifiers могут следовать humidity controller.
 
-The controller converts sensor facts into normalized demand. Devices should not
-independently reinterpret raw CO₂, humidity or room-temperature measurements.
+Controller преобразует sensor facts в normalized demand. Devices не должны независимо переинтерпретировать raw CO₂, humidity или room-temperature measurements.
 
-**control_profile** describes only how the App communicates the requested
-state to the HA entity: the ordered command sets, dependencies between commands
-and verification requirements. It does not describe the device's thermal role,
-inertia or control source.
+**control_profile** описывает только то, как App сообщает requested state HA entity: упорядоченные наборы команд, зависимости между commands и verification requirements. Он не описывает thermal role, inertia или control source device.
 
-The first generic profile name is:
+Первое generic имя profile:
 
 ```text
 control_standart
 ```
 
-A profile can be reused by unrelated devices when their HA command sequence is
-the same. For example, a cooling air conditioner and a heating heat pump may
-both use `control_standart`.
+Profile можно переиспользовать для разных devices, если их HA command sequence одинаков. Например, cooling air conditioner и heating heat pump могут использовать `control_standart`.
 
-A Control Profile may compile one desired state into an ordered Command Plan,
-for example:
+Control Profile может компилировать один desired state в упорядоченный Command Plan, например:
 
 ```text
 activate:
@@ -467,7 +429,7 @@ deactivate:
   1. set_hvac_mode(off)
 ```
 
-A different profile may require:
+Другой profile может требовать:
 
 ```text
 activate:
@@ -478,28 +440,25 @@ activate:
   5. set_fan_mode
 ```
 
-The general Executor must execute the plan; the command order must not be
-hard-coded globally.
+Общий Executor должен выполнять plan; порядок команд не должен быть глобально hard-coded.
 
-**scope** describes where the logical device acts:
+**scope** описывает, где действует logical device:
 
 ```text
 room
 house
 ```
 
-This allows both room-level and house-level ventilation without inventing
-different execution mechanisms.
+Это позволяет room-level и house-level ventilation использовать один execution mechanism.
 
-**equipment_id** optionally groups multiple logical HA control endpoints that
-belong to one physical installation. The design principle is:
+**equipment_id** опционально группирует несколько logical HA control endpoints, принадлежащих одной физической установке. Принцип:
 
 ```text
 one HA entity = one logical controllable device
 multiple logical devices may belong to one physical equipment
 ```
 
-Example supply-air installation:
+Пример supply-air installation:
 
 ```text
 equipment_id: supply_ahu
@@ -513,7 +472,7 @@ climate.supply_reheat
   scope: house
 ```
 
-A room supply damper can remain a separate logical device:
+Room supply damper может оставаться отдельным logical device:
 
 ```text
 valve.livingroom_supply
@@ -522,19 +481,15 @@ valve.livingroom_supply
   room_id: livingroom
 ```
 
-A future CO₂ controller can therefore coordinate house supply/exhaust devices
-and room dampers while every physical endpoint keeps its own command execution,
-verification and Problem state.
+Будущий CO₂ controller сможет координировать house supply/exhaust devices и room dampers, при этом каждый physical endpoint сохранит собственные command execution, verification и Problem state.
 
-This section defines the model only. It does not add ventilation, CO₂ control,
-room dampers or new nested Supervisor configuration to the current v0.1
-implementation.
+Этот раздел описывает только модель. Он не добавляет ventilation, CO₂ control, room dampers или новую nested Supervisor configuration в текущую реализацию v0.1.
 
-## 9. Device capability binding
+## 9. Binding capabilities устройств
 
-Every configured actuator declares what it can do.
+Каждый настроенный actuator объявляет свои возможности.
 
-External App configuration is intentionally flatter than the internal model:
+Внешняя App configuration намеренно проще внутренней модели:
 
 ```text
 fast_heat = comma-separated switch/climate entities
@@ -545,31 +500,31 @@ window_sensors = comma-separated binary_sensor entities
 window_off_devices = thermal actuators to inhibit while a window is open
 ```
 
-If the same `climate` entity is listed in both FAST lists, the internal model compiles it as `heat_cool`. A `switch` may appear in only one thermal list. An entity may have only one owner across the complete configuration.
+Если одна и та же `climate` entity находится в обоих FAST lists, внутренняя модель компилирует её как `heat_cool`. `switch` может присутствовать только в одном thermal list. У одной entity может быть только один owner во всей конфигурации.
 
 ## 10. Persistence
 
-Use SQLite only as lightweight persistent state under:
+SQLite используется только как lightweight persistent state:
 
 ```text
 /data/dh_climate.db
 ```
 
-SQLite is **not** an orchestration engine.
+SQLite **не** является orchestration engine.
 
-It stores only data that must survive restart:
+Хранятся только данные, которые должны переживать restart:
 
 - schema version;
 - season heat/cool thresholds;
-- rolling outdoor samples needed for avg24;
+- rolling outdoor samples для avg24;
 - room target matrix;
 - humidity targets;
-- previous room thermostat action for stateful hysteresis;
-- last known selected profile overlay only if required for facade continuity;
-- compact execution/retry state if needed;
-- product state metadata.
+- previous room thermostat action для stateful hysteresis;
+- последний selected profile overlay, только если нужен для continuity facade;
+- компактный execution/retry state при необходимости;
+- metadata состояния продукта.
 
-No:
+Не хранятся:
 
 - jobs;
 - handlers;
@@ -578,11 +533,11 @@ No:
 - SQL procedures;
 - SQL business rules.
 
-## 11. HA connection model
+## 11. Модель подключения к HA
 
-Use Supervisor internal Home Assistant API.
+Используется внутренний Home Assistant API Supervisor.
 
-Startup/reconnect order:
+Порядок startup/reconnect:
 
 ```text
 1. connect HA WebSocket
@@ -597,53 +552,44 @@ Startup/reconnect order:
 10. publish MQTT facade
 ```
 
-Historical HA events are never replayed.
+Исторические HA events никогда не replay.
 
-A periodic lightweight runtime tick keeps control reconciliation active. The outdoor EMA itself has a separate one-minute minimum cadence; repeated faster recalculations cannot advance it or create faster temperature samples.
+Периодический lightweight runtime tick поддерживает active control reconciliation. У outdoor EMA отдельная минимальная cadence одна минута; более частые recalculations не могут продвинуть EMA или создать более частые temperature samples.
 
-## 12. Execution model
+## 12. Модель выполнения
 
-The new App directly controls configured devices through Home Assistant services.
+Новый App напрямую управляет настроенными devices через Home Assistant services.
 
-There is no replacement for the old Universal Controller as a general subsystem.
+Отдельной универсальной подсистемы на замену старому Universal Controller нет.
 
-Instead each actuator has a compact reconcile/verification lifecycle:
+Вместо этого каждый actuator имеет компактный lifecycle reconcile/verification:
 
 ```text
 desired state
 vs
 current HA state
-→ equal: establish/keep stable baseline
-→ different: issue the required HA service call(s)
+→ equal: установить/сохранить stable baseline
+→ different: отправить требуемые HA service call(s)
 → SENT
-→ post-command state_changed starts a settle window
+→ post-command state_changed запускает settle window
 → delayed state check
 → matching state: VERIFIED_HA
 → persistent mismatch/no event: bounded retry
 ```
 
-A successful Home Assistant service call is only command acceptance and is
-never treated as device confirmation. After a stable state has been
-established, a later actuator `state_changed` away from the still-current
-desired state starts a delayed drift check before corrective execution.
+Успешный Home Assistant service call означает только принятие команды и никогда не считается device confirmation. После установления stable state более поздний `state_changed` actuator, уходящий от всё ещё актуального desired state, создаёт drift candidate и проверяется после settle delay до corrective execution.
 
-This preserves reliability without recreating the PostgreSQL command lifecycle.
+Так сохраняется надёжность без воссоздания PostgreSQL command lifecycle.
 
-### 12.1 Target command-plan and verification model (planned)
+### 12.1 Целевая модель Command Plan и verification (план)
 
-Control Profiles are expected to compile a desired device state into an ordered
-Command Plan containing one or more steps.
+Control Profiles должны компилировать desired device state в упорядоченный Command Plan из одного или нескольких steps.
 
-The useful legacy idea is retained at the behavior level: one desired state may
-require several ordered HA service calls. The old PostgreSQL/UC implementation
-is not retained.
+Полезная legacy-идея сохраняется на уровне поведения: один desired state может требовать нескольких последовательных HA service calls. Старая реализация PostgreSQL/UC не переносится.
 
-A plan may choose whether an individual step requires verification before the
-next step. Simple devices can send several idempotent service calls and verify
-only the final desired state; devices with ordering/timing constraints can
-require a settled state before advancing.
+Plan может определять, требует ли отдельный step verification до перехода к следующему. Простые devices могут отправить несколько идемпотентных service calls и проверить только финальный desired state; devices с ordering/timing constraints могут требовать settled state перед продолжением.
 
-Target lifecycle:
+Целевой lifecycle:
 
 ```text
 DESIRED_CHANGED
@@ -655,25 +601,17 @@ DESIRED_CHANGED
 → PLAN_VERIFIED_HA
 ```
 
-A command is never considered physically confirmed merely because the HA
-service call succeeded. A successful service result means only that Home
-Assistant accepted the call.
+Команда никогда не считается физически подтверждённой только потому, что HA service call успешен. Успешный service result означает лишь, что Home Assistant принял вызов.
 
-Verification is event-oriented:
+Verification event-oriented:
 
-- a relevant HA `state_changed` event can schedule a delayed state check;
-- the settle delay avoids treating an immediate optimistic echo as final
-  evidence;
-- a watchdog deadline handles the case where no state event arrives;
-- after a plan is verified, a later state transition away from the still-current
-  desired state becomes a drift candidate and is checked after a settle delay;
-- if desired state changes while a plan is running, the old plan is superseded
-  and its pending checks become obsolete.
+- релевантный HA `state_changed` может запланировать delayed state check;
+- settle delay не позволяет считать мгновенный optimistic echo финальным доказательством;
+- watchdog deadline покрывает случай, когда state event не пришёл;
+- после verification plan более поздний state transition от всё ещё актуального desired state становится drift candidate и проверяется после settle delay;
+- если desired state меняется во время выполнения plan, старый plan superseded, его pending checks становятся obsolete.
 
-`PLAN_VERIFIED_HA` intentionally means that Home Assistant still reports the
-desired state after the verification delay. It is not proof of physical
-operation. Independent physical evidence may be added by a future profile when
-available.
+`PLAN_VERIFIED_HA` намеренно означает только, что после verification delay Home Assistant всё ещё сообщает desired state. Это не доказательство физической работы. Независимое physical evidence может быть добавлено будущим profile, если оно доступно.
 
 ## 13. MQTT topology
 
@@ -684,13 +622,13 @@ identifier: dh_climate_app
 name: DigitalHouses Climate
 ```
 
-System device owns:
+System device владеет:
 
 - season `climate` facade;
-- outdoor current/avg24 state that is genuinely useful;
+- действительно полезным outdoor current/avg24 state;
 - global problems/health;
-- Version diagnostic;
-- Started at diagnostic.
+- diagnostic Version;
+- diagnostic Started at.
 
 Room devices:
 
@@ -698,39 +636,39 @@ Room devices:
 dh_climate_app_room_<room_id>
 ```
 
-Each room device owns only its room-facing functional entities.
+Каждый room device владеет только функциональными room-facing entities.
 
-MQTT Discovery and current state are retained. Transient machine events are not retained.
+MQTT Discovery и current state retained. Transient machine events не retained.
 
-## 14. Legacy behavior retained
+## 14. Сохранённое legacy-поведение
 
-From `DigitalHouses/dh_climate_1`:
+Из `DigitalHouses/dh_climate_1` сохранены:
 
-- outdoor source priority/fallback;
+- priority/fallback наружных sources;
 - outdoor current + 24h derived concept;
-- global `HEAT / COOL / OFF`;
-- two-slider `heat_cool` season thermostat;
-- room-as-thermostat abstraction;
-- room target matrix by season/profile;
+- глобальный `HEAT / COOL / OFF`;
+- сезонный thermostat `heat_cool` с двумя sliders;
+- абстракция room-as-thermostat;
+- room target matrix по season/profile;
 - `day/night/away/antifreeze`;
-- season-restricted room HVAC modes;
-- profile editing through thermostat facade;
-- temperature/humidity normalization;
-- fallback/unavailable semantics;
-- room window aggregation and per-device open-window inhibition;
-- low-outdoor-temperature protection for reversible climate heating;
-- MQTT Discovery facade concepts.
+- ограниченные сезоном room HVAC modes;
+- редактирование profile через thermostat facade;
+- normalization temperature/humidity;
+- semantics fallback/unavailable;
+- aggregation room windows и per-device inhibition при open window;
+- защита reversible climate heating при низкой наружной температуре;
+- концепции MQTT Discovery facade.
 
-## 15. Legacy architecture intentionally removed
+## 15. Legacy-архитектура, намеренно удалённая
 
-Not ported:
+Не переносится:
 
-- PostgreSQL as business engine;
+- PostgreSQL как business engine;
 - append-only SQL runtime architecture;
 - system job queue;
 - handlers;
 - Matrix;
-- Firewall as a separate engine;
+- Firewall как отдельный engine;
 - Dispatcher;
 - UC queue;
 - Universal Controller;
@@ -740,11 +678,11 @@ Not ported:
 - SQL runtime sessions;
 - PostgreSQL-specific system facade diagnostics.
 
-Equivalent useful behavior is implemented directly in Python where still required.
+Эквивалентное полезное поведение реализуется напрямую в Python там, где оно действительно требуется.
 
-## 16. Implementation modules
+## 16. Модули реализации
 
-Target Python layout:
+Целевая структура Python:
 
 ```text
 src/dh_climate_app/
@@ -764,7 +702,7 @@ src/dh_climate_app/
 └── problems.py
 ```
 
-Dependency direction:
+Направление зависимостей:
 
 ```text
 config / models
@@ -778,11 +716,11 @@ HA + MQTT adapters
 app runtime
 ```
 
-`core.py` must remain testable without Home Assistant, MQTT or SQLite.
+`core.py` должен оставаться тестируемым без Home Assistant, MQTT и SQLite.
 
-## 17. First implementation slice
+## 17. Первый implementation slice
 
-The first executable slice is intentionally vertical:
+Первый executable slice намеренно вертикальный:
 
 ```text
 configured outdoor sources
@@ -798,4 +736,4 @@ configured room temperature sensors
 → FAST/SLOW desired state
 ```
 
-These deterministic rules are now wired to the Home Assistant WebSocket/REST adapters, MQTT facade and direct device reconciliation. The remaining release gate is real HAOS integration testing against configured entities.
+Эти детерминированные правила уже подключены к Home Assistant WebSocket/REST adapters, MQTT facade и прямому device reconciliation. Оставшийся release gate — реальное integration testing HAOS на настроенных entities.
