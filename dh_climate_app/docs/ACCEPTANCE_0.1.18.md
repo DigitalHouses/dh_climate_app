@@ -1,54 +1,44 @@
-# DigitalHouses Climate App 0.1.18 — HAOS acceptance
+# DigitalHouses Climate App 0.1.18 — приёмочное тестирование HAOS
 
-Date: 2026-09-27
+Дата: 2026-09-27
 
-## Scope
+## Область проверки
 
-Version `0.1.18` was validated on a real Home Assistant OS installation using
-the bundled acceptance harness and deterministic MQTT fixtures.
+Версия `0.1.18` проверена на реальной установке Home Assistant OS с bundled acceptance harness и детерминированными MQTT fixtures.
 
-This release specifically corrects the room thermostat capability list so the
-user sees only modes valid for the current global season.
+Этот релиз исправляет список capabilities комнатного термостата, чтобы пользователь видел только режимы, допустимые для текущего глобального сезона.
 
-## Native room Climate result
+## Результат нативного комнатного Climate
 
-The live run passed the exact seasonal capability contract:
+Live run прошёл точный сезонный capability contract:
 
 - HEAT season: `hvac_modes = [off, heat]`;
 - COOL season: `hvac_modes = [off, cool]`;
 - interseason/OFF: `hvac_modes = [off]`;
-- room state follows the same season contract: `heat / cool / off`;
-- `hvac_action` remains independent and exposes actual activity;
-- native `day / night / away` presets survived the HEAT → COOL → OFF
-  Discovery updates;
-- selecting `night` exposed the Night target;
-- selecting Home Assistant's reserved `none` returned to the automatically
-  effective profile.
+- room state следует тому же season contract: `heat / cool / off`;
+- `hvac_action` остаётся независимым и показывает фактическую активность;
+- native presets `day / night / away` пережили Discovery updates HEAT → COOL → OFF;
+- выбор `night` показал Night target;
+- выбор зарезервированного Home Assistant `none` вернул автоматически effective profile.
 
-Preset preservation is implemented without timing delays. The App publishes the
-authoritative retained preset to a season-scoped preset state topic before the
-season-specific MQTT Discovery payload, forcing Home Assistant to resubscribe
-and immediately consume the retained preset.
+Сохранение preset реализовано без timing delays. App сначала публикует authoritative retained preset в season-scoped preset state topic, затем season-specific MQTT Discovery payload. Изменение preset state topic заставляет Home Assistant переподписаться и сразу получить retained preset.
 
-## Safety and actuator result
+## Результат safety и actuators
 
-The same run passed:
+Тот же run прошёл:
 
-- `device_target_out_of_range` start and recovery;
-- bounded `device_no_confirmation` retry through RETRY 2/3, RETRY 3/3 and
-  COOLDOWN 300s, followed by recovery;
-- SLOW heat floor behavior and shutdown outside HEAT season;
-- selective window inhibition through `window_off_devices`;
-- reversible climate cold-weather heating protection without blocking COOL;
-- humidity active control and safe shutdown when the stored target is outside
-  the physical humidifier range.
+- начало и recovery `device_target_out_of_range`;
+- bounded `device_no_confirmation` retry через RETRY 2/3, RETRY 3/3 и COOLDOWN 300s с последующим recovery;
+- SLOW heat floor и shutdown вне HEAT season;
+- selective window inhibition через `window_off_devices`;
+- cold-weather heating protection reversible climate без блокировки COOL;
+- активное humidity control и safe shutdown при stored target вне физического диапазона humidifier.
 
-## Durability result
+## Результат durability
 
-A Climate-App-only Supervisor backup was created before the acceptance
-configuration was applied and restored successfully afterwards.
+До применения acceptance-конфигурации создан Supervisor backup только Climate App, после проверки он успешно восстановлен.
 
-The final runtime returned to the clean baseline with:
+Финальный runtime вернулся к чистому baseline:
 
 - App version `0.1.18`;
 - room state `heat`;
@@ -56,7 +46,7 @@ The final runtime returned to the clean baseline with:
 - aggregate Problem `off`;
 - Problem count `0`.
 
-## Runtime acceptance result
+## Итог runtime acceptance
 
 ```text
 repository CI = green
@@ -78,11 +68,11 @@ final clean baseline = green
 runtime acceptance = PASS
 ```
 
-## Release status
+## Статус релиза
 
-Runtime acceptance and immutable publication are complete.
+Runtime acceptance и immutable publication завершены.
 
-Published release:
+Опубликованный релиз:
 
 - tag: `digitalhouses_climate_app-v0.1.18`;
 - release commit: `744c0cb479305f508ffd4b709d5e96c8623e5357`;
@@ -90,4 +80,4 @@ Published release:
 - manifest digest: `sha256:386b4890f893ba5c87f755a9b2f56267bba700618b870bb0dc8b875860be5e95`;
 - release workflow run: `36276954342`.
 
-No published immutable image version may be overwritten with different content.
+Опубликованная immutable image version не может быть перезаписана другим содержимым.
