@@ -130,7 +130,7 @@ Season facade повторяет поведение DH Climate 5:
 
 - Home Assistant domain: `climate`;
 - mode: `heat_cool`;
-- current temperature: `avg_outdoor_24`;
+- текущая температура: `avg_outdoor_24`;
 - current humidity: rolling 24h humidity, когда доступна;
 - lower target: threshold отопительного сезона;
 - upper target: threshold сезона охлаждения;
@@ -147,7 +147,7 @@ Season facade повторяет поведение DH Climate 5:
 
 Комнатный термостат содержит:
 
-- current room temperature;
+- текущая температура комнаты;
 - target room temperature;
 - HVAC mode, определяемый глобальным season;
 - HVAC action, определяемый room demand;
@@ -256,7 +256,7 @@ Entity публикуется в Home Assistant domain `humidifier`.
 
 Entity содержит:
 
-- current humidity;
+- текущая влажность;
 - target humidity.
 
 Если humidity control не настроен, соответствующая entity не публикуется.
@@ -645,7 +645,7 @@ MQTT Discovery и current state retained. Transient machine events не retained
 Из `DigitalHouses/dh_climate_1` сохранены:
 
 - priority/fallback наружных sources;
-- outdoor current + 24h derived concept;
+- текущая наружная температура + производная величина за 24 часа;
 - глобальный `HEAT / COOL / OFF`;
 - сезонный thermostat `heat_cool` с двумя sliders;
 - абстракция room-as-thermostat;
@@ -664,7 +664,7 @@ MQTT Discovery и current state retained. Transient machine events не retained
 Не переносится:
 
 - PostgreSQL как business engine;
-- append-only SQL runtime architecture;
+- append-only SQL runtime-архитектура;
 - system job queue;
 - handlers;
 - Matrix;
@@ -674,7 +674,7 @@ MQTT Discovery и current state retained. Transient machine events не retained
 - Universal Controller;
 - Confirmator;
 - UC Supervisor;
-- SQL component status;
+- статус SQL components;
 - SQL runtime sessions;
 - PostgreSQL-specific system facade diagnostics.
 
