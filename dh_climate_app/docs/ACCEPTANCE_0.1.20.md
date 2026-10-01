@@ -1,32 +1,28 @@
-# DigitalHouses Climate App 0.1.20 — HAOS acceptance
+# DigitalHouses Climate App 0.1.20 — приёмочное тестирование HAOS
 
-Date: 2026-09-27
+Дата: 2026-09-27
 
-## Scope
+## Область проверки
 
-Version `0.1.20` was validated on a real Home Assistant OS installation using
-the bundled acceptance harness.
+Версия `0.1.20` проверена на реальной установке Home Assistant OS с bundled acceptance harness.
 
-This release adds observability for the existing prioritized outdoor
-temperature source chain.
+Релиз добавляет наблюдаемость существующей приоритетной цепочки источников наружной температуры.
 
-## Outdoor source result
+## Результат наружных источников
 
-The live run confirmed:
+Live run подтвердил:
 
-- the active source is visible through the season facade;
-- a same-source temperature change is written to `climate.log` with the
-  active source;
-- primary source loss switches to the configured backup;
-- the failover writes a dedicated source-switch log line;
-- the failover emits `outdoor_temperature_source_changed`;
-- the Event contains previous/current source and previous/current temperatures;
-- recovery of the preferred primary source switches back automatically;
-- the preferred-source recovery emits the reverse transition;
-- the first complete observation after startup/reconnect remains a baseline,
-  not a synthetic source-change Event.
+- активный источник виден через season facade;
+- изменение температуры при том же источнике записывается в `climate.log` вместе с active source;
+- потеря primary source переключает систему на настроенный backup;
+- failover записывает отдельную строку source-switch в log;
+- failover публикует `outdoor_temperature_source_changed`;
+- Event содержит previous/current source и previous/current temperature;
+- восстановление preferred primary source автоматически переключает систему обратно;
+- preferred-source recovery публикует обратный transition;
+- первое полное наблюдение после startup/reconnect остаётся baseline, а не синтетическим source-change Event.
 
-Observed live sequence:
+Наблюдавшаяся live-последовательность:
 
 ```text
 primary 5.0 °C
@@ -36,23 +32,23 @@ backup 6.0 °C
 primary restored 5.0 °C
 ```
 
-## Regression result
+## Результат регрессии
 
-The same bundled run passed the complete existing acceptance set:
+Тот же bundled run прошёл полный существующий acceptance set:
 
-- dedicated outdoor temperature avg24 sensor;
-- native room HEAT / COOL / OFF semantics;
-- native day / night / away presets;
+- отдельный outdoor temperature avg24 sensor;
+- нативная семантика room HEAT / COOL / OFF;
+- native presets day / night / away;
 - target-range safety;
-- bounded no-confirmation retry and cooldown recovery;
+- bounded no-confirmation retry и cooldown recovery;
 - SLOW floor control;
-- window context and selective inhibition;
-- cold-weather reversible climate protection;
-- humidity active path and safe shutdown;
-- Climate-App-only Supervisor backup/restore;
-- final clean baseline with aggregate Problem off.
+- window context и selective inhibition;
+- cold-weather protection reversible climate;
+- активный humidity path и safe shutdown;
+- Supervisor backup/restore только Climate App;
+- финальный clean baseline с aggregate Problem off.
 
-## Runtime acceptance result
+## Итог runtime acceptance
 
 ```text
 repository CI = green
@@ -69,11 +65,11 @@ final clean baseline = green
 runtime acceptance = PASS
 ```
 
-## Release status
+## Статус релиза
 
-Runtime acceptance and immutable publication are complete.
+Runtime acceptance и immutable publication завершены.
 
-Published release:
+Опубликованный релиз:
 
 - tag: `digitalhouses_climate_app-v0.1.20`;
 - release commit: `50f6ed7cc72cc3b01f8f12b05325d1eb9469a14b`;
@@ -81,4 +77,4 @@ Published release:
 - manifest digest: `sha256:1405f6b91adddc1325047bcdebcee23af0da401b6df4ffd742450d23a0f1476c`;
 - release workflow run: `36280643923`.
 
-No published immutable image version may be overwritten with different content.
+Опубликованная immutable image version не может быть перезаписана другим содержимым.
