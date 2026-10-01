@@ -77,10 +77,10 @@ Runtime acceptance и immutable publication завершены.
 Опубликованный релиз:
 
 - tag: `digitalhouses_climate_app-v0.1.17`;
-- release commit: `a346d46e990b1355fbbcc1c46ebc7d15431f66a8`;
+- commit релиза: `a346d46e990b1355fbbcc1c46ebc7d15431f66a8`;
 - image: `ghcr.io/digitalhouses/digitalhouses_climate_app:0.1.17`;
 - manifest digest: `sha256:641367437f7d8b1bb2796c0fee983080183cf760217a09661be80baf1b229f3d`;
-- release workflow run: `36275409307`.
+- run release workflow: `36275409307`.
 
 Release workflow проверил canonical tag, убедился, что immutable destination не занят, опубликовал multi-architecture GHCR image и создал GitHub Release.
 
