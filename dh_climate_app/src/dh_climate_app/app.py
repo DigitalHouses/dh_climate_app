@@ -12,6 +12,7 @@ from .climate_log import ClimateLog
 from .config import AppConfig, configured_entity_ids, parse_options
 from .core import Profile, Season
 from .devices import compile_room_devices
+from .auto_fast import AutoFastClimateTargets
 from .events import ClimateEventEngine
 from .executor import DeviceExecutor, ReconcileSummary
 from .ha_client import HaState, HomeAssistantClient, StateCache
@@ -117,6 +118,7 @@ class ClimateRuntime:
             entity_ids=self.cache.allowed,
         )
         self.climate_log = ClimateLog(self.ha)
+        self.auto_fast = AutoFastClimateTargets()
         self.executor = DeviceExecutor(
             self.ha,
             climate_log=self.climate_log,
@@ -216,6 +218,7 @@ class ClimateRuntime:
         if not connected:
             self.cache.clear()
             self.executor.reset_transient()
+            self.auto_fast.reset()
             await self._cancel_device_rechecks()
             self.events.reset()
             self._weather_source_last_updated = None
@@ -444,6 +447,7 @@ class ClimateRuntime:
                     humidity_states=humidity_states,
                     outdoor_temperature=outdoor_state.raw_temperature,
                 )
+                desired = self.auto_fast.apply(desired, snapshot)
                 self._last_reconcile = await self.executor.reconcile(
                     desired,
                     snapshot,
