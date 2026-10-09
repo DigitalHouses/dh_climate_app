@@ -17,6 +17,9 @@ class DesiredDeviceState:
     target_temperature: float | None = None
     target_humidity: float | None = None
     source: str = ""
+    # Runtime-only metadata for the automatic reversible FAST climate target.
+    automatic_temperature: bool = False
+    room_temperature: float | None = None
 
     @property
     def signature(self) -> tuple[object, ...]:
@@ -148,6 +151,8 @@ def compile_room_devices(
                             state.control_target_temperature if active else None
                         ),
                         source=f"room:{room.room_id}:fast",
+                        automatic_temperature=(device.function == "heat_cool"),
+                        room_temperature=state.current_temperature,
                     )
                 )
 
