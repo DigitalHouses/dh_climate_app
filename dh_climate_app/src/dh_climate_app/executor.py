@@ -505,6 +505,7 @@ class DeviceExecutor:
                 and actual.state != desired.hvac_mode
                 and desired.target_temperature is not None
                 and actual.attributes.get("device_code") is not None
+                and actual.attributes.get("supported_controller") is not None
             ):
                 self._trace(
                     desired,
