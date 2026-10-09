@@ -201,7 +201,7 @@ FAST devices следуют room demand.
 - `switch`;
 - `climate`.
 
-`fast_heat` и `fast_cool` — списки actuators через запятую. Одна `climate` entity может находиться в обоих списках и тогда трактуется как `heat_cool`. `switch` может находиться только в одном списке.
+`fast_heat` и `fast_cool` — списки actuators через запятую. Для реверсивных climate в обоих списках App автоматически преобразует комнатный target в физический HEAT/COOL target с учётом min/max/step устройства и удерживает его стабильным на протяжении активного цикла. Отдельных пользовательских offset нет. Одна `climate` entity может находиться в обоих списках и тогда трактуется как `heat_cool`. `switch` может находиться только в одном списке.
 
 Reversible `climate` entity в обоих FAST lists также получает legacy cold-weather heating protection. Ниже `ac_min_outdoor_temperature` (default `-10 °C`) App не разрешает ей heating mode, при этом другие допустимые heat sources могут продолжать работу.
 
