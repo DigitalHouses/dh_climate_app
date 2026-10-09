@@ -91,6 +91,7 @@ class ExecutorTests(unittest.IsolatedAsyncioTestCase):
                     "off",
                     temperature=25,
                     device_code=3340,
+                    supported_controller="Broadlink",
                     hvac_modes=["off", "heat", "cool"],
                     min_temp=16,
                     max_temp=32,
