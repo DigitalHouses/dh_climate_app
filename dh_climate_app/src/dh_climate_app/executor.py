@@ -497,6 +497,34 @@ class DeviceExecutor:
             return commands
 
         if desired.domain == "climate":
+            # SmartIR climate.set_temperature accepts an optional hvac_mode:
+            # it updates both values and sends one complete IR command. Calling
+            # set_hvac_mode and set_temperature separately sends two IR packets.
+            if (
+                desired.hvac_mode in {"heat", "cool"}
+                and actual.state != desired.hvac_mode
+                and desired.target_temperature is not None
+                and actual.attributes.get("device_code") is not None
+                and actual.attributes.get("supported_controller") is not None
+            ):
+                self._trace(
+                    desired,
+                    (
+                        "CALL climate.set_temperature -> "
+                        f"{desired.target_temperature}"
+                        f" mode={desired.hvac_mode} (SmartIR single command)"
+                    ),
+                )
+                await self.ha.call_service(
+                    "climate",
+                    "set_temperature",
+                    {
+                        "entity_id": desired.entity_id,
+                        "temperature": desired.target_temperature,
+                        "hvac_mode": desired.hvac_mode,
+                    },
+                )
+                return 1
             if desired.hvac_mode is not None and actual.state != desired.hvac_mode:
                 self._trace(
                     desired,

@@ -72,6 +72,49 @@ class ExecutorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("set_hvac_mode", ha.calls[0][1])
         self.assertEqual("set_temperature", ha.calls[1][1])
 
+    async def test_smartir_mode_and_target_is_one_service_call(self) -> None:
+        ha = FakeHa()
+        executor = DeviceExecutor(ha)
+        summary = await executor.reconcile(
+            [
+                DesiredDeviceState(
+                    entity_id="climate.bedroom_ac",
+                    domain="climate",
+                    hvac_mode="heat",
+                    target_temperature=29.0,
+                    source="room:bedroom:fast",
+                )
+            ],
+            {
+                "climate.bedroom_ac": actual(
+                    "climate.bedroom_ac",
+                    "off",
+                    temperature=25,
+                    device_code=3340,
+                    supported_controller="Broadlink",
+                    hvac_modes=["off", "heat", "cool"],
+                    min_temp=16,
+                    max_temp=32,
+                )
+            },
+            now_monotonic=100,
+        )
+        self.assertEqual(1, summary.commands)
+        self.assertEqual(
+            [
+                (
+                    "climate",
+                    "set_temperature",
+                    {
+                        "entity_id": "climate.bedroom_ac",
+                        "temperature": 29.0,
+                        "hvac_mode": "heat",
+                    },
+                )
+            ],
+            ha.calls,
+        )
+
     async def test_unavailable_device_is_not_commanded(self) -> None:
         ha = FakeHa()
         executor = DeviceExecutor(ha)
