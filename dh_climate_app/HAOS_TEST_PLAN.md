@@ -108,7 +108,7 @@ Acceptance:
 - heating demand включает FAST heat switch;
 - idle/off выключает его;
 - cooling demand активирует только настроенные FAST cooling devices;
-- FAST climate получает правильные HVAC mode и room air target;
+- FAST climate получает правильный HVAC mode; реверсивный FAST climate получает автоматически рассчитанный физический target с учётом комнатного target, фактической room temperature и физических min/max/step;
 - уже корректное physical state не создаёт дублирующий service call;
 - unsupported HVAC mode или target вне range не отправляются вслепую;
 - unavailable physical entity создаёт Problem diagnostic вместо tight retry loop;
@@ -181,7 +181,7 @@ Acceptance:
 
 ## 11. Telemetry
 
-Текущий development-код `0.1.26` всё ещё является baseline policy v1. Нельзя объявлять policy v2 release-ready, пока production deployment `telemetry.digitalhouses.vip` независимо не подтверждён как DigitalHouses Stats `0.4.1+`.
+Предлагаемый development-код `0.1.27` всё ещё является baseline policy v1. Нельзя объявлять policy v2 release-ready, пока production deployment `telemetry.digitalhouses.vip` независимо не подтверждён как DigitalHouses Stats `0.4.1+`.
 
 Финальный acceptance policy v2 должен проверить:
 
@@ -247,4 +247,4 @@ immutable release publication = green
 
 Опубликованный артефакт: `digitalhouses_climate_app-v0.1.21` / `ghcr.io/digitalhouses/digitalhouses_climate_app:0.1.21` / `sha256:5870a9e2791fadc76165f2a5c604cf7d1f84d7448de5e5401721be2a63045349`.
 
-Эта запись не закрывает оставшийся registry-delivery gap: в `config.yaml` всё ещё отсутствует `image:`. Текущие development-изменения `0.1.26` требуют нового полного HAOS acceptance до любого релиза. Дефекты, найденные в HAOS acceptance, исправляются новым commit/version; опубликованная immutable image version никогда не перезаписывается другим содержимым.
+Эта запись не закрывает оставшийся registry-delivery gap: в `config.yaml` всё ещё отсутствует `image:`. Изменения `0.1.27` требуют нового полного HAOS acceptance до любого релиза. Дефекты, найденные в HAOS acceptance, исправляются новым commit/version; опубликованная immutable image version никогда не перезаписывается другим содержимым.
