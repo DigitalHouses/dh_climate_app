@@ -1,5 +1,5 @@
 name: DigitalHouses Climate App
-version: 0.1.27
+version: 0.1.28
 slug: dh_climate_app
 description: Whole-house climate logic with room thermostats and direct Home Assistant device control.
 url: https://github.com/DigitalHouses/dh_climate_app
@@ -16,28 +16,20 @@ hassio_api: true
 services:
   - mqtt:need
 options:
-  hysteresis: 0.5
+  temperature_hysteresis: 0.5
   humidity_hysteresis: 3.0
   night_mode: ""
   we_at_home: ""
-  heat_threshold_default: 12.0
-  cool_threshold_default: 20.0
-  ac_min_outdoor_temperature: -10.0
-  outdoor_temperature_ema_minutes: 20.0
   outdoor_temperature_sources: ""
   outdoor_humidity_sources: ""
   rooms: []
   telemetry_enabled: false
   log_level: info
 schema:
-  hysteresis: float(0,5)
+  temperature_hysteresis: float(0,5)
   humidity_hysteresis: float(0,25)
   night_mode: str
   we_at_home: str
-  heat_threshold_default: float(-50,50)
-  cool_threshold_default: float(-50,50)
-  ac_min_outdoor_temperature: float(-50,20)
-  outdoor_temperature_ema_minutes: float(1,180)
   outdoor_temperature_sources: str
   outdoor_humidity_sources: str
   rooms:
@@ -47,19 +39,11 @@ schema:
       humidity_sensors: "str?"
       window_sensors: "str?"
       window_off_devices: "str?"
-      heat_day: float
-      heat_night: float
-      heat_away: float
-      heat_antifreeze: float
-      cool_day: float
-      cool_night: float
-      cool_away: float
       fast_heat: "str?"
       fast_cool: "str?"
       slow_heat: "str?"
       slow_target: "float?"
-      humidity_mode: list(off|humidifier|dehumidifier)
-      humidity_target: "float(0,100)?"
+      humidity_mode: "list(off|humidifier|dehumidifier)?"
       humidity_actuator: "str?"
   telemetry_enabled: bool
   log_level: list(debug|info|warning|error)

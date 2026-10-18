@@ -53,6 +53,18 @@ class ProductContractTests(unittest.TestCase):
         marker = (APP_ROOT / "digitalhouses.app").read_text(encoding="utf-8")
         self.assertIn("type = haos_addon", marker)
 
+    def test_supervisor_exposes_topology_not_room_targets(self) -> None:
+        config = yaml.safe_load((APP_ROOT / "config.yaml").read_text(encoding="utf-8"))
+        schema = config["schema"]
+        self.assertIn("temperature_hysteresis", schema)
+        for key in ("hysteresis", "heat_threshold_default", "cool_threshold_default",
+                    "ac_min_outdoor_temperature", "outdoor_temperature_ema_minutes"):
+            self.assertNotIn(key, schema)
+            self.assertNotIn(key, config["options"])
+        for key in ("heat_day", "heat_night", "heat_away", "heat_antifreeze",
+                    "cool_day", "cool_night", "cool_away", "humidity_target"):
+            self.assertNotIn(key, schema["rooms"][0])
+
     def test_slug_is_stable(self) -> None:
         config = yaml.safe_load(
             (APP_ROOT / "config.yaml").read_text(encoding="utf-8")

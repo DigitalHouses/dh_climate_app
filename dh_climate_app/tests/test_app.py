@@ -212,17 +212,17 @@ class RoomTargetCommandTests(unittest.IsolatedAsyncioTestCase):
                 MqttCommand(
                     scope="season",
                     command="target_temp_low",
-                    payload="30",
+                    payload="14",
                 ),
                 MqttCommand(
                     scope="season",
                     command="target_temp_high",
-                    payload="35",
+                    payload="23",
                 ),
             ]
         )
 
-        self.assertEqual([(30.0, 35.0)], runtime.store.threshold_calls)
+        self.assertEqual([(14.0, 23.0)], runtime.store.threshold_calls)
 
     async def test_season_range_pair_works_in_reverse_order(self) -> None:
         runtime = self.runtime()
@@ -232,17 +232,26 @@ class RoomTargetCommandTests(unittest.IsolatedAsyncioTestCase):
                 MqttCommand(
                     scope="season",
                     command="target_temp_high",
-                    payload="35",
+                    payload="23",
                 ),
                 MqttCommand(
                     scope="season",
                     command="target_temp_low",
-                    payload="30",
+                    payload="14",
                 ),
             ]
         )
 
-        self.assertEqual([(30.0, 35.0)], runtime.store.threshold_calls)
+        self.assertEqual([(14.0, 23.0)], runtime.store.threshold_calls)
+
+    async def test_season_bounds_reject_out_of_range_batch(self) -> None:
+        runtime = self.runtime()
+        with self.assertRaises(ValueError):
+            await runtime._handle_season_range_commands([
+                MqttCommand(scope="season", command="target_temp_low", payload="10"),
+                MqttCommand(scope="season", command="target_temp_high", payload="25.1"),
+            ])
+        self.assertEqual([], runtime.store.threshold_calls)
 
     async def test_invalid_single_season_threshold_is_rejected(self) -> None:
         runtime = self.runtime()

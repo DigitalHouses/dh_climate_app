@@ -1,5 +1,5 @@
 configuration:
-  hysteresis:
+  temperature_hysteresis:
     name: Гистерезис температуры
     description: Единый общедомовой гистерезис в °C для выбора сезона и комнатных термостатов.
   humidity_hysteresis:
@@ -11,18 +11,6 @@ configuration:
   we_at_home:
     name: Сущность присутствия дома
     description: Необязательный input_boolean.* или binary_sensor.*. Недоступная настроенная сущность считается режимом away.
-  heat_threshold_default:
-    name: Порог отопительного сезона
-    description: Начальный нижний/красный порог сезонного термостата. Изменения из Home Assistant сохраняются.
-  cool_threshold_default:
-    name: Порог сезона охлаждения
-    description: Начальный верхний/синий порог сезонного термостата. Изменения из Home Assistant сохраняются.
-  ac_min_outdoor_temperature:
-    name: Минимальная уличная температура для обогрева кондиционером
-    description: "Общедомовая защита: ниже этого порога реверсивные climate-устройства, используемые и на отопление, и на охлаждение, не включаются на обогрев."
-  outdoor_temperature_ema_minutes:
-    name: EMA уличной температуры
-    description: Постоянная времени экспоненциального сглаживания в минутах для публичной уличной температуры, используемой климатом и выбором сезона. Минимальный шаг обновления — одна минута.
   outdoor_temperature_sources:
     name: Источники уличной температуры
     description: sensor.* или weather.* через запятую в порядке приоритета. Для weather.* используется текущий атрибут temperature.
@@ -31,7 +19,7 @@ configuration:
     description: sensor.* или weather.* через запятую в независимом порядке приоритета. Для weather.* используется текущий атрибут humidity.
   rooms:
     name: Комнаты
-    description: Комнатные термостаты, уставки и прямые привязки исполнительных устройств.
+    description: Комнатные датчики, термостаты и привязки исполнительных устройств.
     fields:
       id:
         name: ID комнаты
@@ -51,27 +39,6 @@ configuration:
       window_off_devices:
         name: Отключать при открытом окне
         description: Исполнительные устройства этой комнаты через запятую, которые нужно принудительно выключать при открытом окне.
-      heat_day:
-        name: Отопление · День
-        description: Целевая температура воздуха в отопительный сезон для профиля day.
-      heat_night:
-        name: Отопление · Ночь
-        description: Целевая температура воздуха в отопительный сезон для профиля night.
-      heat_away:
-        name: Отопление · Away
-        description: Целевая температура воздуха в отопительный сезон для профиля away.
-      heat_antifreeze:
-        name: Отопление · Антизамерзание
-        description: Защитная уставка при выключенном климате комнаты в отопительный сезон.
-      cool_day:
-        name: Охлаждение · День
-        description: Целевая температура воздуха в сезон охлаждения для профиля day.
-      cool_night:
-        name: Охлаждение · Ночь
-        description: Целевая температура воздуха в сезон охлаждения для профиля night.
-      cool_away:
-        name: Охлаждение · Away
-        description: Целевая температура воздуха в сезон охлаждения для профиля away.
       fast_heat:
         name: FAST отопление
         description: switch.* или climate.* через запятую, которые следуют запросу комнаты на отопление.
@@ -87,9 +54,6 @@ configuration:
       humidity_mode:
         name: Управление влажностью
         description: off, humidifier или dehumidifier.
-      humidity_target:
-        name: Целевая влажность
-        description: Целевая относительная влажность комнаты.
       humidity_actuator:
         name: Исполнитель влажности
         description: switch.* или humidifier.*. Оставьте пустым при humidity_mode=off.

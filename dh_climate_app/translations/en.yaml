@@ -1,5 +1,5 @@
 configuration:
-  hysteresis:
+  temperature_hysteresis:
     name: Temperature hysteresis
     description: One house-wide hysteresis in °C used by season selection and room thermostats.
   humidity_hysteresis:
@@ -11,18 +11,6 @@ configuration:
   we_at_home:
     name: Home presence entity
     description: Optional input_boolean.* or binary_sensor.*. An unavailable configured entity resolves to away.
-  heat_threshold_default:
-    name: Heating season threshold
-    description: Initial lower/red threshold for the season thermostat. Later changes from Home Assistant are persisted.
-  cool_threshold_default:
-    name: Cooling season threshold
-    description: Initial upper/blue threshold for the season thermostat. Later changes from Home Assistant are persisted.
-  ac_min_outdoor_temperature:
-    name: Minimum outdoor temperature for AC heating
-    description: Legacy house-wide protection for reversible climate devices used for both heating and cooling.
-  outdoor_temperature_ema_minutes:
-    name: Outdoor temperature EMA
-    description: Exponential moving-average time constant in minutes for the public outdoor temperature used by climate and season logic. Minimum update cadence is one minute.
   outdoor_temperature_sources:
     name: Outdoor temperature sources
     description: Comma-separated sensor.* or weather.* entities in priority order. weather.* uses its current temperature attribute.
@@ -31,7 +19,7 @@ configuration:
     description: Comma-separated sensor.* or weather.* entities in independent priority order. weather.* uses its current humidity attribute.
   rooms:
     name: Rooms
-    description: Room thermostats, targets and direct actuator bindings.
+    description: Room sensors, thermostats and direct actuator bindings.
     fields:
       id:
         name: Room ID
@@ -51,27 +39,6 @@ configuration:
       window_off_devices:
         name: Devices off with open window
         description: Comma-separated thermal actuators from this room that must be forced off while a configured window is open.
-      heat_day:
-        name: Heat · Day
-        description: Room air target in heating season for the day profile.
-      heat_night:
-        name: Heat · Night
-        description: Room air target in heating season for the night profile.
-      heat_away:
-        name: Heat · Away
-        description: Room air target in heating season for the away profile.
-      heat_antifreeze:
-        name: Heat · Antifreeze
-        description: Protection target used when room climate control is off during heating season.
-      cool_day:
-        name: Cool · Day
-        description: Room air target in cooling season for the day profile.
-      cool_night:
-        name: Cool · Night
-        description: Room air target in cooling season for the night profile.
-      cool_away:
-        name: Cool · Away
-        description: Room air target in cooling season for the away profile.
       fast_heat:
         name: FAST heating devices
         description: Comma-separated switch.* or climate.* entities that follow room heating demand.
@@ -87,9 +54,6 @@ configuration:
       humidity_mode:
         name: Humidity control
         description: off, humidifier or dehumidifier.
-      humidity_target:
-        name: Humidity target
-        description: Relative-humidity target for the room.
       humidity_actuator:
         name: Humidity actuator
         description: switch.* or humidifier.* entity. Leave empty when humidity control is off.

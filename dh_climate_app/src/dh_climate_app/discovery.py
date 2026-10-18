@@ -4,7 +4,7 @@ from datetime import datetime
 import json
 from typing import Any
 
-from .config import RoomConfig
+from .config import RoomConfig, SEASON_MIN_TEMP, SEASON_MAX_TEMP
 from .events import EVENT_TYPES
 from .humidity import HumidityState
 from .outdoor import OutdoorState
@@ -88,8 +88,8 @@ def season_discovery_payload(app_version: str) -> dict[str, Any]:
         "temperature_high_command_topic": f"{SEASON_BASE}/set/target_temp_high",
         "action_topic": f"{SEASON_BASE}/hvac_action",
         "json_attributes_topic": f"{SEASON_BASE}/attributes",
-        "min_temp": -40.0,
-        "max_temp": 50.0,
+        "min_temp": SEASON_MIN_TEMP,
+        "max_temp": SEASON_MAX_TEMP,
         "temp_step": 0.1,
         "modes": ["heat_cool"],
         "retain": True,

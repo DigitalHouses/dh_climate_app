@@ -70,6 +70,30 @@ class ConfigTests(unittest.TestCase):
         config = parse_options(raw)
         self.assertEqual(30.0, config.outdoor.temperature_ema_minutes)
 
+    def test_simplified_options_use_initial_targets(self) -> None:
+        raw = options()
+        for key in ("hysteresis", "heat_threshold_default", "cool_threshold_default",
+                    "ac_min_outdoor_temperature", "outdoor_temperature_ema_minutes"):
+            raw.pop(key, None)
+        raw["temperature_hysteresis"] = 0.5
+        for key in ("heat_day", "heat_night", "heat_away", "heat_antifreeze",
+                    "cool_day", "cool_night", "cool_away", "humidity_target"):
+            raw["rooms"][0].pop(key, None)
+        config = parse_options(raw)
+        self.assertEqual(10.0, config.outdoor.heat_threshold_default)
+        self.assertEqual(25.0, config.outdoor.cool_threshold_default)
+        self.assertEqual((23.0, 23.0, 18.0, 10.0),
+            tuple(config.rooms[0].targets.heat.values()))
+        self.assertEqual((25.0, 24.0, 30.0),
+            tuple(config.rooms[0].targets.cool.values()))
+        self.assertEqual(50.0, config.rooms[0].humidity.target_default)
+
+    def test_legacy_hysteresis_survives_new_schema_default(self) -> None:
+        raw = options()
+        raw["hysteresis"] = 0.8
+        raw["temperature_hysteresis"] = 0.5
+        self.assertEqual(0.8, parse_options(raw).global_config.hysteresis)
+
     def test_configured_entity_ids_contains_all_bindings(self) -> None:
         config = parse_options(options())
         entity_ids = configured_entity_ids(config)
@@ -148,11 +172,10 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaises(ConfigError):
             parse_options(raw)
 
-    def test_active_humidity_requires_explicit_target(self) -> None:
+    def test_active_humidity_uses_initial_target(self) -> None:
         raw = options()
         raw["rooms"][0].pop("humidity_target")
-        with self.assertRaises(ConfigError):
-            parse_options(raw)
+        self.assertEqual(50.0, parse_options(raw).rooms[0].humidity.target_default)
 
     def test_room_targets_follow_facade_range(self) -> None:
         raw = options()

@@ -7,7 +7,7 @@ from pathlib import Path
 import sqlite3
 from typing import Iterator
 
-from .config import AppConfig
+from .config import AppConfig, SEASON_MIN_TEMP, SEASON_MAX_TEMP
 from .core import HvacAction, Profile, Sample, Season
 
 
@@ -202,6 +202,11 @@ class StateStore:
         return SeasonThresholds(float(row["heat_threshold"]), float(row["cool_threshold"]))
 
     def set_season_thresholds(self, heat: float, cool: float) -> None:
+        if not (
+            SEASON_MIN_TEMP <= heat <= SEASON_MAX_TEMP
+            and SEASON_MIN_TEMP <= cool <= SEASON_MAX_TEMP
+        ):
+            raise ValueError("season thresholds must be between 5 and 25 °C")
         if heat >= cool:
             raise ValueError("heat threshold must be lower than cool threshold")
         with self.connect() as db:

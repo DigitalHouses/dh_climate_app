@@ -6,6 +6,24 @@ from typing import Any, Mapping, Sequence
 
 from .core import DeviceClass, Profile
 
+# Начальные значения применяются только при отсутствии записей в SQLite.
+SEASON_MIN_TEMP = 5.0
+SEASON_MAX_TEMP = 25.0
+DEFAULT_HEAT_THRESHOLD = 10.0
+DEFAULT_COOL_THRESHOLD = 25.0
+DEFAULT_AC_MIN_OUTDOOR_TEMPERATURE = -10.0
+DEFAULT_OUTDOOR_EMA_MINUTES = 20.0
+DEFAULT_HUMIDITY_TARGET = 50.0
+ROOM_TARGET_INITIAL = {
+    "heat_day": 23.0,
+    "heat_night": 23.0,
+    "heat_away": 18.0,
+    "heat_antifreeze": 10.0,
+    "cool_day": 25.0,
+    "cool_night": 24.0,
+    "cool_away": 30.0,
+}
+
 ROOM_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_]*$")
 ENTITY_LIST_SPLIT_RE = re.compile(r"[,\n]+")
 
@@ -161,19 +179,20 @@ def _entity_list(
 
 
 def _room_targets(room: Mapping[str, Any], path: str) -> RoomTargets:
+    # Старые значения из YAML служат только для начального заполнения SQLite.
     heat = {
-        Profile.DAY: _float(room.get("heat_day"), f"{path}.heat_day"),
-        Profile.NIGHT: _float(room.get("heat_night"), f"{path}.heat_night"),
-        Profile.AWAY: _float(room.get("heat_away"), f"{path}.heat_away"),
+        Profile.DAY: _float(room.get("heat_day", ROOM_TARGET_INITIAL["heat_day"]), f"{path}.heat_day"),
+        Profile.NIGHT: _float(room.get("heat_night", ROOM_TARGET_INITIAL["heat_night"]), f"{path}.heat_night"),
+        Profile.AWAY: _float(room.get("heat_away", ROOM_TARGET_INITIAL["heat_away"]), f"{path}.heat_away"),
         Profile.ANTIFREEZE: _float(
-            room.get("heat_antifreeze"),
+            room.get("heat_antifreeze", ROOM_TARGET_INITIAL["heat_antifreeze"]),
             f"{path}.heat_antifreeze",
         ),
     }
     cool = {
-        Profile.DAY: _float(room.get("cool_day"), f"{path}.cool_day"),
-        Profile.NIGHT: _float(room.get("cool_night"), f"{path}.cool_night"),
-        Profile.AWAY: _float(room.get("cool_away"), f"{path}.cool_away"),
+        Profile.DAY: _float(room.get("cool_day", ROOM_TARGET_INITIAL["cool_day"]), f"{path}.cool_day"),
+        Profile.NIGHT: _float(room.get("cool_night", ROOM_TARGET_INITIAL["cool_night"]), f"{path}.cool_night"),
+        Profile.AWAY: _float(room.get("cool_away", ROOM_TARGET_INITIAL["cool_away"]), f"{path}.cool_away"),
     }
     for profile, target in (*heat.items(), *cool.items()):
         if not 5.0 <= target <= 35.0:
@@ -315,9 +334,7 @@ def _room_humidity(
         f"{path}.humidity_target",
     )
     if target is None:
-        raise ConfigError(
-            f"{path}.humidity_target is required when humidity control is enabled"
-        )
+        target = DEFAULT_HUMIDITY_TARGET
     if not 0.0 <= target <= 100.0:
         raise ConfigError(f"{path}.humidity_target must be between 0 and 100")
     actuator = HumidityActuatorConfig(
@@ -333,9 +350,15 @@ def _room_humidity(
 def parse_options(raw: Any) -> AppConfig:
     root = _as_mapping(raw, "options")
 
-    hysteresis = _float(root.get("hysteresis", 0.5), "hysteresis")
+    # Старый hysteresis имеет приоритет над автоматически заданным новым default.
+    hysteresis_raw = root.get("temperature_hysteresis", 0.5)
+    if "hysteresis" in root and (
+        "temperature_hysteresis" not in root or hysteresis_raw == 0.5
+    ):
+        hysteresis_raw = root["hysteresis"]
+    hysteresis = _float(hysteresis_raw, "temperature_hysteresis")
     if not 0.0 <= hysteresis <= 5.0:
-        raise ConfigError("hysteresis must be between 0 and 5")
+        raise ConfigError("temperature_hysteresis must be between 0 and 5")
 
     humidity_hysteresis = _float(
         root.get("humidity_hysteresis", 3.0),
@@ -362,11 +385,11 @@ def parse_options(raw: Any) -> AppConfig:
     )
 
     heat_default = _float(
-        root.get("heat_threshold_default", 12.0),
+        root.get("heat_threshold_default", DEFAULT_HEAT_THRESHOLD),
         "heat_threshold_default",
     )
     cool_default = _float(
-        root.get("cool_threshold_default", 20.0),
+        root.get("cool_threshold_default", DEFAULT_COOL_THRESHOLD),
         "cool_threshold_default",
     )
     if heat_default >= cool_default:
@@ -375,7 +398,7 @@ def parse_options(raw: Any) -> AppConfig:
         )
 
     ac_min_outdoor_temperature = _float(
-        root.get("ac_min_outdoor_temperature", -10.0),
+        root.get("ac_min_outdoor_temperature", DEFAULT_AC_MIN_OUTDOOR_TEMPERATURE),
         "ac_min_outdoor_temperature",
     )
     if not -50.0 <= ac_min_outdoor_temperature <= 20.0:
@@ -384,7 +407,7 @@ def parse_options(raw: Any) -> AppConfig:
         )
 
     temperature_ema_minutes = _float(
-        root.get("outdoor_temperature_ema_minutes", 20.0),
+        root.get("outdoor_temperature_ema_minutes", DEFAULT_OUTDOOR_EMA_MINUTES),
         "outdoor_temperature_ema_minutes",
     )
     if not 1.0 <= temperature_ema_minutes <= 180.0:
