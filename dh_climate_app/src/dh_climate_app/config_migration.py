@@ -4,7 +4,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -23,7 +23,7 @@ LEGACY_GLOBAL_KEYS = frozenset({
 
 
 def build_migrated_options(raw: Mapping[str, Any]) -> tuple[dict[str, Any], tuple[str, ...]]:
-    """Удалить старые начальные уставки, не меняя топологию и параметры управления."""
+    """Remove obsolete seed values without changing device bindings or topology."""
     options = json.loads(json.dumps(raw))
     exceptions: list[str] = []
     for key, standard in (
@@ -33,13 +33,15 @@ def build_migrated_options(raw: Mapping[str, Any]) -> tuple[dict[str, Any], tupl
         if key in options and float(options[key]) != standard:
             exceptions.append(key)
 
-    # При нестандартных защитных настройках значения остаются рабочими
-    # через совместимый parser: никакой скрытой смены алгоритма.
+    # A nonstandard safety parameter is never silently converted to a default.
     if exceptions:
         return options, tuple(exceptions)
 
     if "hysteresis" in options:
-        if "temperature_hysteresis" not in options or options["temperature_hysteresis"] == 0.5:
+        if (
+            "temperature_hysteresis" not in options
+            or options["temperature_hysteresis"] == 0.5
+        ):
             options["temperature_hysteresis"] = options["hysteresis"]
     for key in LEGACY_GLOBAL_KEYS:
         options.pop(key, None)
@@ -51,55 +53,106 @@ def build_migrated_options(raw: Mapping[str, Any]) -> tuple[dict[str, Any], tupl
     return options, ()
 
 
+def build_supervisor_patch(
+    raw: Mapping[str, Any],
+    migrated: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Supply explicit null tombstones: Supervisor merges option patches."""
+    patch = json.loads(json.dumps(migrated))
+    for key in LEGACY_GLOBAL_KEYS:
+        if key in raw and key not in migrated:
+            patch[key] = None
+    # The full rooms array replaces its old entries, removing old target fields.
+    return patch
+
+
+def _supervisor_request(token: str, method: str, endpoint: str, body: bytes | None = None) -> dict[str, Any]:
+    request = Request(
+        f"http://supervisor/addons/self/{endpoint}",
+        data=body,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        method=method,
+    )
+    with urlopen(request, timeout=8) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _read_stored_options(
+    token: str,
+    reader: Callable[[], Mapping[str, Any]] | None,
+) -> dict[str, Any]:
+    # /data/options.json is a VALIDATED runtime copy. Removed schema keys may
+    # already be missing there while still remaining in Supervisor storage.
+    response = (
+        reader()
+        if reader is not None
+        else _supervisor_request(token, "GET", "info")
+    )
+    if response.get("result") != "ok":
+        raise RuntimeError(f"Supervisor info returned: {response.get('message')}")
+    data = response.get("data")
+    raw = data.get("options") if isinstance(data, dict) else None
+    if not isinstance(raw, dict):
+        raise RuntimeError("Supervisor info does not contain options object")
+    return json.loads(json.dumps(raw))
+
+
 def migrate_supervisor_options(
     options_path: Path,
     *,
     token: str | None = None,
     snapshot_path: Path | None = None,
-    sender=None,
+    reader: Callable[[], Mapping[str, Any]] | None = None,
+    sender: Callable[[bytes], Mapping[str, Any]] | None = None,
 ) -> bool:
-    """Очистить Supervisor после SQLite seed; сетевые ошибки не останавливают климат."""
+    """Cleanup AFTER SQLite seed; never update runtime targets from old YAML."""
     token = token if token is not None else os.environ.get("SUPERVISOR_TOKEN", "")
     if not token or not options_path.exists():
         return False
-    raw = json.loads(options_path.read_text(encoding="utf-8"))
-    migrated, exceptions = build_migrated_options(raw)
-    if exceptions:
-        LOGGER.warning(
-            "Миграция options отложена: нестандартные защитные настройки %s; "
-            "старые значения продолжают действовать",
-            ", ".join(exceptions),
-        )
-        return False
-    if migrated == raw:
-        return False
-    snapshot_path = snapshot_path or options_path.parent / "options_before_0.1.28.json"
-    if not snapshot_path.exists():
-        snapshot_path.write_text(
-            json.dumps(raw, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-    body = json.dumps({"options": migrated}).encode("utf-8")
-
-    def send(payload: bytes) -> dict[str, Any]:
-        request = Request(
-            "http://supervisor/addons/self/options",
-            data=payload,
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        )
-        with urlopen(request, timeout=8) as response:
-            return json.loads(response.read().decode("utf-8"))
 
     try:
-        response = (sender or send)(body)
+        raw = _read_stored_options(token, reader)
+        migrated, exceptions = build_migrated_options(raw)
+        if exceptions:
+            LOGGER.warning(
+                "Очистка Supervisor options остановлена: нестандартные параметры %s; "
+                "требуется отдельная проверка",
+                ", ".join(exceptions),
+            )
+            return False
+        if migrated == raw:
+            return False
+
+        snapshot_path = snapshot_path or options_path.parent / "options_before_0.1.29_supervisor.json"
+        if not snapshot_path.exists():
+            snapshot_path.write_text(
+                json.dumps(raw, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+        patch = build_supervisor_patch(raw, migrated)
+        body = json.dumps({"options": patch}).encode("utf-8")
+        response = (
+            sender(body)
+            if sender is not None
+            else _supervisor_request(token, "POST", "options", body)
+        )
         if response.get("result") != "ok":
-            raise RuntimeError(f"Supervisor rejected options migration: {response.get('message')}")
-    except (HTTPError, URLError, OSError, RuntimeError, ValueError) as exc:
-        LOGGER.warning("Supervisor options не очищены, повторим при следующем запуске: %s", exc)
+            raise RuntimeError(f"Supervisor rejected migration: {response.get('message')}")
+
+        stored_after = _read_stored_options(token, reader)
+        actual, remaining = build_migrated_options(stored_after)
+        if actual != stored_after or remaining:
+            raise RuntimeError(
+                "Supervisor still stores deprecated options after migration; "
+                "next startup can retry"
+            )
+
+        LOGGER.info("Supervisor options очищены, SQLite и привязки устройств сохранены")
+        return True
+    except (HTTPError, URLError, OSError, RuntimeError, ValueError, TypeError) as exc:
+        LOGGER.warning("Supervisor options migration deferred: %s", exc)
         return False
-    LOGGER.info("Старые параметры конфигурации удалены из Supervisor; SQLite сохранена")
-    return True
