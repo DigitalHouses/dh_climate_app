@@ -48,6 +48,7 @@ class ConfigMigrationTests(unittest.TestCase):
 
     def test_supervisor_merging_needs_null_deletion_markers(self) -> None:
         raw = options()
+        raw["outdoor_temperature_ema_minutes"] = 20.0
         new, _ = build_migrated_options(raw)
         patch = build_supervisor_patch(raw, new)
         self.assertIsNone(patch["hysteresis"])
