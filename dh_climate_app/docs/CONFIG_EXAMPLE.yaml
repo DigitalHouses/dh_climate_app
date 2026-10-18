@@ -4,19 +4,14 @@
 # Home Assistant App поддерживает ограниченную глубину вложенности.
 # Где это указано, порядок определяет приоритет.
 
-hysteresis: 0.5
+temperature_hysteresis: 0.5
 humidity_hysteresis: 3.0
 
 night_mode: input_boolean.night_mode
 we_at_home: input_boolean.we_at_home
 
-heat_threshold_default: 12.0
-cool_threshold_default: 20.0
-
-# Реверсивные climate-устройства, присутствующие одновременно в обоих FAST-
-# списках, считаются AC/heat-pump устройствами для legacy-защиты отопления
-# при низкой наружной температуре.
-ac_min_outdoor_temperature: -10.0
+# Сезонные пороги: initial HEAT 10 °C, COOL 25 °C, затем SQLite/MQTT.
+# RAW-защита реверсивного обогрева кондиционером: −10 °C, фиксирована в коде.
 
 # Упорядоченная priority-цепочка: используется первый текущий валидный источник.
 # sensor.* читается из numeric state; weather.* — из текущего атрибута temperature.
@@ -52,18 +47,7 @@ rooms:
     window_off_devices: >-
       climate.living_room_ac
 
-    # Цели температуры воздуха комнаты: room × season × profile.
-    # Эти поля отражают текущую v0.1-схему. По продуктовому манифесту
-    # operational targets должны быть перенесены из YAML в persisted HA config entities.
-    heat_day: 23.0
-    heat_night: 22.0
-    heat_away: 18.0
-    heat_antifreeze: 10.0
-
-    cool_day: 24.0
-    cool_night: 24.0
-    cool_away: 28.0
-
+    # Day/Night/Away/Antifreeze настроены через HA, хранятся в SQLite.
     # FAST-устройства следуют demand комнатного термостата.
     # Одна climate entity может присутствовать в обоих списках и тогда
     # считается heat_cool.
@@ -84,7 +68,6 @@ rooms:
     slow_target: 27.0
 
     humidity_mode: dehumidifier
-    humidity_target: 50
     humidity_actuator: switch.living_room_dehumidifier
 
 telemetry_enabled: false
