@@ -31,6 +31,8 @@ class DiscoveryTests(unittest.TestCase):
     def test_season_climate_is_two_threshold_heat_cool(self) -> None:
         payload = season_discovery_payload("0.1.0")
         self.assertEqual(["heat_cool"], payload["modes"])
+        self.assertEqual(5.0, payload["min_temp"])
+        self.assertEqual(25.0, payload["max_temp"])
         self.assertIn("temperature_low_command_topic", payload)
         self.assertIn("temperature_high_command_topic", payload)
         self.assertEqual("all", payload["availability_mode"])
