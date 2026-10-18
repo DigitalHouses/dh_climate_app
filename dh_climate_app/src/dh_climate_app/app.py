@@ -9,7 +9,7 @@ from pathlib import Path
 import signal
 
 from .climate_log import ClimateLog
-from .config import AppConfig, configured_entity_ids, parse_options
+from .config import AppConfig, SEASON_MIN_TEMP, SEASON_MAX_TEMP, configured_entity_ids, parse_options
 from .core import Profile, Season
 from .devices import compile_room_devices
 from .auto_fast import AutoFastClimateTargets
@@ -20,6 +20,7 @@ from .humidity import HumidityEngine, HumidityState
 from .mqtt import ClimateMqttFacade, MqttBridge, MqttCommand
 from .outdoor import OutdoorEngine, OutdoorState
 from .persistence import StateStore
+from .config_migration import migrate_supervisor_options
 from .problems import Problem, collect_problems
 from .rooms import ProfileEditOverlay, RoomEngine, RoomState
 from .telemetry import TelemetryClient, TelemetryRunner
@@ -67,6 +68,8 @@ class ClimateRuntime:
         self.store.initialize(config)
         if not self.store.integrity_check():
             raise RuntimeError("SQLite integrity_check failed")
+        # Supervisor options очищаем только после успешного заполнения SQLite.
+        migrate_supervisor_options(OPTIONS_FILE)
 
         self.outdoor = OutdoorEngine(
             config=config.outdoor,
@@ -622,6 +625,8 @@ class ClimateRuntime:
                     f"invalid numeric season command: {item.payload}"
                 ) from exc
 
+            if not SEASON_MIN_TEMP <= value <= SEASON_MAX_TEMP:
+                raise ValueError("season temperature must be between 5 and 25 °C")
             if item.command == "target_temp_low":
                 heat = value
             elif item.command == "target_temp_high":
