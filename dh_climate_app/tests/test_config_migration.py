@@ -8,7 +8,6 @@ from pathlib import Path
 from dh_climate_app.config import parse_options
 from dh_climate_app.config_migration import (
     build_migrated_options,
-    build_supervisor_patch,
     migrate_supervisor_options,
 )
 from dh_climate_app.core import Profile, Season
@@ -46,16 +45,20 @@ class ConfigMigrationTests(unittest.TestCase):
             exceptions,
         )
 
-    def test_supervisor_merging_needs_null_deletion_markers(self) -> None:
+    def test_full_replacement_has_no_removed_keys_or_null_tombstones(self) -> None:
         raw = options()
         raw["outdoor_temperature_ema_minutes"] = 20.0
-        new, _ = build_migrated_options(raw)
-        patch = build_supervisor_patch(raw, new)
-        self.assertIsNone(patch["hysteresis"])
-        self.assertIsNone(patch["heat_threshold_default"])
-        self.assertIsNone(patch["outdoor_temperature_ema_minutes"])
-        self.assertNotIn("heat_day", patch["rooms"][0])
-        self.assertEqual(raw["rooms"][0]["temperature_sensors"], patch["rooms"][0]["temperature_sensors"])
+        cleaned, exceptions = build_migrated_options(raw)
+        self.assertEqual((), exceptions)
+        for key in ("hysteresis", "heat_threshold_default",
+                    "outdoor_temperature_ema_minutes"):
+            self.assertNotIn(key, cleaned)
+        self.assertNotIn("heat_day", cleaned["rooms"][0])
+        self.assertEqual(raw["rooms"][0]["temperature_sensors"],
+                         cleaned["rooms"][0]["temperature_sensors"])
+        self.assertTrue(all(value is not None for value in cleaned.values()))
+        self.assertTrue(all(value is not None for value in cleaned["rooms"][0].values()))
+        parse_options(cleaned)  # Schema-consistent payload
 
     def test_runtime_file_filtered_but_supervisor_old_options_still_saved(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -73,13 +76,13 @@ class ConfigMigrationTests(unittest.TestCase):
                 return {"result": "ok", "data": {"options": stored}}
 
             def sender(body: bytes):
-                patch = json.loads(body)["options"]
-                payloads.append(patch)
-                for key, value in patch.items():
-                    if value is None:
-                        stored.pop(key, None)
-                    else:
-                        stored[key] = value
+                # The real Supervisor replaces the complete options mapping.
+                cleaned = json.loads(body)["options"]
+                if any(value is None for value in cleaned.values()):
+                    return {"result": "error", "message": "invalid schema"}
+                payloads.append(cleaned)
+                stored.clear()
+                stored.update(cleaned)
                 return {"result": "ok", "data": {}}
 
             snapshot = Path(directory) / "old_options.json"

@@ -53,19 +53,6 @@ def build_migrated_options(raw: Mapping[str, Any]) -> tuple[dict[str, Any], tupl
     return options, ()
 
 
-def build_supervisor_patch(
-    raw: Mapping[str, Any],
-    migrated: Mapping[str, Any],
-) -> dict[str, Any]:
-    """Supply explicit null tombstones: Supervisor merges option patches."""
-    patch = json.loads(json.dumps(migrated))
-    for key in LEGACY_GLOBAL_KEYS:
-        if key in raw and key not in migrated:
-            patch[key] = None
-    # The full rooms array replaces its old entries, removing old target fields.
-    return patch
-
-
 def _supervisor_request(token: str, method: str, endpoint: str, body: bytes | None = None) -> dict[str, Any]:
     request = Request(
         f"http://supervisor/addons/self/{endpoint}",
@@ -126,15 +113,16 @@ def migrate_supervisor_options(
         if migrated == raw:
             return False
 
-        snapshot_path = snapshot_path or options_path.parent / "options_before_0.1.29_supervisor.json"
+        snapshot_path = snapshot_path or options_path.parent / "options_before_0.1.30_supervisor.json"
         if not snapshot_path.exists():
             snapshot_path.write_text(
                 json.dumps(raw, ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",
             )
 
-        patch = build_supervisor_patch(raw, migrated)
-        body = json.dumps({"options": patch}).encode("utf-8")
+        # Supervisor replaces the entire options dictionary; null tombstones are
+        # invalid for removed schema keys. Send the complete CLEAN dictionary.
+        body = json.dumps({"options": migrated}).encode("utf-8")
         response = (
             sender(body)
             if sender is not None
@@ -145,9 +133,9 @@ def migrate_supervisor_options(
 
         stored_after = _read_stored_options(token, reader)
         actual, remaining = build_migrated_options(stored_after)
-        if actual != stored_after or remaining:
+        if stored_after != migrated or actual != stored_after or remaining:
             raise RuntimeError(
-                "Supervisor still stores deprecated options after migration; "
+                "Supervisor did not persist the exact cleaned options; "
                 "next startup can retry"
             )
 
