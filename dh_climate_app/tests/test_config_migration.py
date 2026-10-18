@@ -6,7 +6,11 @@ import unittest
 from pathlib import Path
 
 from dh_climate_app.config import parse_options
-from dh_climate_app.config_migration import build_migrated_options, migrate_supervisor_options
+from dh_climate_app.config_migration import (
+    build_migrated_options,
+    build_supervisor_patch,
+    migrate_supervisor_options,
+)
 from dh_climate_app.core import Profile, Season
 from dh_climate_app.persistence import StateStore
 from test_config import options
@@ -42,41 +46,79 @@ class ConfigMigrationTests(unittest.TestCase):
             exceptions,
         )
 
-    def test_supervisor_write_has_snapshot_and_is_idempotent(self) -> None:
+    def test_supervisor_merging_needs_null_deletion_markers(self) -> None:
+        raw = options()
+        new, _ = build_migrated_options(raw)
+        patch = build_supervisor_patch(raw, new)
+        self.assertIsNone(patch["hysteresis"])
+        self.assertIsNone(patch["heat_threshold_default"])
+        self.assertIsNone(patch["outdoor_temperature_ema_minutes"])
+        self.assertNotIn("heat_day", patch["rooms"][0])
+        self.assertEqual(raw["rooms"][0]["temperature_sensors"], patch["rooms"][0]["temperature_sensors"])
+
+    def test_runtime_file_filtered_but_supervisor_old_options_still_saved(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "options.json"
             raw = options()
             raw["hysteresis"] = 0.8
-            path.write_text(json.dumps(raw), encoding="utf-8")
+            raw["temperature_hysteresis"] = 0.5  # Supervisor new schema default
+            validated, _ = build_migrated_options(raw)
+            path.write_text(json.dumps(validated), encoding="utf-8")
+
+            stored = json.loads(json.dumps(raw))
             payloads = []
 
+            def reader():
+                return {"result": "ok", "data": {"options": stored}}
+
             def sender(body: bytes):
-                payloads.append(json.loads(body))
+                patch = json.loads(body)["options"]
+                payloads.append(patch)
+                for key, value in patch.items():
+                    if value is None:
+                        stored.pop(key, None)
+                    else:
+                        stored[key] = value
                 return {"result": "ok", "data": {}}
 
             snapshot = Path(directory) / "old_options.json"
             self.assertTrue(migrate_supervisor_options(
-                path, token="dummy", sender=sender, snapshot_path=snapshot,
+                path, token="dummy", reader=reader, sender=sender,
+                snapshot_path=snapshot,
             ))
             self.assertEqual(raw, json.loads(snapshot.read_text(encoding="utf-8")))
-            cleaned = payloads[0]["options"]
-            self.assertEqual(0.8, cleaned["temperature_hysteresis"])
-            self.assertNotIn("hysteresis", cleaned)
-            self.assertNotIn("heat_day", cleaned["rooms"][0])
-            self.assertEqual(raw["rooms"][0]["name"], cleaned["rooms"][0]["name"])
-            path.write_text(json.dumps(cleaned), encoding="utf-8")
+            self.assertEqual(0.8, stored["temperature_hysteresis"])
+            self.assertNotIn("hysteresis", stored)
+            self.assertNotIn("heat_day", stored["rooms"][0])
+            self.assertEqual(raw["rooms"][0]["name"], stored["rooms"][0]["name"])
             self.assertFalse(migrate_supervisor_options(
-                path, token="dummy", sender=sender, snapshot_path=snapshot,
+                path, token="dummy", reader=reader, sender=sender,
+                snapshot_path=snapshot,
             ))
             self.assertEqual(1, len(payloads))
+
+    def test_supervisor_did_not_delete_legacy_options_means_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "options.json"
+            raw = options()
+            path.write_text(json.dumps(raw), encoding="utf-8")
+            snapshot = Path(directory) / "old.json"
+            self.assertFalse(migrate_supervisor_options(
+                path, token="dummy", snapshot_path=snapshot,
+                reader=lambda: {"result": "ok", "data": {"options": raw}},
+                sender=lambda data: {"result": "ok", "data": {}},
+            ))
+            self.assertTrue(snapshot.exists())
 
     def test_supervisor_rejection_preserves_original(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "options.json"
-            path.write_text(json.dumps(options()), encoding="utf-8")
+            raw = options()
+            path.write_text(json.dumps(raw), encoding="utf-8")
             snapshot = Path(directory) / "old.json"
             self.assertFalse(migrate_supervisor_options(
                 path, token="dummy", snapshot_path=snapshot,
+                reader=lambda: {"result": "ok", "data": {"options": raw}},
                 sender=lambda data: {"result": "error", "message": "invalid"},
             ))
             self.assertTrue(snapshot.exists())

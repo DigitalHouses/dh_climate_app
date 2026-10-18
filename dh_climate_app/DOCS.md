@@ -90,8 +90,9 @@ COOL Day/Night/Away — 25/24/30 °C. Значения редактируютс�
 этого диапазона не сбрасываются: для изменения задаётся допустимая пара.
 
 После успешного SQLite seed App автоматически очищает старые поля
-Supervisor options, сохранив исходный JSON в
-`/data/options_before_0.1.28.json`. Если ранее были нестандартные
+Supervisor options (начиная с 0.1.29 — через сохранённые options
+Supervisor GET /addons/self/info), сохранив исходный JSON в
+`/data/options_before_0.1.29_supervisor.json`. Если ранее были нестандартные
 `ac_min_outdoor_temperature` или `outdoor_temperature_ema_minutes`,
 автоматическая очистка откладывается и старые значения продолжают
 действовать до отдельного решения. Перед первым обновлением рекомендуется
