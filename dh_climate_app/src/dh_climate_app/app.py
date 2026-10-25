@@ -11,7 +11,7 @@ import signal
 from .climate_log import ClimateLog
 from .config import AppConfig, SEASON_MIN_TEMP, SEASON_MAX_TEMP, configured_entity_ids, parse_options
 from .core import Profile, Season
-from .devices import compile_room_devices
+from .devices import StartupActuatorGate, compile_room_devices
 from .auto_fast import AutoFastClimateTargets
 from .events import ClimateEventEngine
 from .executor import DeviceExecutor, ReconcileSummary
@@ -95,6 +95,8 @@ class ClimateRuntime:
         self._weather_forecast_response: object | None = None
         self._weather_source_last_updated: datetime | None = None
         self._weather_forecast_fetched_at: datetime | None = None
+        self.startup_gate = StartupActuatorGate()
+        self._last_startup_deferred: tuple[str, ...] = ()
         self._last_reconcile = ReconcileSummary(commands=0, problems=())
         self._last_problems: tuple[Problem, ...] = ()
         self._last_room_log_signatures: dict[str, tuple[object, ...]] = {}
@@ -222,6 +224,8 @@ class ClimateRuntime:
             self.cache.clear()
             self.executor.reset_transient()
             self.auto_fast.reset()
+            self.startup_gate.reset()
+            self._last_startup_deferred = ()
             await self._cancel_device_rechecks()
             self.events.reset()
             self._weather_source_last_updated = None
@@ -451,6 +455,29 @@ class ClimateRuntime:
                     outdoor_temperature=outdoor_state.raw_temperature,
                 )
                 desired = self.auto_fast.apply(desired, snapshot)
+                desired = self.startup_gate.filter(
+                    desired,
+                    room_states=room_states,
+                    humidity_states=humidity_states,
+                    outdoor_available=outdoor_state.available,
+                )
+                deferred = self.startup_gate.deferred_entities
+                if deferred != self._last_startup_deferred:
+                    if deferred:
+                        self.climate_log.write2climate_log(
+                            "STARTUP_GATE",
+                            "DEFER | " + ", ".join(deferred),
+                        )
+                    elif self._last_startup_deferred:
+                        status = (
+                            "TIMEOUT_FAIL_SAFE"
+                            if self.startup_gate.timed_out
+                            else "READY"
+                        )
+                        self.climate_log.write2climate_log(
+                            "STARTUP_GATE", status,
+                        )
+                    self._last_startup_deferred = deferred
                 self._last_reconcile = await self.executor.reconcile(
                     desired,
                     snapshot,
