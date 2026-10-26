@@ -640,3 +640,48 @@ def problem_state_payload(problems: tuple[object, ...]) -> tuple[str, str]:
         separators=(",", ":"),
     )
     return state, attrs
+
+
+def global_climate_health_discovery_payloads(
+    app_version: str,
+) -> dict[str, tuple[str, dict[str, Any]]]:
+    """Two independent retained diagnostics: infrastructure and climate."""
+    result = {}
+    for name, label in (
+        ("global_health", "Global health"),
+        ("climate_health", "Climate health"),
+    ):
+        object_id = f"dh_climate_app_{name}"
+        result[name] = (
+            f"{DISCOVERY_PREFIX}/sensor/{object_id}/config",
+            {
+                "name": label,
+                "unique_id": object_id,
+                "default_entity_id": f"sensor.{object_id}",
+                "state_topic": f"{BASE_TOPIC}/{name}",
+                "availability_topic": SYSTEM_AVAILABILITY_TOPIC,
+                "entity_category": "diagnostic",
+                "device": system_device(app_version),
+                "origin": _origin(app_version),
+            },
+        )
+    return result
+
+
+def room_health_discovery_payload(
+    room: RoomConfig, app_version: str,
+) -> tuple[str, dict[str, Any]]:
+    object_id = f"dh_climate_app_{room.room_id}_health"
+    return (
+        f"{DISCOVERY_PREFIX}/sensor/{object_id}/config",
+        {
+            "name": "Health",
+            "unique_id": object_id,
+            "default_entity_id": f"sensor.{object_id}",
+            "state_topic": f"{room_base(room.room_id)}/health",
+            "availability_topic": SYSTEM_AVAILABILITY_TOPIC,
+            "entity_category": "diagnostic",
+            "device": room_device(room, app_version),
+            "origin": _origin(app_version),
+        },
+    )
