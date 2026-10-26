@@ -20,7 +20,6 @@ from .humidity import HumidityEngine, HumidityState
 from .mqtt import ClimateMqttFacade, MqttBridge, MqttCommand
 from .outdoor import OutdoorEngine, OutdoorState
 from .persistence import StateStore
-from .config_migration import migrate_supervisor_options
 from .problems import Problem, collect_problems
 from .rooms import ProfileEditOverlay, RoomEngine, RoomState
 from .telemetry import TelemetryClient, TelemetryRunner
@@ -68,9 +67,6 @@ class ClimateRuntime:
         self.store.initialize(config)
         if not self.store.integrity_check():
             raise RuntimeError("SQLite integrity_check failed")
-        # Supervisor options очищаем только после успешного заполнения SQLite.
-        migrate_supervisor_options(OPTIONS_FILE)
-
         self.outdoor = OutdoorEngine(
             config=config.outdoor,
             store=self.store,
@@ -319,6 +315,9 @@ class ClimateRuntime:
         async with self._calculation_lock:
             values = self.cache.values()
             snapshot = self.cache.snapshot()
+            self.outdoor.hysteresis = self.store.get_global_tuning(
+                "season_hysteresis"
+            )
             outdoor_state = self.outdoor.evaluate(
                 snapshot,
                 observed_at=observed_at,
@@ -448,11 +447,36 @@ class ClimateRuntime:
             self.facade.set_season_available(system_available)
 
             if self._ha_connected:
+                slow_targets = {
+                    room_id: self.store.get_slow_target(
+                        room_id, state.effective_profile
+                    )
+                    for room_id, state in room_states.items()
+                }
+                previous_open = {}
+                for room in self.config.rooms:
+                    for device in room.devices:
+                        if device.temperature_sensor is None:
+                            continue
+                        actual = snapshot.get(device.entity_id)
+                        if actual is None or actual.state not in {"on", "off"}:
+                            continue
+                        powered = actual.state == "on"
+                        previous_open[device.entity_id] = (
+                            powered if device.actuator == "normal_closed"
+                            else not powered
+                        )
                 desired = compile_room_devices(
                     config=self.config,
                     room_states=room_states,
                     humidity_states=humidity_states,
                     outdoor_temperature=outdoor_state.raw_temperature,
+                    screed_values=values,
+                    slow_targets=slow_targets,
+                    slow_hysteresis=self.store.get_global_tuning(
+                        "slow_heat_hysteresis"
+                    ),
+                    slow_previous_open=previous_open,
                 )
                 desired = self.auto_fast.apply(desired, snapshot)
                 desired = self.startup_gate.filter(
