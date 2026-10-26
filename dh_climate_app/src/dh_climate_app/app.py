@@ -11,7 +11,7 @@ import signal
 from .climate_log import ClimateLog
 from .config import AppConfig, SEASON_MIN_TEMP, SEASON_MAX_TEMP, configured_entity_ids, parse_options
 from .core import Profile, Season
-from .devices import StartupActuatorGate, compile_room_devices
+from .devices import StartupActuatorGate, SlowValveIntervalGuard, compile_room_devices
 from .auto_fast import AutoFastClimateTargets
 from .events import ClimateEventEngine
 from .executor import DeviceExecutor, ReconcileSummary
@@ -92,6 +92,7 @@ class ClimateRuntime:
         self._weather_source_last_updated: datetime | None = None
         self._weather_forecast_fetched_at: datetime | None = None
         self.startup_gate = StartupActuatorGate()
+        self.slow_valve_guard = SlowValveIntervalGuard(self.store)
         self._last_startup_deferred: tuple[str, ...] = ()
         self._last_reconcile = ReconcileSummary(commands=0, problems=())
         self._last_problems: tuple[Problem, ...] = ()
@@ -484,6 +485,14 @@ class ClimateRuntime:
                     room_states=room_states,
                     humidity_states=humidity_states,
                     outdoor_available=outdoor_state.available,
+                )
+                desired = self.slow_valve_guard.filter(
+                    desired,
+                    config=self.config,
+                    room_states=room_states,
+                    observed=snapshot,
+                    sensor_values=values,
+                    now=observed_at,
                 )
                 deferred = self.startup_gate.deferred_entities
                 if deferred != self._last_startup_deferred:
