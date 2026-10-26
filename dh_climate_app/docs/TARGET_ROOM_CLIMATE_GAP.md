@@ -55,11 +55,11 @@
 4. Реальная runtime semantics `VERIFIED_HA` и source-known vs unavailable сохраняется.
 5. Глобальный `HEAT/COOL/OFF` и сезонный outdoor pipeline сохраняются.
 
-## 3. Архитектурные инварианты миграции
+## 3. Архитектурные инварианты ручного перехода
 
 - **Никаких автоматических команд реальным реле/кондиционерам при редактировании схемы.** Переход target → implementation делается новой версией с CI и тестовой конфигурацией.
-- **Смена формата сохранённых Supervisor options:** текущие поля `rooms[].temperature_sensors`, `outdoor_temperature_sources` и др. хранятся как строки. Нельзя одним commit заменить schema на `[str]`, не обеспечив миграцию имеющихся options: Supervisor валидирует options прежде, чем App сможет их распарсить. Обязателен backup + поэтапная совместимость + явное преобразование и проверка GUI, исключая потерю комнат и датчиков.
-- Старые `fast_heat/fast_cool/slow_heat` можно читать через временный совместимый parser, но **только при однозначной семантике**, с явным migration report; не угадывать `control` по домену для реальных устройств, когда это может поменять поведение.
+- **РЕШЕНО 2026-10-27: автоматической миграции YAML/options нет.** Для новой экспериментальной версии инсталлятор полностью заменит options вручную на заранее подготовленный YAML. Старые bindings нужно читать в режиме read-only **для подготовки готового конфига**, а не автоматически конвертировать App-кодом. Однако Supervisor валидирует сохранённые старые options по новой schema до запуска Python: проверить точный порядок установки новой версии и вставки YAML на изолированном App. Обязательны backup и preflight. См. [next implementation handoff](NEXT_IMPLEMENTATION_HANDOFF_2026-10-27.md).
+- **Один новый runtime-контракт:** не писать временный compatibility parser для старых `fast_heat/fast_cool/slow_heat` лишь ради миграции YAML. Настоящие role/control/actuator привязки нельзя угадывать по домену, их надо явно указать в новом конфиге. Сохранить stable room IDs, SQLite targets и корректный seed новых настроек.
 - Сохранить стабильные `room_id`, MQTT unique IDs, existing setpoints и SQLite; не переименовывать установленные сущности косметически.
 - Для `slow_heat + switch` запретить невалидные схемы без явно известного physical actuator type / wiring в целевом строгом режиме. Не считать `normal_open` / `normal_closed` автоматически доказательством контактов.
 - Для `control=device` проверять capabilities (разрешённый режим, численный temperature target), факт sensor authority должен быть характеристикой реального термостата; `switch + device` — ошибка конфигурации.
@@ -72,7 +72,7 @@
 
 | Фаза | Содержание | Gate |
 | --- | --- | --- |
-| A — Model / validation | Структуры Role/Control/Actuator, совместимый parser, строгий ownership и nested schema; source-level Supervisor PASS уже есть, требуется проверка установленного native GUI | Разбор старого и target config, **0 изменённых физических команд**, GUI save/reopen + migration preflight |
+| A — Model / validation | Структуры Role/Control/Actuator, **единый новый parser**, строгий ownership и nested schema; source-level Supervisor PASS уже есть | Валидация только нового YAML, **0 изменённых физических команд**, GUI save/reopen + проверенный ручной порядок обновления options |
 | B — SLOW relay | Logical valve open/closed, NO/NC mapping, сезон, floor sensor present/absent | LAB и физический dry-run; отсутствие команд OFF в HEAT без датчика |
 | C — SLOW regulator | Floor sensor, hysteresis, 5/5 min timers, durable state, loss→OPEN+DEGRADED | Е2Е потери/возврата датчика, safety override, restart |
 | D — DEVICE mode | SLOW floor thermostat + FAST air thermostat, profile-based targets, idempotent reconciliation, capabilities | Night/away profile и season E2E, запрет вмешательства в локальную автоматику |
@@ -86,7 +86,7 @@
 1. **РЕШЕНО: все наружные источники временно недоступны.** Продолжать по последней достоверной температуре/сезону с `degraded`, не переводить дом в `off` только из-за outage. Вопрос *первого запуска без baseline* решается безопасным `unknown`, без подстановки выдуманного сезона. Отдельно проверить аппаратный cold-weather safety кондиционера при stale temperature.
 2. **Минимальные времена ON/OFF после рестарта** без достоверного последнего физического switch time — уточнить сохранение/причины восстановления и безопасный приоритет действий.
 3. **РЕШЕНО по UX и спискам:** редактирование остаётся внутри комнаты, все множественные поля (включая один элемент) становятся нативными YAML-списками; отдельный root `devices` отклонён. **Source-level проверка Supervisor 2026.10.4 прошла**: nested `rooms[].temperature_sensors[]`, `rooms[].devices[]` и `outdoor.*_sources[]` валидируются и получают повторяемые GUI nodes. **Остался живой GUI smoke** с round-trip сохранением на отдельном тестовом App. Для reversible FAST не допускаются конкурирующие desired state. См. [отчёт](SUPERVISOR_NESTED_SCHEMA_PROBE.md).
-4. **РЕШЕНО: `slow_target` — не runtime поле YAML в TARGET.** Текущее значение использовать **однократно** для seed/migration `slow_heat_day/night/away` в SQLite с дальнейшей редакцией через MQTT Number. **Открыто только** конкретное число seed для впервые добавленной комнаты без legacy `slow_target` и нюансы миграции уже существующего состояния.
+4. **РЕШЕНО: `slow_target` отсутствует в новом YAML.** Перед ручной заменой прочитать существующие значения из текущего options и SQLite, не терять реальные настройки. В новых runtime уставках `slow_heat_day/night/away` использовать сохранённые значения или однократный seed при отсутствии записей; не создавать автоматический YAML-конвертер. **Открыто** численное значение seed для впервые добавленной комнаты без исторического `slow_target`.
 5. **Глобальные weather/boiler/pump bindings**: статус относится к климатической инфраструктуре, но котёл и насосы не объявлены существующей реализацией; допуск новых диагностических входов отдельным решением.
 6. **События без `schema_version`** меняют существующий контракт; прежде чем выпускать, найти и обновить всех известных потребителей `event.dh_climate_app_event`.
 
