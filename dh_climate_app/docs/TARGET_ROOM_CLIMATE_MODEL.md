@@ -38,13 +38,35 @@
 
 Реверсивный исполнитель (один `climate` для `fast_heat` и `fast_cool`) — **одно физическое устройство** с двумя сезонными ролями: компилятор должен строить **один** непротиворечивый desired state, а не два конкурирующих потока команд. Точное YAML-представление множественной роли утверждается в миграции конфигурации, без создания дублирующих устройств.
 
-## 3. Целевой пример декларативного описания
+## 3. Целевой UX графической конфигурации и декларативное описание
 
-**Почему здесь плоская схема:** существующий Supervisor `config.yaml` описывает `rooms` списком записей с примитивными полями. Прямое вложение `rooms[].devices[]` добавляет новый уровень списка объектов и не соответствует принятой в App плоской форме. Это ограничение **формата Supervisor options**, а не невозможность иметь несколько устройств в комнате.
+### 3.1 Обязательный контракт UX: **комната — основная единица навигации**
 
-**Предлагаемое представление для согласования:** две корневые таблицы `rooms` и `devices`. У каждого устройства обязательный `room_id` — ссылка на соответствующую комнату. В интерфейсе человек видит явные роли/режимы, а App при чтении собирает devices обратно по комнатам. Это не дополнительная сущность в runtime, а нормальная схема связей. **Финальный формат ещё требует решения при миграции**: код 0.1.31 этого YAML не поддерживает.
+Существующий графический редактор Home Assistant Supervisor уже показывает `Комнаты` как список записей, каждая из которых открывается кнопкой «Изменить». **Эту организацию требуется сохранить.** Инсталлятор должен находить оборудование по комнате, а не искать `switch` и `climate` в отдельной большой таблице всех устройств дома.
+
+Целевые верхнеуровневые блоки графической конфигурации:
+
+1. **Общие параметры:** лишь необходимые для установки bindings и продуктовые настройки (например, `night_mode`, `we_at_home`, источники сервисов и диагностические опции). Не дублировать в YAML оперативные уставки и tuning.
+2. **Outdoor:** отдельный понятный раздел с **упорядоченным списком** `sensor.*` / `weather.*` для температуры и отдельным упорядоченным списком для влажности. Порядок означает приоритет, первая валидная сущность активна; следующие автоматически становятся fallback, возврат preferred выполняется по существующему правилу.
+3. **Комнаты:** существующий графический список с `Добавить / Изменить / Удалить` и стабильными `id/name`. При редактировании комнаты видны её датчики, окна, влажность и **всё её оборудование**; каждое устройство имеет ясные `entity`, `role`, `control`, опциональный `actuator: normal_open/normal_closed` и датчик стяжки. Несколько устройств одной комнаты и двойная сезонная роль реверсивного устройства поддерживаются моделью без конкурирующих команд.
+
+**Не принимать** два независимых верхнеуровневых пользовательских списка `rooms` и `devices` как целевой UX: это усложнит поиск устройства при изменениях. Внутренняя нормализация таблиц в Python/SQLite допускается, но **не должна протекать в навигацию инсталлятора**.
+
+### 3.2 Пример ПРЕДМЕТНОЙ МОДЕЛИ, а не готового `config.yaml`
 
 ```yaml
+# Иллюстрация желаемой структуры редактора. НЕ вставлять
+# в действующие Supervisor options до реализации schema.
+
+outdoor:
+  temperature_sources:
+    - sensor.outdoor_temperature
+    - weather.primary
+    - weather.forecast_home_assistant
+  humidity_sources:
+    - sensor.outdoor_humidity
+    - weather.primary
+
 rooms:
   - id: livingroom
     name: Гостиная
@@ -53,44 +75,45 @@ rooms:
     window_sensors: binary_sensor.livingroom_window
     humidity_mode: humidifier
     humidity_actuator: switch.socket_humidifier
+    devices:
+      - entity: switch.relay32
+        role: slow_heat
+        control: app
+        actuator: normal_open
 
-devices:
-  - room_id: livingroom
-    entity: switch.relay32
-    role: slow_heat
-    control: app
-    actuator: normal_open
+      - entity: switch.floor_valve
+        role: slow_heat
+        control: app
+        actuator: normal_closed
+        temperature_sensor: sensor.livingroom_screed_temperature
 
-  - room_id: livingroom
-    entity: switch.floor_valve
-    role: slow_heat
-    control: app
-    actuator: normal_closed
-    temperature_sensor: sensor.livingroom_screed_temperature
+      - entity: climate.sunricher_floor
+        role: slow_heat
+        control: device
 
-  - room_id: livingroom
-    entity: climate.sunricher_floor
-    role: slow_heat
-    control: device
+      - entity: switch.radiator_relay
+        role: fast_heat
+        control: app
+        actuator: normal_closed
 
-  - room_id: livingroom
-    entity: switch.radiator_relay
-    role: fast_heat
-    control: app
-    actuator: normal_closed
+      - entity: climate.bosch_radiator
+        role: fast_heat
+        control: device
 
-  - room_id: livingroom
-    entity: climate.bosch_radiator
-    role: fast_heat
-    control: device
-
-  - room_id: livingroom
-    entity: climate.livingroom_ac
-    role: fast_cool
-    control: app
+      - entity: climate.livingroom_ac
+        role: fast_cool
+        control: app
 ```
 
-Пример показывает **различные возможные устройства**, а не обязательный полный комплект. `actuator` применим только к реле, действительно управляющему клапаном/сервоприводом; у обычного электроприбора это поле отсутствует. `room_id` у устройства должен ссылаться на реально существующую комнату. App валидирует уникальное владение физическими актуаторами; реверсивный кондиционер не должен получать два конфликтующих desired-state потока.
+Здесь `devices` **логически принадлежат комнате**. Пример включает несколько допустимых типов, но не требует установить их все. `actuator` относится к физическому приводу клапана и не обязателен для коммутации обычного электроприбора. Для реверсивного устройства App не создаёт два конфликтующих desired state.
+
+### 3.3 Отдельный технический вопрос: сохранение графического редактора Supervisor
+
+Действующая `config.yaml`/options schema использует список комнат с плоскими primitive-полями; `outdoor_temperature_sources` и `outdoor_humidity_sources` уже допускают несколько значений **в строке через запятую**. Их source failover в runtime существует. **Требование новой итерации — прежде всего удобное представление источников как приоритетных записей, без изменения смысла fallback.**
+
+Вложенные коллекции `rooms[].devices[]` в примере выше **не объявлены работающей native Supervisor GUI-формой**: нужно отдельно проверить возможности/ограничения редактора в целевой версии HAOS и выбрать реализуемую сериализацию. Сохранение навигации «Комнаты → редактирование комнаты → оборудование» является **жёстким UX-инвариантом**, а конкретная внутренняя кодировка options — техническая деталь. Не переносить данные в отдельный пользовательский список устройств только ради удобства парсера.
+
+Оперативные уставки Day/Night/Away (воздух/стяжка), глобальные FAST/SLOW hysteresis и min ON/OFF живут в SQLite и настраиваются через MQTT entities в HA, а не в установочном редакторе.
 
 ## 4. Управление уставками и профилями
 
