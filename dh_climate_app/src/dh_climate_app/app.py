@@ -17,6 +17,8 @@ from .events import ClimateEventEngine
 from .executor import DeviceExecutor, ReconcileSummary
 from .ha_client import HaState, HomeAssistantClient, StateCache
 from .humidity import HumidityEngine, HumidityState
+from .health import reduce_climate_health
+from .persistence import GLOBAL_TUNING_SEEDS
 from .mqtt import ClimateMqttFacade, MqttBridge, MqttCommand
 from .outdoor import OutdoorEngine, OutdoorState
 from .persistence import StateStore
@@ -333,6 +335,11 @@ class ClimateRuntime:
                 season=outdoor_state.season,
             )
             humidity_states = self.humidity.evaluate_all(values)
+            slow_targets = {
+                room_id: self.store.get_slow_target(
+                    room_id, state.effective_profile
+                ) for room_id, state in room_states.items()
+            }
 
             previous_outdoor = self._last_outdoor_state
             current_raw_temperature = (
@@ -443,17 +450,20 @@ class ClimateRuntime:
 
             for humidity_state in humidity_states.values():
                 self.facade.publish_humidity(humidity_state)
+            self.facade.publish_tuning({
+                key: self.store.get_global_tuning(key)
+                for key in GLOBAL_TUNING_SEEDS
+            })
+            for room in self.config.rooms:
+                self.facade.publish_slow_targets(room.room_id, {
+                    profile.value: self.store.get_slow_target(room.room_id, profile)
+                    for profile in (Profile.DAY, Profile.NIGHT, Profile.AWAY)
+                })
 
             system_available = self._ha_connected and outdoor_state.available
             self.facade.set_season_available(system_available)
 
             if self._ha_connected:
-                slow_targets = {
-                    room_id: self.store.get_slow_target(
-                        room_id, state.effective_profile
-                    )
-                    for room_id, state in room_states.items()
-                }
                 previous_open = {}
                 for room in self.config.rooms:
                     for device in room.devices:
@@ -523,8 +533,17 @@ class ClimateRuntime:
                 rooms=room_states,
                 humidity=humidity_states,
                 execution=self._last_reconcile.problems,
+                config=self.config,
+                sensor_values=values,
+                slow_targets=slow_targets,
             )
             self.facade.publish_problems(self._last_problems)
+            health = reduce_climate_health(
+                outdoor=outdoor_state,
+                rooms=room_states,
+                problems=self._last_problems,
+            )
+            self.facade.publish_health(health)
 
             for event in self.events.observe(
                 outdoor=outdoor_state,
@@ -532,6 +551,7 @@ class ClimateRuntime:
                 rooms=room_states,
                 problems=self._last_problems,
                 observed_at=observed_at,
+                health=health,
             ):
                 self.facade.publish_event(event)
 
@@ -610,7 +630,21 @@ class ClimateRuntime:
                 self.command_queue.task_done()
 
     async def _handle_command(self, command: MqttCommand) -> None:
-        if command.scope == "system":
+        if command.scope == "tuning":
+            self.store.set_global_tuning(
+                command.command, float(command.payload)
+            )
+        elif command.scope == "slow_target":
+            if command.room_id is None:
+                raise ValueError("slow target command requires room_id")
+            if command.room_id not in {r.room_id for r in self.config.rooms}:
+                raise ValueError(f"unknown room {command.room_id}")
+            if command.command not in {"day", "night", "away"}:
+                raise ValueError("invalid SLOW target profile")
+            self.store.set_slow_target(
+                command.room_id, Profile(command.command), float(command.payload),
+            )
+        elif command.scope == "system":
             await self._handle_system_command(command.command, command.payload)
         elif command.scope == "season":
             await self._handle_season_command(command.command, command.payload)
