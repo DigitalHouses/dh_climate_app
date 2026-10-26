@@ -11,7 +11,18 @@ from .config import AppConfig, SEASON_MIN_TEMP, SEASON_MAX_TEMP
 from .core import HvacAction, Profile, Sample, Season
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+GLOBAL_TUNING_SEEDS = {
+    "season_hysteresis": 0.5,
+    "fast_heat_hysteresis": 0.5,
+    "fast_cool_hysteresis": 0.5,
+    "slow_heat_hysteresis": 0.5,
+    "slow_heat_min_on_time": 5.0,
+    "slow_heat_min_off_time": 5.0,
+    "humidity_hysteresis": 3.0,
+}
+
 
 
 @dataclass(frozen=True)
@@ -86,6 +97,18 @@ class StateStore:
                         CHECK (climate_control_enabled IN (0, 1))
                 );
 
+                CREATE TABLE IF NOT EXISTS global_tuning (
+                    key TEXT PRIMARY KEY,
+                    value REAL NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS slow_room_targets (
+                    room_id TEXT NOT NULL,
+                    profile TEXT NOT NULL CHECK (profile IN ('day', 'night', 'away')),
+                    target REAL NOT NULL,
+                    PRIMARY KEY (room_id, profile)
+                );
+
                 CREATE TABLE IF NOT EXISTS humidity_targets (
                     room_id TEXT PRIMARY KEY,
                     target REAL NOT NULL
@@ -119,6 +142,12 @@ class StateStore:
                     config.outdoor.cool_threshold_default,
                 ),
             )
+
+            for key, value in GLOBAL_TUNING_SEEDS.items():
+                db.execute(
+                    "INSERT OR IGNORE INTO global_tuning(key, value) VALUES (?, ?)",
+                    (key, value),
+                )
 
             for room in config.rooms:
                 db.execute(
@@ -163,6 +192,74 @@ class StateStore:
                         """,
                         (room.room_id,),
                     )
+
+    def get_global_tuning(self, key: str) -> float:
+        if key not in GLOBAL_TUNING_SEEDS:
+            raise KeyError(key)
+        with self.connect() as db:
+            row = db.execute(
+                "SELECT value FROM global_tuning WHERE key=?", (key,),
+            ).fetchone()
+        return GLOBAL_TUNING_SEEDS[key] if row is None else float(row["value"])
+
+    def set_global_tuning(self, key: str, value: float) -> None:
+        bounds = {
+            "season_hysteresis": (0.0, 5.0),
+            "fast_heat_hysteresis": (0.0, 5.0),
+            "fast_cool_hysteresis": (0.0, 5.0),
+            "slow_heat_hysteresis": (0.0, 5.0),
+            "slow_heat_min_on_time": (0.0, 120.0),
+            "slow_heat_min_off_time": (0.0, 120.0),
+            "humidity_hysteresis": (0.0, 25.0),
+        }
+        if key not in bounds:
+            raise KeyError(key)
+        low, high = bounds[key]
+        if not low <= value <= high:
+            raise ValueError(f"{key} must be between {low} and {high}")
+        with self.connect() as db:
+            db.execute(
+                """INSERT INTO global_tuning(key, value) VALUES (?, ?)
+                   ON CONFLICT(key) DO UPDATE SET value=excluded.value""",
+                (key, float(value)),
+            )
+
+    def get_slow_target(self, room_id: str, profile: Profile) -> float | None:
+        if profile is Profile.ANTIFREEZE:
+            return None
+        with self.connect() as db:
+            row = db.execute(
+                """SELECT target FROM slow_room_targets
+                   WHERE room_id=? AND profile=?""",
+                (room_id, profile.value),
+            ).fetchone()
+        return None if row is None else float(row["target"])
+
+    def set_slow_target(self, room_id: str, profile: Profile, target: float) -> None:
+        if profile is Profile.ANTIFREEZE:
+            raise ValueError("SLOW has no antifreeze profile")
+        if not 5.0 <= target <= 45.0:
+            raise ValueError("SLOW screed target must be between 5 and 45 °C")
+        with self.connect() as db:
+            db.execute(
+                """INSERT INTO slow_room_targets(room_id, profile, target)
+                   VALUES (?, ?, ?)
+                   ON CONFLICT(room_id, profile)
+                   DO UPDATE SET target=excluded.target""",
+                (room_id, profile.value, float(target)),
+            )
+
+    def seed_existing_slow_target(self, room_id: str, target: float) -> None:
+        """Explicit preflight seed from measured old options; never overwrite."""
+        if not 5.0 <= target <= 45.0:
+            raise ValueError("SLOW screed target must be between 5 and 45 °C")
+        with self.connect() as db:
+            for profile in (Profile.DAY, Profile.NIGHT, Profile.AWAY):
+                db.execute(
+                    """INSERT OR IGNORE INTO slow_room_targets(
+                           room_id, profile, target) VALUES (?, ?, ?)""",
+                    (room_id, profile.value, float(target)),
+                )
 
     def integrity_check(self) -> bool:
         with self.connect() as db:
