@@ -180,7 +180,10 @@ class RoomEngine:
                 season=season,
                 current_temperature=current_temperature,
                 target_temperature=control_target,
-                hysteresis=self.config.global_config.hysteresis,
+                hysteresis=self.store.get_global_tuning(
+                    "fast_heat_hysteresis" if season is Season.HEAT
+                    else "fast_cool_hysteresis"
+                ),
                 previous_action=previous,
             )
         elif not climate_enabled:
@@ -190,7 +193,10 @@ class RoomEngine:
                 season=season,
                 current_temperature=current_temperature,
                 target_temperature=control_target,
-                hysteresis=self.config.global_config.hysteresis,
+                hysteresis=self.store.get_global_tuning(
+                    "fast_heat_hysteresis" if season is Season.HEAT
+                    else "fast_cool_hysteresis"
+                ),
                 previous_action=previous,
             )
 
