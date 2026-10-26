@@ -86,6 +86,7 @@ SQLite в `/data/dh_climate.db` хранит только долговремен
 
 Документация этого проекта ведётся на русском языке.
 
+- [Следующий этап реализации: ручная замена YAML, сохранение SQLite](docs/NEXT_IMPLEMENTATION_HANDOFF_2026-10-27.md)
 - [Целевая матрица климатических комнат (TARGET, не реализована)](docs/TARGET_ROOM_CLIMATE_MODEL.md)
 - [Проверка вложенных списков Supervisor 2026.10.4](docs/SUPERVISOR_NESTED_SCHEMA_PROBE.md)
 - [GAP-анализ версии 0.1.31 относительно целевой матрицы](docs/TARGET_ROOM_CLIMATE_GAP.md)
