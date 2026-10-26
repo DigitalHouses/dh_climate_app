@@ -24,7 +24,7 @@
 | G04 | SLOW без стяжки | `slow_target` обязателен для всякого `slow_heat`; не различается наличие датчика | Если floor sensor **не указан**, HEAT = OPEN постоянно, OFF/COOL = CLOSED, target не нужен | **P0** |
 | G05 | SLOW + APP с датчиком | Нет per-device `temperature_sensor` стяжки и локальной SLOW температурной политики | Регулирование по стяжке, отдельный hysteresis и min ON/OFF | **P1** |
 | G06 | SLOW деградация | При потере floor sensor нет описанного `OPEN + DEGRADED` | Явная потеря датчика → OPEN при HEAT, Problem и room health, восстановление | **P0 safety contract** |
-| G07 | SLOW + DEVICE профили | Постоянный `slow_target` берётся из YAML | `slow_heat_day/night/away` из SQLite/MQTT, смена профиля передаёт новую температуру стяжки, без internal presets | **P1** |
+| G07 | SLOW + DEVICE профили | `slow_target` — существующая уставка в YAML, а не seed-only; профильных целей стяжки нет | TARGET без `slow_target` в YAML: однократная миграция имеющегося значения в `slow_heat_day/night/away` SQLite/MQTT, без internal presets | **P1** |
 | G08 | FAST + DEVICE | FAST независимо от автономности следует `room.control_action`, при room idle → HVAC OFF; `control=device` не существует | Автономный термостат получает сезонный режим и комнатный численный target; App не циклирует локальную работу | **P0** |
 | G09 | FAST + APP | Есть комнатный гистерезис и `switch/climate` исполнитель, auto-bias для reversible `climate`; нет явного control flag | Сохранить прямую модель, явно отделить от `device`, не ломая SmartIR/AC | **P0 compatibility** |
 | G10 | Гистерезисы | Один `temperature_hysteresis` управляет сезоном и температурой комнаты | Отдельные `fast_heat_hysteresis`, `fast_cool_hysteresis`, `slow_heat_hysteresis` и независимый сезонный гистерезис | **P1** |
@@ -35,11 +35,12 @@
 | G15 | Room/global FSM Events | Есть `problem_started/recovered`; нет `room_health_changed`, `climate_health_changed` | Переходы именно комнатного и общеклиматического FSM; избежать дублирования | **P1** |
 | G16 | Event payload | `schema_version=2` обязателен; `room_name` есть в window events, отсутствует в Problem events | Без поля версии; `room_id + room_name` во всех комнатных событиях; миграция потребителей | **P1 compatibility** |
 | G17 | MQTT config entities | Есть room FAST heat/cool targets, humidity target и season thresholds | Отдельные SLOW profile targets, FAST/SLOW hysteresis и SLOW min timers с seed→SQLite→MQTT | **P1** |
-| G18 | Конфигурация Supervisor | `config.yaml` принимает плоские room entries, не вложенный `devices` список | Выбрать представление target declarations с учётом ограничений Supervisor; безопасная migration из старого YAML | **P0 migration** |
-| G19 | Startup/sensor-loss semantics | Стартовая задержка FAST зависит от первого outdoor+room-air; SLOW только от наружной температуры; после timeout — прежний fail-safe | Отличать device-local temperature, room-air и floor sensor, initial UNKNOWN и стабильную деградацию | **P1** |
+| G18 | Конфигурация Supervisor | `config.yaml` принимает плоские room entries, не вложенный `rooms[].devices[]` | **Предложение для согласования:** два корневых списка `rooms` и `devices`, в каждом device `room_id` и primitive fields; migration старого YAML | **P0 migration** |
+| G19 | Startup/sensor-loss semantics | Стартовая задержка FAST зависит от первого outdoor+room-air; SLOW только от наружной температуры; после timeout — прежний fail-safe | Отличать device-local temperature, room-air и floor sensor; после первой достоверной наружной температуры держать last-known season в `degraded`, а на первом запуске без baseline — `unknown` | **P1** |
 | G20 | Уведомления | События уже машинные; локальный HA package формирует сообщения | Добавить маршрутизацию room/climate FSM events, отображение room_name, startup reconciliation | **P2 (HA local)** |
 | G21 | Влажность | Реализован отдельный humidity controller; домены switch/humidifier, runtime target в SQLite | Сохранить как самостоятельную климатическую функцию комнаты и учитывать в room health; не ломать | **P1 regression** |
 | G22 | Документация/acceptance | `HAOS_TEST_PLAN.md`, README и аудиты содержат исторические версии/acceptance | Документировать новый target, миграцию, результаты per-role E2E и обновить release gates | **P2** |
+| G23 | Last-known outdoor climate | При отсутствии live outdoor код `decide_season` возвращает `off`; нет закреплённого last-known season/freshness-контракта | Все sources lost → продолжить последнее рассчитанное HEAT/COOL/OFF, global/climate `degraded`, snapshot в SQLite с временем, никаких фиктивных avg24 samples, возобновить расчёт после recovery | **P0 safety/continuity** |
 
 ### Критичный технический GAP G02
 
@@ -61,7 +62,7 @@
 - Для `slow_heat + switch` запретить невалидные схемы без явно известного physical actuator type / wiring в целевом строгом режиме. Не считать `normal_open` / `normal_closed` автоматически доказательством контактов.
 - Для `control=device` проверять capabilities (разрешённый режим, численный temperature target), факт sensor authority должен быть характеристикой реального термостата; `switch + device` — ошибка конфигурации.
 - Нельзя трактовать `unavailable` как фактически OPEN/CLOSED или объявлять физическую безопасность на основании optimistic HA state.
-- **Потеря наружного источника** и неизвестный сезон требуют явного решения по защите от замерзания; до утверждения не изменять текущую сезонную safety-модель молча.
+- **Согласованная политика потери всех наружных источников:** после получения хотя бы одного достоверного значения App продолжает управлять по последней действительной температуре и рассчитанному сезону; глобальный и итоговый климатический FSM получают как минимум `degraded`. Сохраняются температура, timestamp, source, сезон и расчётный контекст в SQLite; не создавать притворно свежие минутные samples EMA/avg24. После восстановления любого действительного источника вернуть live-расчёт. Если достоверного baseline **никогда не было**, не выдумывать температурный факт или HEAT. Аппаратная защита AC при устаревшей наружной температуре — отдельный тест/ограничение.
 - Seed `slow_heat_hysteresis=0.5 °C`, `slow_heat_min_on_time=5 min`, `slow_heat_min_off_time=5 min`; дополнительные параметры/targets seeded **только** при отсутствии persisted state. Разделить сезонный и температурные hysteresis при миграции.
 - В проде не подключать новую схему к настоящему 32-канальному реле до отдельной read-only сверки mapping каналов и верификации ON→energized на стенде.
 
@@ -69,21 +70,21 @@
 
 | Фаза | Содержание | Gate |
 | --- | --- | --- |
-| A — Model / validation | Структуры Role/Control/Actuator, совместимый parser, строгий ownership, invalid-combination unit tests | Разбор старого и target config, **0 изменённых физических команд** |
+| A — Model / validation | Структуры Role/Control/Actuator, совместимый parser, строгий ownership, invalid-combination unit tests; отдельно решить два корневых списка `rooms/devices` | Разбор старого и target config, **0 изменённых физических команд** |
 | B — SLOW relay | Logical valve open/closed, NO/NC mapping, сезон, floor sensor present/absent | LAB и физический dry-run; отсутствие команд OFF в HEAT без датчика |
 | C — SLOW regulator | Floor sensor, hysteresis, 5/5 min timers, durable state, loss→OPEN+DEGRADED | Е2Е потери/возврата датчика, safety override, restart |
 | D — DEVICE mode | SLOW floor thermostat + FAST air thermostat, profile-based targets, idempotent reconciliation, capabilities | Night/away profile и season E2E, запрет вмешательства в локальную автоматику |
-| E — Health & Events | Problems → room/global/climate retained FSM, versionless event contract, room_name, transition-only events | Unit/event tests, RECORDER no-churn, HA local notification package |
+| E — Health & Events | Problems → room/global/climate retained FSM, outdoor last-known continuity, versionless event contract, room_name, transition-only events | Unit/event tests, RECORDER no-churn, HA local notification package |
 | F — Acceptance / docs | Полная регрессия LAB, no-restart regression, HAOS backup/restore, deployment audit | RELEASE gate отдельной новой версии |
 
 Эти фазы **план**, не разрешение менять работающий код. Сначала матрица/тесты, затем поэтапная реализация.
 
 ## 5. Открытые решения, которые нельзя молча подменять
 
-1. **Неизвестен глобальный HEAT/OFF сезон** при длительной потере наружного источника — что делать с сезонным SLOW клапаном, чтобы не заморозить трубы? Это отдельный safety decision, не тот же случай, что пропавший датчик стяжки.
+1. **РЕШЕНО: все наружные источники временно недоступны.** Продолжать по последней достоверной температуре/сезону с `degraded`, не переводить дом в `off` только из-за outage. Вопрос *первого запуска без baseline* решается безопасным `unknown`, без подстановки выдуманного сезона. Отдельно проверить аппаратный cold-weather safety кондиционера при stale temperature.
 2. **Минимальные времена ON/OFF после рестарта** без достоверного последнего физического switch time — уточнить сохранение/причины восстановления и безопасный приоритет действий.
-3. **Единое представление reversible FAST** в Supervisor-constrained YAML, исключающее двойные команды одной entity.
-4. **SLOW ROOM targets**: начальные Day/Night/Away значения стяжки и migration старого `slow_target` в профильную матрицу; пользователь их пока не утверждал.
+3. **Форма YAML для обсуждения:** предложены корневые `rooms` и `devices` с `devices[].room_id` (вместо вложенного списка `rooms[].devices`). Это схема для декларативного описания множества устройств, без изменения физической модели; **ещё не утверждена**. Вариант reversible FAST должен исключать два конкурирующих desired state.
+4. **РЕШЕНО: `slow_target` — не runtime поле YAML в TARGET.** Текущее значение использовать **однократно** для seed/migration `slow_heat_day/night/away` в SQLite с дальнейшей редакцией через MQTT Number. **Открыто только** конкретное число seed для впервые добавленной комнаты без legacy `slow_target` и нюансы миграции уже существующего состояния.
 5. **Глобальные weather/boiler/pump bindings**: статус относится к климатической инфраструктуре, но котёл и насосы не объявлены существующей реализацией; допуск новых диагностических входов отдельным решением.
 6. **События без `schema_version`** меняют существующий контракт; прежде чем выпускать, найти и обновить всех известных потребителей `event.dh_climate_app_event`.
 
