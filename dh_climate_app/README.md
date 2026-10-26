@@ -86,6 +86,8 @@ SQLite в `/data/dh_climate.db` хранит только долговремен
 
 Документация этого проекта ведётся на русском языке.
 
+- [Целевая матрица климатических комнат (TARGET, не реализована)](docs/TARGET_ROOM_CLIMATE_MODEL.md)
+- [GAP-анализ версии 0.1.31 относительно целевой матрицы](docs/TARGET_ROOM_CLIMATE_GAP.md)
 - [Манифест продукта и конфигурации](docs/PRODUCT_CONFIGURATION_MANIFEST.md)
 - [Архитектура](docs/ARCHITECTURE.md)
 - [Контракт поведения legacy-системы](docs/LEGACY_BEHAVIOR.md)
