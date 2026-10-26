@@ -35,12 +35,13 @@
 | G15 | Room/global FSM Events | Есть `problem_started/recovered`; нет `room_health_changed`, `climate_health_changed` | Переходы именно комнатного и общеклиматического FSM; избежать дублирования | **P1** |
 | G16 | Event payload | `schema_version=2` обязателен; `room_name` есть в window events, отсутствует в Problem events | Без поля версии; `room_id + room_name` во всех комнатных событиях; миграция потребителей | **P1 compatibility** |
 | G17 | MQTT config entities | Есть room FAST heat/cool targets, humidity target и season thresholds | Отдельные SLOW profile targets, FAST/SLOW hysteresis и SLOW min timers с seed→SQLite→MQTT | **P1** |
-| G18 | Конфигурация Supervisor | `config.yaml` принимает плоские room entries, не вложенный `rooms[].devices[]` | **Предложение для согласования:** два корневых списка `rooms` и `devices`, в каждом device `room_id` и primitive fields; migration старого YAML | **P0 migration** |
+| G18 | GUI / Supervisor options | `config.yaml` и нативная форма отображают удобный **единый список комнат** с плоскими полями; отдельных устройств с `role/control` нет | **Сохранить UX Комнаты → редактирование → датчики/оборудование**; проверить поддержку вложенного редактирования и подобрать внутреннее представление, не создавая отдельную навигацию `devices` | **P0 UX/migration** |
 | G19 | Startup/sensor-loss semantics | Стартовая задержка FAST зависит от первого outdoor+room-air; SLOW только от наружной температуры; после timeout — прежний fail-safe | Отличать device-local temperature, room-air и floor sensor; после первой достоверной наружной температуры держать last-known season в `degraded`, а на первом запуске без baseline — `unknown` | **P1** |
 | G20 | Уведомления | События уже машинные; локальный HA package формирует сообщения | Добавить маршрутизацию room/climate FSM events, отображение room_name, startup reconciliation | **P2 (HA local)** |
 | G21 | Влажность | Реализован отдельный humidity controller; домены switch/humidifier, runtime target в SQLite | Сохранить как самостоятельную климатическую функцию комнаты и учитывать в room health; не ломать | **P1 regression** |
 | G22 | Документация/acceptance | `HAOS_TEST_PLAN.md`, README и аудиты содержат исторические версии/acceptance | Документировать новый target, миграцию, результаты per-role E2E и обновить release gates | **P2** |
 | G23 | Last-known outdoor climate | При отсутствии live outdoor код `decide_season` возвращает `off`; нет закреплённого last-known season/freshness-контракта | Все sources lost → продолжить последнее рассчитанное HEAT/COOL/OFF, global/climate `degraded`, snapshot в SQLite с временем, никаких фиктивных avg24 samples, возобновить расчёт после recovery | **P0 safety/continuity** |
+| G24 | Outdoor GUI | В runtime уже есть независимые приоритетные `sensor.*`/`weather.*` chains для температуры и влажности, но в Supervisor обе вводятся как строки со списками через запятую | Сохранить рабочую source priority/fallback, визуально сделать отдельный **Outdoor** блок с понятными упорядоченными приоритетными источниками температуры и влажности | **P1 UX** |
 
 ### Критичный технический GAP G02
 
@@ -70,12 +71,12 @@
 
 | Фаза | Содержание | Gate |
 | --- | --- | --- |
-| A — Model / validation | Структуры Role/Control/Actuator, совместимый parser, строгий ownership, invalid-combination unit tests; отдельно решить два корневых списка `rooms/devices` | Разбор старого и target config, **0 изменённых физических команд** |
+| A — Model / validation | Структуры Role/Control/Actuator, совместимый parser, строгий ownership, invalid-combination unit tests; проверить native Supervisor nested editor, **сохранить комнатную навигацию** | Разбор старого и target config, **0 изменённых физических команд**, ручная проверка GUI |
 | B — SLOW relay | Logical valve open/closed, NO/NC mapping, сезон, floor sensor present/absent | LAB и физический dry-run; отсутствие команд OFF в HEAT без датчика |
 | C — SLOW regulator | Floor sensor, hysteresis, 5/5 min timers, durable state, loss→OPEN+DEGRADED | Е2Е потери/возврата датчика, safety override, restart |
 | D — DEVICE mode | SLOW floor thermostat + FAST air thermostat, profile-based targets, idempotent reconciliation, capabilities | Night/away profile и season E2E, запрет вмешательства в локальную автоматику |
 | E — Health & Events | Problems → room/global/climate retained FSM, outdoor last-known continuity, versionless event contract, room_name, transition-only events | Unit/event tests, RECORDER no-churn, HA local notification package |
-| F — Acceptance / docs | Полная регрессия LAB, no-restart regression, HAOS backup/restore, deployment audit | RELEASE gate отдельной новой версии |
+| F — Acceptance / docs | Полная регрессия LAB, no-restart regression, сохранение GUI «Комнаты», удобный Outdoor fallback editor, HAOS backup/restore, deployment audit | RELEASE gate отдельной новой версии |
 
 Эти фазы **план**, не разрешение менять работающий код. Сначала матрица/тесты, затем поэтапная реализация.
 
@@ -83,7 +84,7 @@
 
 1. **РЕШЕНО: все наружные источники временно недоступны.** Продолжать по последней достоверной температуре/сезону с `degraded`, не переводить дом в `off` только из-за outage. Вопрос *первого запуска без baseline* решается безопасным `unknown`, без подстановки выдуманного сезона. Отдельно проверить аппаратный cold-weather safety кондиционера при stale temperature.
 2. **Минимальные времена ON/OFF после рестарта** без достоверного последнего физического switch time — уточнить сохранение/причины восстановления и безопасный приоритет действий.
-3. **Форма YAML для обсуждения:** предложены корневые `rooms` и `devices` с `devices[].room_id` (вместо вложенного списка `rooms[].devices`). Это схема для декларативного описания множества устройств, без изменения физической модели; **ещё не утверждена**. Вариант reversible FAST должен исключать два конкурирующих desired state.
+3. **РЕШЕНО по UX:** верхнеуровневая навигация остаётся **по комнатам**; при открытии комнаты инсталлятор находит её датчики и все связанные актуаторы. Предложение о двух отдельных пользовательских списках `rooms` и `devices` **отклонено**. **Открыта только реализация редактора/сериализация Supervisor options** для нескольких `role/control` устройств внутри комнаты; предметная YAML-модель `rooms[].devices[]` не является доказательством поддержки текущей HAOS GUI-формой. Reversible FAST не должен получать два конкурирующих desired state.
 4. **РЕШЕНО: `slow_target` — не runtime поле YAML в TARGET.** Текущее значение использовать **однократно** для seed/migration `slow_heat_day/night/away` в SQLite с дальнейшей редакцией через MQTT Number. **Открыто только** конкретное число seed для впервые добавленной комнаты без legacy `slow_target` и нюансы миграции уже существующего состояния.
 5. **Глобальные weather/boiler/pump bindings**: статус относится к климатической инфраструктуре, но котёл и насосы не объявлены существующей реализацией; допуск новых диагностических входов отдельным решением.
 6. **События без `schema_version`** меняют существующий контракт; прежде чем выпускать, найти и обновить всех известных потребителей `event.dh_climate_app_event`.
