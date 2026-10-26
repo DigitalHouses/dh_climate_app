@@ -16,34 +16,40 @@ hassio_api: true
 services:
   - mqtt:need
 options:
-  temperature_hysteresis: 0.5
-  humidity_hysteresis: 3.0
   night_mode: ""
   we_at_home: ""
-  outdoor_temperature_sources: ""
-  outdoor_humidity_sources: ""
+  outdoor:
+    temperature_sources: []
+    humidity_sources: []
   rooms: []
   telemetry_enabled: false
   log_level: info
 schema:
-  temperature_hysteresis: float(0,5)
-  humidity_hysteresis: float(0,25)
   night_mode: str
   we_at_home: str
-  outdoor_temperature_sources: str
-  outdoor_humidity_sources: str
+  outdoor:
+    temperature_sources:
+      - str
+    humidity_sources:
+      - str
   rooms:
     - id: str
       name: str
-      temperature_sensors: str
-      humidity_sensors: "str?"
-      window_sensors: "str?"
-      window_off_devices: "str?"
-      fast_heat: "str?"
-      fast_cool: "str?"
-      slow_heat: "str?"
-      slow_target: "float?"
+      temperature_sensors:
+        - str
+      humidity_sensors:
+        - "str?"
+      window_sensors:
+        - "str?"
       humidity_mode: "list(off|humidifier|dehumidifier)?"
       humidity_actuator: "str?"
+      devices:
+        - entity: str
+          role: list(slow_heat|fast_heat|fast_cool)
+          control: list(app|device)
+          actuator: "list(normal_open|normal_closed)?"
+          temperature_sensor: "str?"
+          window_off: "bool?"
+          reversible: "bool?"
   telemetry_enabled: bool
   log_level: list(debug|info|warning|error)
