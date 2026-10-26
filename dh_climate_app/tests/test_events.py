@@ -117,7 +117,7 @@ class ClimateEventTests(unittest.TestCase):
         self.assertEqual("weather.backup", event["current_source"])
         self.assertEqual(18.4, event["previous_temperature"])
         self.assertEqual(17.1, event["current_temperature"])
-        self.assertEqual(2, event["schema_version"])
+        self.assertNotIn("schema_version", event)
 
     def test_first_outdoor_source_is_baseline_not_transition(self) -> None:
         engine = ClimateEventEngine()
@@ -154,7 +154,7 @@ class ClimateEventTests(unittest.TestCase):
         self.assertEqual("rain", events[0]["previous_type"])
         self.assertEqual("snow", events[0]["current_type"])
         self.assertEqual(0.8, events[0]["precipitation_mm"])
-        self.assertEqual(2, events[0]["schema_version"])
+        self.assertNotIn("schema_version", events[0])
 
     def test_precipitation_start_and_stop(self) -> None:
         engine = ClimateEventEngine()
