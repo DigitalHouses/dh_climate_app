@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import sqlite3
 from typing import Iterator
@@ -107,6 +107,12 @@ class StateStore:
                     profile TEXT NOT NULL CHECK (profile IN ('day', 'night', 'away')),
                     target REAL NOT NULL,
                     PRIMARY KEY (room_id, profile)
+                );
+
+                CREATE TABLE IF NOT EXISTS slow_valve_runtime (
+                    entity_id TEXT PRIMARY KEY,
+                    last_observed_open INTEGER NOT NULL CHECK (last_observed_open IN (0, 1)),
+                    last_change_at TEXT
                 );
 
                 CREATE TABLE IF NOT EXISTS humidity_targets (
@@ -260,6 +266,42 @@ class StateStore:
                            room_id, profile, target) VALUES (?, ?, ?)""",
                     (room_id, profile.value, float(target)),
                 )
+
+    def observe_slow_valve(
+        self, entity_id: str, valve_open: bool, observed_at: datetime,
+    ) -> datetime | None:
+        """Persist an HA-observed transition, never guess the first change time.
+
+        HA state verification is not a physical end-switch confirmation.
+        """
+        if observed_at.tzinfo is None:
+            raise ValueError("observed_at must have timezone")
+        with self.connect() as db:
+            row = db.execute(
+                """SELECT last_observed_open, last_change_at
+                   FROM slow_valve_runtime WHERE entity_id=?""",
+                (entity_id,),
+            ).fetchone()
+            if row is None:
+                db.execute(
+                    """INSERT INTO slow_valve_runtime(
+                           entity_id,last_observed_open,last_change_at)
+                       VALUES (?,?,NULL)""",
+                    (entity_id, int(valve_open)),
+                )
+                return None
+            if bool(row["last_observed_open"]) != valve_open:
+                db.execute(
+                    """UPDATE slow_valve_runtime
+                       SET last_observed_open=?, last_change_at=?
+                       WHERE entity_id=?""",
+                    (int(valve_open), observed_at.isoformat(), entity_id),
+                )
+                return observed_at
+            return (
+                datetime.fromisoformat(row["last_change_at"])
+                if row["last_change_at"] else None
+            )
 
     def integrity_check(self) -> bool:
         with self.connect() as db:
