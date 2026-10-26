@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import datetime, timezone
+from typing import Mapping
 import time
 
 from .config import AppConfig, DeviceConfig
 from .core import DeviceClass, HvacAction, Season, _numeric_state
 from .humidity import HumidityState
 from .rooms import RoomState
+from .persistence import StateStore
 
 
 @dataclass(frozen=True)
@@ -312,3 +315,84 @@ def compile_room_devices(
                     )
                 )
     return desired
+
+
+class SlowValveIntervalGuard:
+    """Apply min ON/OFF to observed SLOW valve transitions only.
+
+    Normal heating cycles respect minimum durations. Seasonal shutdown,
+    open-window inhibit and configured screed sensor outage bypass timers.
+    The first observed state has UNKNOWN transition time; it is never
+    assigned a fabricated startup timestamp.
+    """
+
+    def __init__(self, store: StateStore) -> None:
+        self.store = store
+
+    def filter(
+        self,
+        desired: list[DesiredDeviceState],
+        *,
+        config: AppConfig,
+        room_states: dict[str, RoomState],
+        observed: Mapping[str, object],
+        sensor_values: Mapping[str, object],
+        now: datetime | None = None,
+    ) -> list[DesiredDeviceState]:
+        now = now or datetime.now(timezone.utc)
+        devices = {
+            device.entity_id: (room.room_id, device)
+            for room in config.rooms for device in room.devices
+            if device.device_class is DeviceClass.SLOW
+            and device.control == "app"
+            and device.temperature_sensor is not None
+        }
+        output: list[DesiredDeviceState] = []
+        for requested in desired:
+            pair = devices.get(requested.entity_id)
+            if pair is None:
+                output.append(requested)
+                continue
+            room_id, device = pair
+            actual = observed.get(device.entity_id)
+            state = getattr(actual, "state", None)
+            if state not in {"on", "off"}:
+                # No trustworthy observed relay: executor handles unknown.
+                output.append(requested)
+                continue
+            powered = state == "on"
+            observed_open = (
+                powered if device.actuator == "normal_closed"
+                else not powered
+            )
+            last_change = self.store.observe_slow_valve(
+                device.entity_id, observed_open, now,
+            )
+            if requested.power == powered:
+                output.append(requested)
+                continue
+            room = room_states[room_id]
+            sensor_lost = _numeric_state(
+                sensor_values.get(device.temperature_sensor)
+            ) is None
+            safety = (
+                room.season is not Season.HEAT
+                or sensor_lost
+                or (device.window_policy == "turn_off"
+                    and room.window_state == "open")
+            )
+            if safety or last_change is None:
+                output.append(requested)
+                continue
+            key = (
+                "slow_heat_min_on_time" if observed_open
+                else "slow_heat_min_off_time"
+            )
+            minimum_seconds = 60 * self.store.get_global_tuning(key)
+            elapsed = (now - last_change).total_seconds()
+            if elapsed < minimum_seconds:
+                # Keep the actual physical relay state through a normal cycle.
+                output.append(replace(requested, power=powered))
+            else:
+                output.append(requested)
+        return output
