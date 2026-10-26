@@ -70,9 +70,12 @@ outdoor:
 rooms:
   - id: livingroom
     name: Гостиная
-    temperature_sensors: sensor.livingroom_air_temperature
-    humidity_sensors: sensor.livingroom_humidity
-    window_sensors: binary_sensor.livingroom_window
+    temperature_sensors:
+      - sensor.livingroom_air_temperature
+    humidity_sensors:
+      - sensor.livingroom_humidity
+    window_sensors:
+      - binary_sensor.livingroom_window
     humidity_mode: humidifier
     humidity_actuator: switch.socket_humidifier
     devices:
@@ -111,7 +114,11 @@ rooms:
 
 Действующая `config.yaml`/options schema использует список комнат с плоскими primitive-полями; `outdoor_temperature_sources` и `outdoor_humidity_sources` уже допускают несколько значений **в строке через запятую**. Их source failover в runtime существует. **Требование новой итерации — прежде всего удобное представление источников как приоритетных записей, без изменения смысла fallback.**
 
-Вложенные коллекции `rooms[].devices[]` в примере выше **не объявлены работающей native Supervisor GUI-формой**: нужно отдельно проверить возможности/ограничения редактора в целевой версии HAOS и выбрать реализуемую сериализацию. Сохранение навигации «Комнаты → редактирование комнаты → оборудование» является **жёстким UX-инвариантом**, а конкретная внутренняя кодировка options — техническая деталь. Не переносить данные в отдельный пользовательский список устройств только ради удобства парсера.
+**Результат технической проверки:** в исходном коде Supervisor **2026.10.4** рекурсивная schema (`vol.Self`) и генератор `UiOptions` принимают `rooms[].temperature_sensors[]`, `rooms[].devices[]` и `outdoor.temperature_sources[]`. Изолированная проверка `SCHEMA_VALIDATION` и вложенных повторяемых GUI nodes прошла. См. [отчёт о проверке](SUPERVISOR_NESTED_SCHEMA_PROBE.md). Это **не подтверждение** реального открытия/сохранения формы на установленном HAOS — обязателен GUI smoke `render → edit → save → reopen` на отдельном тестовом App.
+
+**Целевое правило:** любое поле с множественными значениями — YAML-список, включая один элемент. Отдельные скаляры `id/name/role/control/actuator` остаются скалярами. `temperature_sensors` комнаты агрегируются, `outdoor.temperature_sources` образуют упорядоченный fallback (их семантика различна).
+
+**Миграционное ограничение:** менять `temperature_sensors: str` на `[str]` в production schema без миграции сохранённых options нельзя. Сам Python-парсер `_entity_list` уже понимает строки и списки, но Supervisor сначала валидирует сохранённые значения. Сохранение навигации «Комнаты → редактирование комнаты → оборудование» является **жёстким UX-инвариантом**.
 
 Оперативные уставки Day/Night/Away (воздух/стяжка), глобальные FAST/SLOW hysteresis и min ON/OFF живут в SQLite и настраиваются через MQTT entities в HA, а не в установочном редакторе.
 
