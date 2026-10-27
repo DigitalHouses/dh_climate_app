@@ -56,7 +56,11 @@ class ProductContractTests(unittest.TestCase):
     def test_supervisor_exposes_topology_not_room_targets(self) -> None:
         config = yaml.safe_load((APP_ROOT / "config.yaml").read_text(encoding="utf-8"))
         schema = config["schema"]
-        self.assertIn("temperature_hysteresis", schema)
+        self.assertIn("outdoor", schema)
+        self.assertIn("temperature_sources", schema["outdoor"])
+        self.assertIn("devices", schema["rooms"][0])
+        self.assertEqual([{"entity": "str", "role": "list(slow_heat|fast_heat|fast_cool)", "control": "list(app|device)", "actuator": "list(normal_open|normal_closed)?", "temperature_sensor": "str?", "window_off": "bool?", "reversible": "bool?"}], schema["rooms"][0]["devices"])
+        self.assertNotIn("temperature_hysteresis", schema)
         for key in ("hysteresis", "heat_threshold_default", "cool_threshold_default",
                     "ac_min_outdoor_temperature", "outdoor_temperature_ema_minutes"):
             self.assertNotIn(key, schema)
