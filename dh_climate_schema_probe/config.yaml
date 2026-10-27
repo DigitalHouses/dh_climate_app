@@ -1,0 +1,77 @@
+name: DigitalHouses Climate UI Schema Probe (TEST ONLY)
+version: 0.1.32-rc1
+slug: dh_climate_schema_probe
+description: Isolated GUI editor validation. Does not access Home Assistant API, MQTT or actuators.
+url: https://github.com/DigitalHouses/dh_climate_app
+arch:
+  - amd64
+  - aarch64
+startup: application
+boot: manual
+init: false
+stage: experimental
+options:
+  night_mode: ""
+  we_at_home: ""
+  outdoor:
+    temperature_sources:
+      - weather.probe_primary
+      - sensor.probe_backup
+    humidity_sources:
+      - sensor.probe_outdoor_humidity
+  rooms:
+    - id: probe_room
+      name: Тест комнаты
+      temperature_sensors:
+        - sensor.probe_air_one
+        - sensor.probe_air_two
+      humidity_sensors: []
+      window_sensors: []
+      humidity_mode: 'off'
+      devices:
+        - entity: climate.probe_ac
+          role: fast_heat
+          control: app
+          reversible: true
+        - entity: switch.probe_floor
+          role: slow_heat
+          control: app
+          actuator: normal_closed
+    - id: probe_second_room
+      name: Вторая комната
+      temperature_sensors:
+        - sensor.probe_second_air
+      humidity_sensors: []
+      window_sensors: []
+      devices: []
+  telemetry_enabled: false
+  log_level: info
+schema:
+  night_mode: str
+  we_at_home: str
+  outdoor:
+    temperature_sources:
+      - str
+    humidity_sources:
+      - str
+  rooms:
+    - id: str
+      name: str
+      temperature_sensors:
+        - str
+      humidity_sensors:
+        - "str?"
+      window_sensors:
+        - "str?"
+      humidity_mode: "list(off|humidifier|dehumidifier)?"
+      humidity_actuator: "str?"
+      devices:
+        - entity: str
+          role: list(slow_heat|fast_heat|fast_cool)
+          control: list(app|device)
+          actuator: "list(normal_open|normal_closed)?"
+          temperature_sensor: "str?"
+          window_off: "bool?"
+          reversible: "bool?"
+  telemetry_enabled: bool
+  log_level: list(debug|info|warning|error)
