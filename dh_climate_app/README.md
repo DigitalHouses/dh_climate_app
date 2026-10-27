@@ -134,3 +134,9 @@ ghcr.io/digitalhouses/digitalhouses_climate_app:<version>
 ```
 
 Публикация релиза контролируется репозиторием. `dh_climate_app/RELEASE` должен содержать точный канонический tag для версии из `config.yaml`. После проверенного merge в `main` workflow валидирует датированный changelog, создаёт канонический tag, проверяет отсутствие уже существующих immutable GHCR version tag и GitHub Release, затем публикует multi-architecture image и GitHub Release.
+
+## Demand (0.1.33)
+
+Наблюдение ROOM / DEVICE / ACTUAL запросов тепла и холода через MQTT Discovery.
+ROOM — по `hvac_action` всех комнатных термостатов; DEVICE — по `hvac_action` аппаратных `control: device`; ACTUAL — по явно указанным в `actual_demand` внешним `binary_sensor`.
+Полный контракт, имена сущностей, особенности Recorder: [docs/DEMAND_CONTRACT.md](docs/DEMAND_CONTRACT.md).

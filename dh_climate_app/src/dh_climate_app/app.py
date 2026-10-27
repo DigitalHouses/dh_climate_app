@@ -11,6 +11,7 @@ import signal
 from .climate_log import ClimateLog
 from .config import AppConfig, SEASON_MIN_TEMP, SEASON_MAX_TEMP, configured_entity_ids, parse_options
 from .core import Profile, Season
+from .demand import actual_demand, device_demand, room_demand
 from .devices import StartupActuatorGate, SlowValveIntervalGuard, compile_room_devices
 from .auto_fast import AutoFastClimateTargets
 from .events import ClimateEventEngine
@@ -116,6 +117,7 @@ class ClimateRuntime:
             rooms=config.rooms,
             command_queue=self.command_queue,
             weather_enabled=self.weather_source is not None,
+            actual_demand_sources=dict(config.actual_demand),
         )
         self.ha = HomeAssistantClient(
             token=os.environ["SUPERVISOR_TOKEN"],
@@ -138,6 +140,7 @@ class ClimateRuntime:
         self.telemetry_runner.start()
         self.facade.set_season_available(False)
         self.facade.set_rooms_available(False)
+        self.facade.set_demand_available(False)
 
         tasks = [
             asyncio.create_task(
@@ -232,6 +235,7 @@ class ClimateRuntime:
             self._weather_forecast_response = None
             self.facade.set_season_available(False)
             self.facade.set_rooms_available(False)
+            self.facade.set_demand_available(False)
             return
 
         await self._recalculate(
@@ -447,6 +451,23 @@ class ClimateRuntime:
                     published_target=published_target,
                     profile_targets=profile_targets,
                 )
+
+            # Demand is a read-only projection of the same event snapshot.
+            # No actuator commands, no independent hysteresis, no polling.
+            for direction in ("heat", "cool"):
+                self.facade.publish_demand(
+                    "room", direction,
+                    room_demand(self.config, room_states, direction),
+                )
+                self.facade.publish_demand(
+                    "device", direction,
+                    device_demand(self.config, snapshot, direction),
+                )
+                if self.config.actual_demand.get(direction):
+                    self.facade.publish_demand(
+                        "actual", direction,
+                        actual_demand(self.config.actual_demand[direction], snapshot),
+                    )
 
             for humidity_state in humidity_states.values():
                 self.facade.publish_humidity(humidity_state)
