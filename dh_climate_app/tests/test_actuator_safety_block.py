@@ -6,7 +6,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
-from dh_climate_app.config import parse_options
+from legacy_fixtures import parse_legacy_fixture as parse_options
 from dh_climate_app.core import Season
 from dh_climate_app.devices import DesiredDeviceState, compile_room_devices
 from dh_climate_app.events import ClimateEventEngine
@@ -135,6 +135,7 @@ class ActuatorSafetyBlockTests(unittest.IsolatedAsyncioTestCase):
             room_states=rooms,
             humidity_states={},
             outdoor_temperature=outdoor_temperature,
+            slow_targets={"living_room": 27.0},
         )
         return rooms, {item.entity_id: item for item in desired}
 

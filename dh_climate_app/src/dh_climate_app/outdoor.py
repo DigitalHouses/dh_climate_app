@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from math import exp
+import json
 from typing import Mapping, Sequence
 
 from .config import OutdoorConfig
@@ -37,6 +38,8 @@ class OutdoorState:
     hysteresis: float
     season: Season
     raw_temperature: float | None = None
+    stale: bool = False
+    last_valid_at: str | None = None
 
     @property
     def available(self) -> bool:
@@ -153,10 +156,46 @@ class OutdoorEngine:
             else Season.OFF
         )
 
+        # No fake temperature samples during a total source outage.
+        # Restore the last genuine season even across App restarts.
+        last_valid_at: str | None = None
+        stale = temperature is None
+        if temperature is not None:
+            last_valid_at = observed_at.isoformat()
+            last_known = {
+                "source": temperature[0],
+                "raw": temperature[1],
+                "filtered": filtered_temperature,
+                "avg24": avg_temperature,
+                "season": season.value,
+                "observed_at": last_valid_at,
+            }
+            previous_json = self.store.get_metadata("outdoor_last_known_v1")
+            previous = json.loads(previous_json) if previous_json else None
+            if (
+                previous is None
+                or previous.get("source") != temperature[0]
+                or previous.get("raw") != temperature[1]
+                or previous.get("season") != season.value
+                or previous.get("observed_at", "")[:16] != last_valid_at[:16]
+            ):
+                self.store.set_metadata(
+                    "outdoor_last_known_v1",
+                    json.dumps(last_known, sort_keys=True),
+                )
+        else:
+            saved = self.store.get_metadata("outdoor_last_known_v1")
+            if saved is not None:
+                cached = json.loads(saved)
+                season = Season(cached["season"])
+                filtered_temperature = cached.get("filtered")
+                avg_temperature = cached.get("avg24")
+                last_valid_at = cached.get("observed_at")
+            # No baseline: remain unavailable and never invent a season.
         return OutdoorState(
             observed_at=observed_at,
             current_temperature=(
-                filtered_temperature if temperature is not None else None
+                filtered_temperature
             ),
             current_humidity=humidity[1] if humidity else None,
             avg_24h_temperature=avg_temperature,
@@ -168,6 +207,8 @@ class OutdoorEngine:
             hysteresis=self.hysteresis,
             season=season,
             raw_temperature=temperature[1] if temperature else None,
+            stale=stale,
+            last_valid_at=last_valid_at,
         )
 
     def set_thresholds(self, *, heat: float, cool: float) -> None:

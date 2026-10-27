@@ -93,7 +93,7 @@ class HumidityEngine:
                 controller_type=str(room.humidity.controller_type),
                 current_humidity=current,
                 target_humidity=target,
-                hysteresis=self.config.global_config.humidity_hysteresis,
+                hysteresis=self.store.get_global_tuning("humidity_hysteresis"),
                 previous_active=previous,
             )
         if active != previous:

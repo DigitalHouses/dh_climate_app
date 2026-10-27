@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from dh_climate_app.config import parse_options
+from legacy_fixtures import parse_legacy_fixture as parse_options
 from dh_climate_app.core import HvacAction, Profile, Season
 from dh_climate_app.persistence import StateStore
 from dh_climate_app.rooms import ProfileEditOverlay, RoomEngine, aggregate_window_state

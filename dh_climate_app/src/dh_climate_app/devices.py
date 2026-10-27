@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import datetime, timezone
+from typing import Mapping
 import time
 
 from .config import AppConfig, DeviceConfig
-from .core import DeviceClass, HvacAction, Season
+from .core import DeviceClass, HvacAction, Season, _numeric_state
 from .humidity import HumidityState
 from .rooms import RoomState
+from .persistence import StateStore
 
 
 @dataclass(frozen=True)
@@ -92,6 +95,8 @@ class StartupActuatorGate:
             # SLOW has a local floor thermostat: only the global season matters.
             if kind == "slow":
                 ready = self._outdoor_seen
+            elif kind == "fast-device":
+                ready = self._outdoor_seen
             elif kind == "fast":
                 ready = (
                     self._outdoor_seen
@@ -136,8 +141,7 @@ def _thermal_inhibited(
     if (
         heating
         and minimum is not None
-        and outdoor_temperature is not None
-        and outdoor_temperature < minimum
+        and (outdoor_temperature is None or outdoor_temperature < minimum)
     ):
         return True
 
@@ -150,80 +154,132 @@ def compile_room_devices(
     room_states: dict[str, RoomState],
     humidity_states: dict[str, HumidityState],
     outdoor_temperature: float | None = None,
+    screed_values: dict[str, object] | None = None,
+    slow_targets: dict[str, float] | None = None,
+    slow_hysteresis: float = 0.5,
+    slow_previous_open: dict[str, bool] | None = None,
 ) -> list[DesiredDeviceState]:
-    """Compile physical desired state from room truth.
+    """Compile one desired state per physical device, including NO/NC polarity.
 
-    Window state remains context, not thermostat truth: it can inhibit only
-    devices whose explicit window_policy is turn_off. Likewise the legacy
-    low-outdoor-temperature AC safety is represented as an explicit
-    per-device heating limit instead of a device-type registry.
+    Missing configured screed sensor in HEAT is an explicit fail-open policy.
+    Missing SLOW target is a configuration fault: do not heat blindly.
+    Min ON/OFF interval enforcement belongs to the stateful valve controller,
+    not to this pure desired-state compiler.
     """
     desired: list[DesiredDeviceState] = []
-
+    screed_values = screed_values or {}
+    slow_targets = slow_targets or {}
+    slow_previous_open = slow_previous_open or {}
     for room in config.rooms:
         state = room_states[room.room_id]
         for device in room.devices:
             domain = device.entity_id.split(".", 1)[0]
-
             if device.device_class is DeviceClass.SLOW:
-                active = state.season is Season.HEAT
-                if active and _thermal_inhibited(
-                    device,
-                    room_state=state,
-                    outdoor_temperature=outdoor_temperature,
-                    heating=True,
+                heating = state.season is Season.HEAT
+                if heating and _thermal_inhibited(
+                    device, room_state=state,
+                    outdoor_temperature=outdoor_temperature, heating=True,
                 ):
-                    active = False
+                    heating = False
+                target = slow_targets.get(room.room_id)
+                valve_open = heating
+                if device.control == "device":
+                    # The local floor thermostat owns PWM and its screed sensor.
+                    # Without persisted slab target, inhibit rather than guess.
+                    active = heating and target is not None
+                    desired.append(
+                        DesiredDeviceState(
+                            entity_id=device.entity_id, domain=domain,
+                            hvac_mode="heat" if active else "off",
+                            target_temperature=target if active else None,
+                            source=f"room:{room.room_id}:slow",
+                        )
+                    )
+                    continue
+                if device.temperature_sensor is not None and heating:
+                    slab = _numeric_state(
+                        screed_values.get(device.temperature_sensor)
+                    )
+                    if slab is None:
+                        valve_open = True  # contractual degraded fail-open
+                    elif target is None:
+                        valve_open = False  # missing seed: no invented setpoint
+                    elif slab <= target - slow_hysteresis:
+                        valve_open = True
+                    elif slab >= target + slow_hysteresis:
+                        valve_open = False
+                    else:
+                        valve_open = slow_previous_open.get(device.entity_id, False)
+                # switch.on means energized, not necessarily physically OPEN.
+                power = (
+                    valve_open if device.actuator == "normal_closed"
+                    else not valve_open
+                )
                 desired.append(
                     DesiredDeviceState(
-                        entity_id=device.entity_id,
-                        domain=domain,
-                        hvac_mode="heat" if active else "off",
-                        target_temperature=(
-                            device.target_temperature if active else None
-                        ),
+                        entity_id=device.entity_id, domain=domain, power=power,
                         source=f"room:{room.room_id}:slow",
                     )
                 )
                 continue
 
-            active = _function_matches(
-                device.function,
-                state.control_action,
-            )
-            heating = (
-                active
-                and state.control_action is HvacAction.HEATING
-            )
-            if active and _thermal_inhibited(
-                device,
-                room_state=state,
-                outdoor_temperature=outdoor_temperature,
-                heating=heating,
-            ):
-                active = False
-
-            if domain == "switch":
+            if device.control == "device":
+                # Independent local air thermostat; room hysteresis must never
+                # pulse its heat/off or cool/off mode.
+                requested = (
+                    "heat" if state.season is Season.HEAT
+                    and device.function in {"heat", "heat_cool"}
+                    else "cool" if state.season is Season.COOL
+                    and device.function in {"cool", "heat_cool"}
+                    and state.climate_control_enabled
+                    else "off"
+                )
+                if requested != "off" and _thermal_inhibited(
+                    device, room_state=state,
+                    outdoor_temperature=outdoor_temperature,
+                    heating=requested == "heat",
+                ):
+                    requested = "off"
                 desired.append(
                     DesiredDeviceState(
-                        entity_id=device.entity_id,
-                        domain=domain,
-                        power=active,
+                        entity_id=device.entity_id, domain=domain,
+                        hvac_mode=requested,
+                        target_temperature=(
+                            state.control_target_temperature
+                            if requested != "off" else None
+                        ),
+                        source=f"room:{room.room_id}:fast-device",
+                    )
+                )
+                continue
+
+            active = _function_matches(device.function, state.control_action)
+            heating = active and state.control_action is HvacAction.HEATING
+            if active and _thermal_inhibited(
+                device, room_state=state,
+                outdoor_temperature=outdoor_temperature, heating=heating,
+            ):
+                active = False
+            if domain == "switch":
+                # Optional physical valve: logical ON -> energized NO/NC mapping.
+                power = (
+                    not active if device.actuator == "normal_open" else active
+                )
+                desired.append(
+                    DesiredDeviceState(
+                        entity_id=device.entity_id, domain=domain, power=power,
                         source=f"room:{room.room_id}:fast",
                     )
                 )
             else:
-                if active and state.control_action is HvacAction.HEATING:
-                    mode = "heat"
-                elif active and state.control_action is HvacAction.COOLING:
-                    mode = "cool"
-                else:
-                    mode = "off"
+                mode = (
+                    "heat" if active and state.control_action is HvacAction.HEATING
+                    else "cool" if active and state.control_action is HvacAction.COOLING
+                    else "off"
+                )
                 desired.append(
                     DesiredDeviceState(
-                        entity_id=device.entity_id,
-                        domain=domain,
-                        hvac_mode=mode,
+                        entity_id=device.entity_id, domain=domain, hvac_mode=mode,
                         target_temperature=(
                             state.control_target_temperature if active else None
                         ),
@@ -241,8 +297,7 @@ def compile_room_devices(
             if domain == "switch":
                 desired.append(
                     DesiredDeviceState(
-                        entity_id=entity_id,
-                        domain=domain,
+                        entity_id=entity_id, domain=domain,
                         power=humidity_state.active,
                         source=f"room:{room.room_id}:humidity",
                     )
@@ -250,16 +305,94 @@ def compile_room_devices(
             else:
                 desired.append(
                     DesiredDeviceState(
-                        entity_id=entity_id,
-                        domain=domain,
+                        entity_id=entity_id, domain=domain,
                         power=humidity_state.active,
                         target_humidity=(
                             humidity_state.target_humidity
-                            if humidity_state.active
-                            else None
+                            if humidity_state.active else None
                         ),
                         source=f"room:{room.room_id}:humidity",
                     )
                 )
-
     return desired
+
+
+class SlowValveIntervalGuard:
+    """Apply min ON/OFF to observed SLOW valve transitions only.
+
+    Normal heating cycles respect minimum durations. Seasonal shutdown,
+    open-window inhibit and configured screed sensor outage bypass timers.
+    The first observed state has UNKNOWN transition time; it is never
+    assigned a fabricated startup timestamp.
+    """
+
+    def __init__(self, store: StateStore) -> None:
+        self.store = store
+
+    def filter(
+        self,
+        desired: list[DesiredDeviceState],
+        *,
+        config: AppConfig,
+        room_states: dict[str, RoomState],
+        observed: Mapping[str, object],
+        sensor_values: Mapping[str, object],
+        now: datetime | None = None,
+    ) -> list[DesiredDeviceState]:
+        now = now or datetime.now(timezone.utc)
+        devices = {
+            device.entity_id: (room.room_id, device)
+            for room in config.rooms for device in room.devices
+            if device.device_class is DeviceClass.SLOW
+            and device.control == "app"
+            and device.temperature_sensor is not None
+        }
+        output: list[DesiredDeviceState] = []
+        for requested in desired:
+            pair = devices.get(requested.entity_id)
+            if pair is None:
+                output.append(requested)
+                continue
+            room_id, device = pair
+            actual = observed.get(device.entity_id)
+            state = getattr(actual, "state", None)
+            if state not in {"on", "off"}:
+                # No trustworthy observed relay: executor handles unknown.
+                output.append(requested)
+                continue
+            powered = state == "on"
+            observed_open = (
+                powered if device.actuator == "normal_closed"
+                else not powered
+            )
+            last_change = self.store.observe_slow_valve(
+                device.entity_id, observed_open, now,
+            )
+            if requested.power == powered:
+                output.append(requested)
+                continue
+            room = room_states[room_id]
+            sensor_lost = _numeric_state(
+                sensor_values.get(device.temperature_sensor)
+            ) is None
+            safety = (
+                room.season is not Season.HEAT
+                or sensor_lost
+                or (device.window_policy == "turn_off"
+                    and room.window_state == "open")
+            )
+            if safety or last_change is None:
+                output.append(requested)
+                continue
+            key = (
+                "slow_heat_min_on_time" if observed_open
+                else "slow_heat_min_off_time"
+            )
+            minimum_seconds = 60 * self.store.get_global_tuning(key)
+            elapsed = (now - last_change).total_seconds()
+            if elapsed < minimum_seconds:
+                # Keep the actual physical relay state through a normal cycle.
+                output.append(replace(requested, power=powered))
+            else:
+                output.append(requested)
+        return output

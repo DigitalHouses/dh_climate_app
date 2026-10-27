@@ -8,6 +8,7 @@ from .config import RoomConfig, SEASON_MIN_TEMP, SEASON_MAX_TEMP
 from .events import EVENT_TYPES
 from .humidity import HumidityState
 from .outdoor import OutdoorState
+from .persistence import GLOBAL_TUNING_SEEDS
 from .rooms import RoomState
 from .weather import WeatherState
 
@@ -640,3 +641,111 @@ def problem_state_payload(problems: tuple[object, ...]) -> tuple[str, str]:
         separators=(",", ":"),
     )
     return state, attrs
+
+
+def global_climate_health_discovery_payloads(
+    app_version: str,
+) -> dict[str, tuple[str, dict[str, Any]]]:
+    """Two independent retained diagnostics: infrastructure and climate."""
+    result = {}
+    for name, label in (
+        ("global_health", "Global health"),
+        ("climate_health", "Climate health"),
+    ):
+        object_id = f"dh_climate_app_{name}"
+        result[name] = (
+            f"{DISCOVERY_PREFIX}/sensor/{object_id}/config",
+            {
+                "name": label,
+                "unique_id": object_id,
+                "default_entity_id": f"sensor.{object_id}",
+                "state_topic": f"{BASE_TOPIC}/{name}",
+                "availability_topic": SYSTEM_AVAILABILITY_TOPIC,
+                "entity_category": "diagnostic",
+                "device": system_device(app_version),
+                "origin": _origin(app_version),
+            },
+        )
+    return result
+
+
+def room_health_discovery_payload(
+    room: RoomConfig, app_version: str,
+) -> tuple[str, dict[str, Any]]:
+    object_id = f"dh_climate_app_{room.room_id}_health"
+    return (
+        f"{DISCOVERY_PREFIX}/sensor/{object_id}/config",
+        {
+            "name": "Health",
+            "unique_id": object_id,
+            "default_entity_id": f"sensor.{object_id}",
+            "state_topic": f"{room_base(room.room_id)}/health",
+            "availability_topic": SYSTEM_AVAILABILITY_TOPIC,
+            "entity_category": "diagnostic",
+            "device": room_device(room, app_version),
+            "origin": _origin(app_version),
+        },
+    )
+
+
+def global_tuning_discovery_payloads(
+    app_version: str,
+) -> dict[str, tuple[str, dict[str, Any]]]:
+    result = {}
+    for key in GLOBAL_TUNING_SEEDS:
+        is_time = key.endswith("_time")
+        is_humidity = key == "humidity_hysteresis"
+        object_id = f"dh_climate_app_{key}"
+        result[key] = (
+            f"{DISCOVERY_PREFIX}/number/{object_id}/config",
+            {
+                "name": key.replace("_", " ").title(),
+                "unique_id": object_id,
+                "default_entity_id": f"number.{object_id}",
+                "state_topic": f"{BASE_TOPIC}/settings/{key}",
+                "command_topic": f"{BASE_TOPIC}/settings/set/{key}",
+                "unit_of_measurement": (
+                    "min" if is_time else "%RH" if is_humidity else "°C"
+                ),
+                "min": 0,
+                "max": 120 if is_time else 25 if is_humidity else 5,
+                "step": 1 if is_time else 0.5 if is_humidity else 0.1,
+                "mode": "box",
+                "entity_category": "config",
+                "visible_by_default": False,
+                "availability_topic": SYSTEM_AVAILABILITY_TOPIC,
+                "retain": True,
+                "device": system_device(app_version),
+                "origin": _origin(app_version),
+            },
+        )
+    return result
+
+
+def slow_target_discovery_payload(
+    room: RoomConfig, profile: str, app_version: str,
+) -> tuple[str, dict[str, Any]]:
+    key = f"slow_heat_{profile}"
+    object_id = f"dh_climate_app_{room.room_id}_{key}"
+    return (
+        f"{DISCOVERY_PREFIX}/number/{object_id}/config",
+        {
+            "name": f"SLOW Heat {profile.title()} Target",
+            "unique_id": object_id,
+            "default_entity_id": f"number.{object_id}",
+            "state_topic": f"{room_base(room.room_id)}/slow_targets/{profile}",
+            "command_topic": f"{room_base(room.room_id)}/slow_targets/set/{profile}",
+            "device_class": "temperature",
+            "unit_of_measurement": "°C",
+            "min": 5,
+            "max": 45,
+            "step": 0.5,
+            "mode": "box",
+            "entity_category": "config",
+            "visible_by_default": False,
+            "availability_topic": SYSTEM_AVAILABILITY_TOPIC,
+            "retain": True,
+            "device": room_device(room, app_version),
+            "origin": _origin(app_version),
+        },
+    )

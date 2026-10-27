@@ -57,6 +57,9 @@ class DeviceConfig:
     target_temperature: float | None
     window_policy: str = "ignore"
     min_heating_outdoor_temperature: float | None = None
+    control: str = "app"
+    actuator: str | None = None
+    temperature_sensor: str | None = None
 
 
 @dataclass(frozen=True)
@@ -208,105 +211,96 @@ def _room_devices(
     *,
     ac_min_outdoor_temperature: float,
 ) -> tuple[DeviceConfig, ...]:
-    fast_heat = _entity_list(
-        room.get("fast_heat"),
-        f"{path}.fast_heat",
-        ("climate", "switch"),
-    )
-    fast_cool = _entity_list(
-        room.get("fast_cool"),
-        f"{path}.fast_cool",
-        ("climate", "switch"),
-    )
-    slow_heat = _entity_list(
-        room.get("slow_heat"),
-        f"{path}.slow_heat",
-        ("climate",),
-    )
-    window_off = set(
-        _entity_list(
-            room.get("window_off_devices"),
-            f"{path}.window_off_devices",
-            ("climate", "switch"),
-        )
-    )
+    """Strict room-local topology. One entry is one physical owner.
 
-    fast_heat_set = set(fast_heat)
-    fast_cool_set = set(fast_cool)
-    slow_set = set(slow_heat)
-    overlap = slow_set & (fast_heat_set | fast_cool_set)
-    if overlap:
-        raise ConfigError(
-            f"{path}: devices cannot be both FAST and SLOW: {sorted(overlap)}"
-        )
-
-    all_thermal = fast_heat_set | fast_cool_set | slow_set
-    unknown_window_devices = window_off - all_thermal
-    if unknown_window_devices:
-        raise ConfigError(
-            f"{path}.window_off_devices contains non-thermal devices: "
-            f"{sorted(unknown_window_devices)}"
-        )
-
+    Reversible climate uses a single entry with role=fast_heat and
+    reversible=true, avoiding two conflicting commands to the same entity.
+    """
+    entries = _as_list(room.get("devices", []), f"{path}.devices")
     devices: list[DeviceConfig] = []
-    ordered_fast = list(fast_heat)
-    ordered_fast.extend(
-        entity_id for entity_id in fast_cool if entity_id not in fast_heat_set
-    )
-    for entity_id in ordered_fast:
-        in_heat = entity_id in fast_heat_set
-        in_cool = entity_id in fast_cool_set
-        if in_heat and in_cool:
-            function = "heat_cool"
-        elif in_heat:
-            function = "heat"
-        else:
-            function = "cool"
-
-        if entity_id.startswith("switch.") and function == "heat_cool":
+    seen: set[str] = set()
+    for index, raw in enumerate(entries):
+        device_path = f"{path}.devices[{index}]"
+        entry = _as_mapping(raw, device_path)
+        unknown = set(entry) - {
+            "entity", "role", "control", "actuator", "temperature_sensor",
+            "window_off", "reversible",
+        }
+        if unknown:
+            raise ConfigError(f"{device_path}: unknown keys: {sorted(unknown)}")
+        entity_id = _entity(
+            entry.get("entity"), f"{device_path}.entity", ("switch", "climate")
+        )
+        if entity_id in seen:
+            raise ConfigError(f"{device_path}: duplicate physical actuator {entity_id}")
+        seen.add(entity_id)
+        domain = entity_id.split(".", 1)[0]
+        role = str(entry.get("role", "")).strip()
+        control = str(entry.get("control", "")).strip()
+        if role not in {"slow_heat", "fast_heat", "fast_cool"}:
+            raise ConfigError(f"{device_path}.role must be slow_heat, fast_heat or fast_cool")
+        if control not in {"app", "device"}:
+            raise ConfigError(f"{device_path}.control must be app or device")
+        if control == "device" and domain != "climate":
+            raise ConfigError(f"{device_path}: device control requires climate.*")
+        if role == "slow_heat" and domain == "climate" and control != "device":
             raise ConfigError(
-                f"{path}: switch {entity_id} cannot be both heat and cool"
+                f"{device_path}: slow_heat climate requires control=device"
             )
 
-        # A climate entity configured for both heating and cooling represents
-        # the legacy AC/heat-pump class for low-outdoor-temperature protection.
-        minimum = (
-            ac_min_outdoor_temperature
-            if function == "heat_cool" and entity_id.startswith("climate.")
-            else None
+        actuator = entry.get("actuator") or None
+        if actuator is not None:
+            if actuator not in {"normal_open", "normal_closed"}:
+                raise ConfigError(f"{device_path}.actuator must be normal_open or normal_closed")
+            if domain != "switch" or control != "app":
+                raise ConfigError(f"{device_path}: actuator polarity requires app-controlled switch")
+        if role == "slow_heat" and domain == "switch" and actuator is None:
+            raise ConfigError(
+                f"{device_path}: slow_heat switch requires explicit actuator polarity"
+            )
+
+        temperature_sensor = _entity(
+            entry.get("temperature_sensor"),
+            f"{device_path}.temperature_sensor",
+            ("sensor",),
+            required=False,
+        ) or None
+        if temperature_sensor and not (
+            role == "slow_heat" and domain == "switch" and control == "app"
+        ):
+            raise ConfigError(
+                f"{device_path}: external screed sensor is only for slow_heat switch/app"
+            )
+        reversible = entry.get("reversible", False)
+        if type(reversible) is not bool:
+            raise ConfigError(f"{device_path}.reversible must be boolean")
+        if reversible and not (role == "fast_heat" and domain == "climate"):
+            raise ConfigError(
+                f"{device_path}: reversible requires fast_heat climate"
+            )
+        window_off = entry.get("window_off", False)
+        if type(window_off) is not bool:
+            raise ConfigError(f"{device_path}.window_off must be boolean")
+        device_class = (
+            DeviceClass.SLOW if role == "slow_heat" else DeviceClass.FAST
+        )
+        function = (
+            "heat_cool" if reversible else
+            "cool" if role == "fast_cool" else "heat"
         )
         devices.append(
             DeviceConfig(
                 entity_id=entity_id,
-                device_class=DeviceClass.FAST,
+                device_class=device_class,
                 function=function,
                 target_temperature=None,
-                window_policy=(
-                    "turn_off" if entity_id in window_off else "ignore"
+                window_policy="turn_off" if window_off else "ignore",
+                min_heating_outdoor_temperature=(
+                    ac_min_outdoor_temperature if reversible else None
                 ),
-                min_heating_outdoor_temperature=minimum,
-            )
-        )
-
-    slow_target = _optional_float(
-        room.get("slow_target"),
-        f"{path}.slow_target",
-    )
-    if slow_heat and slow_target is None:
-        raise ConfigError(
-            f"{path}.slow_target is required when slow_heat is configured"
-        )
-    for entity_id in slow_heat:
-        devices.append(
-            DeviceConfig(
-                entity_id=entity_id,
-                device_class=DeviceClass.SLOW,
-                function="heat",
-                target_temperature=slow_target,
-                window_policy=(
-                    "turn_off" if entity_id in window_off else "ignore"
-                ),
-                min_heating_outdoor_temperature=None,
+                control=control,
+                actuator=actuator,
+                temperature_sensor=temperature_sensor,
             )
         )
     return tuple(devices)
@@ -348,123 +342,78 @@ def _room_humidity(
 
 
 def parse_options(raw: Any) -> AppConfig:
+    """Only the target Supervisor contract; legacy options are not migrated."""
     root = _as_mapping(raw, "options")
-
-    # Старый hysteresis имеет приоритет над автоматически заданным новым default.
-    hysteresis_raw = root.get("temperature_hysteresis", 0.5)
-    if "hysteresis" in root and (
-        "temperature_hysteresis" not in root or hysteresis_raw == 0.5
-    ):
-        hysteresis_raw = root["hysteresis"]
-    hysteresis = _float(hysteresis_raw, "temperature_hysteresis")
-    if not 0.0 <= hysteresis <= 5.0:
-        raise ConfigError("temperature_hysteresis must be between 0 and 5")
-
-    humidity_hysteresis = _float(
-        root.get("humidity_hysteresis", 3.0),
-        "humidity_hysteresis",
-    )
-    if not 0.0 <= humidity_hysteresis <= 25.0:
-        raise ConfigError("humidity_hysteresis must be between 0 and 25")
+    allowed = {
+        "night_mode", "we_at_home", "outdoor", "rooms",
+        "telemetry_enabled", "log_level",
+    }
+    unknown = set(root) - allowed
+    if unknown:
+        raise ConfigError(f"options: obsolete or unknown keys: {sorted(unknown)}")
 
     global_config = GlobalConfig(
-        hysteresis=hysteresis,
-        humidity_hysteresis=humidity_hysteresis,
+        hysteresis=0.5,  # Persisted global tuning supersedes this initial seed.
+        humidity_hysteresis=3.0,
         night_mode=_entity(
-            root.get("night_mode"),
-            "night_mode",
-            ("input_boolean", "binary_sensor"),
-            required=False,
+            root.get("night_mode"), "night_mode",
+            ("input_boolean", "binary_sensor"), required=False,
         ),
         we_at_home=_entity(
-            root.get("we_at_home"),
-            "we_at_home",
-            ("input_boolean", "binary_sensor"),
-            required=False,
+            root.get("we_at_home"), "we_at_home",
+            ("input_boolean", "binary_sensor"), required=False,
         ),
     )
 
-    heat_default = _float(
-        root.get("heat_threshold_default", DEFAULT_HEAT_THRESHOLD),
-        "heat_threshold_default",
-    )
-    cool_default = _float(
-        root.get("cool_threshold_default", DEFAULT_COOL_THRESHOLD),
-        "cool_threshold_default",
-    )
-    if heat_default >= cool_default:
-        raise ConfigError(
-            "heat_threshold_default must be lower than cool_threshold_default"
-        )
-
-    ac_min_outdoor_temperature = _float(
-        root.get("ac_min_outdoor_temperature", DEFAULT_AC_MIN_OUTDOOR_TEMPERATURE),
-        "ac_min_outdoor_temperature",
-    )
-    if not -50.0 <= ac_min_outdoor_temperature <= 20.0:
-        raise ConfigError(
-            "ac_min_outdoor_temperature must be between -50 and 20"
-        )
-
-    temperature_ema_minutes = _float(
-        root.get("outdoor_temperature_ema_minutes", DEFAULT_OUTDOOR_EMA_MINUTES),
-        "outdoor_temperature_ema_minutes",
-    )
-    if not 1.0 <= temperature_ema_minutes <= 180.0:
-        raise ConfigError(
-            "outdoor_temperature_ema_minutes must be between 1 and 180"
-        )
-
+    outdoor_raw = _as_mapping(root.get("outdoor", {}), "outdoor")
+    if set(outdoor_raw) - {"temperature_sources", "humidity_sources"}:
+        raise ConfigError("outdoor: unknown keys")
     outdoor = OutdoorConfig(
-        heat_threshold_default=heat_default,
-        cool_threshold_default=cool_default,
-        temperature_ema_minutes=temperature_ema_minutes,
+        heat_threshold_default=DEFAULT_HEAT_THRESHOLD,
+        cool_threshold_default=DEFAULT_COOL_THRESHOLD,
+        temperature_ema_minutes=DEFAULT_OUTDOOR_EMA_MINUTES,
         temperature_sources=_entity_list(
-            root.get("outdoor_temperature_sources", ""),
-            "outdoor_temperature_sources",
-            ("sensor", "weather"),
+            _as_list(outdoor_raw.get("temperature_sources", []), "outdoor.temperature_sources"),
+            "outdoor.temperature_sources", ("sensor", "weather"),
         ),
         humidity_sources=_entity_list(
-            root.get("outdoor_humidity_sources", ""),
-            "outdoor_humidity_sources",
-            ("sensor", "weather"),
+            _as_list(outdoor_raw.get("humidity_sources", []), "outdoor.humidity_sources"),
+            "outdoor.humidity_sources", ("sensor", "weather"),
         ),
     )
-
     rooms: list[RoomConfig] = []
     room_ids: set[str] = set()
     for index, item in enumerate(_as_list(root.get("rooms", []), "rooms")):
         path = f"rooms[{index}]"
         room = _as_mapping(item, path)
-
+        allowed_room = {
+            "id", "name", "temperature_sensors", "humidity_sensors",
+            "window_sensors", "humidity_mode", "humidity_actuator", "devices",
+        }
+        unknown_room = set(room) - allowed_room
+        if unknown_room:
+            raise ConfigError(f"{path}: obsolete or unknown keys: {sorted(unknown_room)}")
         room_id = str(room.get("id", "")).strip().lower()
         if not ROOM_ID_RE.fullmatch(room_id):
             raise ConfigError(f"{path}.id must match {ROOM_ID_RE.pattern}")
         if room_id in room_ids:
             raise ConfigError(f"{path}.id duplicates {room_id}")
         room_ids.add(room_id)
-
         name = str(room.get("name", "")).strip()
         if not name:
             raise ConfigError(f"{path}.name is required")
-
         temperature_sensors = _entity_list(
-            room.get("temperature_sensors"),
-            f"{path}.temperature_sensors",
-            ("sensor",),
-            required=True,
+            _as_list(room.get("temperature_sensors"), f"{path}.temperature_sensors"),
+            f"{path}.temperature_sensors", ("sensor",), required=True,
         )
         humidity_sensors = _entity_list(
-            room.get("humidity_sensors", ""),
-            f"{path}.humidity_sensors",
-            ("sensor",),
+            _as_list(room.get("humidity_sensors", []), f"{path}.humidity_sensors"),
+            f"{path}.humidity_sensors", ("sensor",),
         )
         window_sensors = _entity_list(
-            room.get("window_sensors", ""),
-            f"{path}.window_sensors",
-            ("binary_sensor",),
+            _as_list(room.get("window_sensors", []), f"{path}.window_sensors"),
+            f"{path}.window_sensors", ("binary_sensor",),
         )
-
         rooms.append(
             RoomConfig(
                 room_id=room_id,
@@ -472,48 +421,48 @@ def parse_options(raw: Any) -> AppConfig:
                 temperature_sensors=temperature_sensors,
                 humidity_sensors=humidity_sensors,
                 window_sensors=window_sensors,
-                targets=_room_targets(room, path),
+                targets=_room_targets({}, path),
                 devices=_room_devices(
-                    room,
-                    path,
-                    ac_min_outdoor_temperature=ac_min_outdoor_temperature,
+                    room, path,
+                    ac_min_outdoor_temperature=DEFAULT_AC_MIN_OUTDOOR_TEMPERATURE,
                 ),
                 humidity=_room_humidity(room, path, humidity_sensors),
             )
         )
 
-    actuator_owners: dict[str, str] = {}
+    owners: dict[str, str] = {}
     for room in rooms:
         for device in room.devices:
-            owner = f"room:{room.room_id}:thermal"
-            previous = actuator_owners.get(device.entity_id)
-            if previous is not None:
-                raise ConfigError(
-                    f"actuator {device.entity_id} is configured twice: "
-                    f"{previous}, {owner}"
-                )
-            actuator_owners[device.entity_id] = owner
-
+            entities = (device.entity_id,)
+            if device.temperature_sensor in entities:
+                raise ConfigError("sensor cannot be its own actuator")
+            for entity_id in entities:
+                if entity_id in owners:
+                    raise ConfigError(
+                        f"actuator {entity_id} owned by both {owners[entity_id]} "
+                        f"and room:{room.room_id}"
+                    )
+                owners[entity_id] = f"room:{room.room_id}"
         if room.humidity.actuator is not None:
             entity_id = room.humidity.actuator.entity_id
-            owner = f"room:{room.room_id}:humidity"
-            previous = actuator_owners.get(entity_id)
-            if previous is not None:
+            if entity_id in owners:
                 raise ConfigError(
-                    f"actuator {entity_id} is configured twice: "
-                    f"{previous}, {owner}"
+                    f"actuator {entity_id} owned by both {owners[entity_id]} "
+                    f"and room:{room.room_id}:humidity"
                 )
-            actuator_owners[entity_id] = owner
+            owners[entity_id] = f"room:{room.room_id}:humidity"
 
     log_level = str(root.get("log_level", "info")).strip().lower()
     if log_level not in {"debug", "info", "warning", "error"}:
         raise ConfigError("log_level must be debug, info, warning or error")
-
+    telemetry_enabled = root.get("telemetry_enabled", False)
+    if type(telemetry_enabled) is not bool:
+        raise ConfigError("telemetry_enabled must be boolean")
     return AppConfig(
         global_config=global_config,
         outdoor=outdoor,
         rooms=tuple(rooms),
-        telemetry_enabled=bool(root.get("telemetry_enabled", False)),
+        telemetry_enabled=telemetry_enabled,
         log_level=log_level,
     )
 
@@ -536,6 +485,8 @@ def configured_entity_ids(config: AppConfig) -> frozenset[str]:
         result.update(room.window_sensors)
         for device in room.devices:
             result.add(device.entity_id)
+            if device.temperature_sensor:
+                result.add(device.temperature_sensor)
         if room.humidity.actuator is not None:
             result.add(room.humidity.actuator.entity_id)
 

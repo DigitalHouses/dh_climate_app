@@ -11,16 +11,17 @@ import signal
 from .climate_log import ClimateLog
 from .config import AppConfig, SEASON_MIN_TEMP, SEASON_MAX_TEMP, configured_entity_ids, parse_options
 from .core import Profile, Season
-from .devices import StartupActuatorGate, compile_room_devices
+from .devices import StartupActuatorGate, SlowValveIntervalGuard, compile_room_devices
 from .auto_fast import AutoFastClimateTargets
 from .events import ClimateEventEngine
 from .executor import DeviceExecutor, ReconcileSummary
 from .ha_client import HaState, HomeAssistantClient, StateCache
 from .humidity import HumidityEngine, HumidityState
+from .health import reduce_climate_health
+from .persistence import GLOBAL_TUNING_SEEDS
 from .mqtt import ClimateMqttFacade, MqttBridge, MqttCommand
 from .outdoor import OutdoorEngine, OutdoorState
 from .persistence import StateStore
-from .config_migration import migrate_supervisor_options
 from .problems import Problem, collect_problems
 from .rooms import ProfileEditOverlay, RoomEngine, RoomState
 from .telemetry import TelemetryClient, TelemetryRunner
@@ -68,9 +69,6 @@ class ClimateRuntime:
         self.store.initialize(config)
         if not self.store.integrity_check():
             raise RuntimeError("SQLite integrity_check failed")
-        # Supervisor options очищаем только после успешного заполнения SQLite.
-        migrate_supervisor_options(OPTIONS_FILE)
-
         self.outdoor = OutdoorEngine(
             config=config.outdoor,
             store=self.store,
@@ -96,6 +94,7 @@ class ClimateRuntime:
         self._weather_source_last_updated: datetime | None = None
         self._weather_forecast_fetched_at: datetime | None = None
         self.startup_gate = StartupActuatorGate()
+        self.slow_valve_guard = SlowValveIntervalGuard(self.store)
         self._last_startup_deferred: tuple[str, ...] = ()
         self._last_reconcile = ReconcileSummary(commands=0, problems=())
         self._last_problems: tuple[Problem, ...] = ()
@@ -319,6 +318,9 @@ class ClimateRuntime:
         async with self._calculation_lock:
             values = self.cache.values()
             snapshot = self.cache.snapshot()
+            self.outdoor.hysteresis = self.store.get_global_tuning(
+                "season_hysteresis"
+            )
             outdoor_state = self.outdoor.evaluate(
                 snapshot,
                 observed_at=observed_at,
@@ -333,6 +335,11 @@ class ClimateRuntime:
                 season=outdoor_state.season,
             )
             humidity_states = self.humidity.evaluate_all(values)
+            slow_targets = {
+                room_id: self.store.get_slow_target(
+                    room_id, state.effective_profile
+                ) for room_id, state in room_states.items()
+            }
 
             previous_outdoor = self._last_outdoor_state
             current_raw_temperature = (
@@ -443,16 +450,44 @@ class ClimateRuntime:
 
             for humidity_state in humidity_states.values():
                 self.facade.publish_humidity(humidity_state)
+            self.facade.publish_tuning({
+                key: self.store.get_global_tuning(key)
+                for key in GLOBAL_TUNING_SEEDS
+            })
+            for room in self.config.rooms:
+                self.facade.publish_slow_targets(room.room_id, {
+                    profile.value: self.store.get_slow_target(room.room_id, profile)
+                    for profile in (Profile.DAY, Profile.NIGHT, Profile.AWAY)
+                })
 
             system_available = self._ha_connected and outdoor_state.available
             self.facade.set_season_available(system_available)
 
             if self._ha_connected:
+                previous_open = {}
+                for room in self.config.rooms:
+                    for device in room.devices:
+                        if device.temperature_sensor is None:
+                            continue
+                        actual = snapshot.get(device.entity_id)
+                        if actual is None or actual.state not in {"on", "off"}:
+                            continue
+                        powered = actual.state == "on"
+                        previous_open[device.entity_id] = (
+                            powered if device.actuator == "normal_closed"
+                            else not powered
+                        )
                 desired = compile_room_devices(
                     config=self.config,
                     room_states=room_states,
                     humidity_states=humidity_states,
                     outdoor_temperature=outdoor_state.raw_temperature,
+                    screed_values=values,
+                    slow_targets=slow_targets,
+                    slow_hysteresis=self.store.get_global_tuning(
+                        "slow_heat_hysteresis"
+                    ),
+                    slow_previous_open=previous_open,
                 )
                 desired = self.auto_fast.apply(desired, snapshot)
                 desired = self.startup_gate.filter(
@@ -460,6 +495,14 @@ class ClimateRuntime:
                     room_states=room_states,
                     humidity_states=humidity_states,
                     outdoor_available=outdoor_state.available,
+                )
+                desired = self.slow_valve_guard.filter(
+                    desired,
+                    config=self.config,
+                    room_states=room_states,
+                    observed=snapshot,
+                    sensor_values=values,
+                    now=observed_at,
                 )
                 deferred = self.startup_gate.deferred_entities
                 if deferred != self._last_startup_deferred:
@@ -490,8 +533,17 @@ class ClimateRuntime:
                 rooms=room_states,
                 humidity=humidity_states,
                 execution=self._last_reconcile.problems,
+                config=self.config,
+                sensor_values=values,
+                slow_targets=slow_targets,
             )
             self.facade.publish_problems(self._last_problems)
+            health = reduce_climate_health(
+                outdoor=outdoor_state,
+                rooms=room_states,
+                problems=self._last_problems,
+            )
+            self.facade.publish_health(health)
 
             for event in self.events.observe(
                 outdoor=outdoor_state,
@@ -499,6 +551,7 @@ class ClimateRuntime:
                 rooms=room_states,
                 problems=self._last_problems,
                 observed_at=observed_at,
+                health=health,
             ):
                 self.facade.publish_event(event)
 
@@ -577,7 +630,21 @@ class ClimateRuntime:
                 self.command_queue.task_done()
 
     async def _handle_command(self, command: MqttCommand) -> None:
-        if command.scope == "system":
+        if command.scope == "tuning":
+            self.store.set_global_tuning(
+                command.command, float(command.payload)
+            )
+        elif command.scope == "slow_target":
+            if command.room_id is None:
+                raise ValueError("slow target command requires room_id")
+            if command.room_id not in {r.room_id for r in self.config.rooms}:
+                raise ValueError(f"unknown room {command.room_id}")
+            if command.command not in {"day", "night", "away"}:
+                raise ValueError("invalid SLOW target profile")
+            self.store.set_slow_target(
+                command.room_id, Profile(command.command), float(command.payload),
+            )
+        elif command.scope == "system":
             await self._handle_system_command(command.command, command.payload)
         elif command.scope == "season":
             await self._handle_season_command(command.command, command.payload)

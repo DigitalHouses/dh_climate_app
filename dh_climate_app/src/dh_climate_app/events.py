@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Iterable
 
+from .health import ClimateHealth
 from .outdoor import OutdoorState
 from .problems import Problem
 from .rooms import RoomState
@@ -20,6 +21,8 @@ EVENT_TYPES = (
     "window_closed",
     "problem_started",
     "problem_recovered",
+    "room_health_changed",
+    "climate_health_changed",
 )
 
 
@@ -29,7 +32,6 @@ def _temperature(value: float | None) -> float | None:
 
 def _base(event_type: str, observed_at: datetime) -> dict[str, object]:
     return {
-        "schema_version": EVENT_SCHEMA_VERSION,
         "event_type": event_type,
         "observed_at": observed_at.isoformat(),
     }
@@ -48,6 +50,7 @@ def _problem_payload(
     event_type: str,
     problem: Problem,
     observed_at: datetime,
+    room_name: str | None = None,
 ) -> dict[str, object]:
     payload = _base(event_type, observed_at)
     payload.update(
@@ -58,7 +61,12 @@ def _problem_payload(
         }
     )
     if problem.room_id is not None:
+        if not room_name:
+            raise ValueError(
+                f"room_name required for room event: {problem.room_id}"
+            )
         payload["room_id"] = problem.room_id
+        payload["room_name"] = room_name
     if problem.entity_id is not None:
         payload["entity_id"] = problem.entity_id
     if problem.details is not None:
@@ -82,6 +90,8 @@ class ClimateEventEngine:
         self._weather: WeatherState | None = None
         self._windows: dict[str, str] = {}
         self._problems: dict[tuple[object, ...], Problem] = {}
+        self._room_health: dict[str, str] = {}
+        self._climate_health: str | None = None
 
     def reset(self) -> None:
         self._initialized = False
@@ -91,6 +101,8 @@ class ClimateEventEngine:
         self._weather = None
         self._windows = {}
         self._problems = {}
+        self._room_health = {}
+        self._climate_health = None
 
     def observe(
         self,
@@ -100,6 +112,7 @@ class ClimateEventEngine:
         rooms: dict[str, RoomState],
         problems: Iterable[Problem],
         observed_at: datetime,
+        health: ClimateHealth | None = None,
     ) -> tuple[dict[str, object], ...]:
         current_problems = {
             _problem_key(problem): problem
@@ -119,6 +132,9 @@ class ClimateEventEngine:
             self._weather = weather
             self._windows = current_windows
             self._problems = current_problems
+            if health is not None:
+                self._room_health = dict(health.rooms)
+                self._climate_health = health.climate_state
             return ()
 
         events: list[dict[str, object]] = []
@@ -230,6 +246,8 @@ class ClimateEventEngine:
                     "problem_started",
                     current_problems[key],
                     observed_at,
+                    room_name=rooms[current_problems[key].room_id].name
+                    if current_problems[key].room_id in rooms else None,
                 )
             )
         for key in sorted(previous_keys - current_keys, key=str):
@@ -238,8 +256,35 @@ class ClimateEventEngine:
                     "problem_recovered",
                     self._problems[key],
                     observed_at,
+                    room_name=rooms[self._problems[key].room_id].name
+                    if self._problems[key].room_id in rooms else None,
                 )
             )
+
+        if health is not None:
+            for room_id, current_health in health.rooms.items():
+                previous_health = self._room_health.get(room_id)
+                if previous_health is not None and previous_health != current_health:
+                    event = _base("room_health_changed", observed_at)
+                    event.update({
+                        "room_id": room_id,
+                        "room_name": rooms[room_id].name,
+                        "previous_health": previous_health,
+                        "current_health": current_health,
+                    })
+                    events.append(event)
+            if (
+                self._climate_health is not None
+                and self._climate_health != health.climate_state
+            ):
+                event = _base("climate_health_changed", observed_at)
+                event.update({
+                    "previous_health": self._climate_health,
+                    "current_health": health.climate_state,
+                })
+                events.append(event)
+            self._room_health = dict(health.rooms)
+            self._climate_health = health.climate_state
 
         self._season = current_season
         self._temperature_source = outdoor.temperature_source
