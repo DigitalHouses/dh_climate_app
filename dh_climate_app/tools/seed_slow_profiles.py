@@ -97,7 +97,7 @@ def main() -> int:
         if not args.apply:
             print("DRY-RUN ONLY: zero SQLite changes")
             return 0
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         backup = args.db.with_name(args.db.name + f".before-slow-seed-{timestamp}.bak")
         if backup.exists():
             raise RuntimeError(f"backup already exists: {backup}")
