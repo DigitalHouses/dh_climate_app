@@ -7,7 +7,7 @@ from math import exp
 from pathlib import Path
 from types import SimpleNamespace
 
-from dh_climate_app.config import parse_options
+from legacy_fixtures import parse_legacy_fixture as parse_options
 from dh_climate_app.core import Season
 from dh_climate_app.outdoor import (
     TEMPERATURE_HISTORY_MODE_EMA_MINUTE_V1,
