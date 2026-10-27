@@ -11,6 +11,7 @@ import paho.mqtt.client as mqtt
 
 from .config import RoomConfig
 from .core import DeviceClass
+from .demand import Demand
 from .health import ClimateHealth
 from .persistence import GLOBAL_TUNING_SEEDS
 from .discovery import (
@@ -24,6 +25,9 @@ from .discovery import (
     SYSTEM_PROBLEM_TOPIC,
     SYSTEM_EVENT_TOPIC,
     diagnostic_discovery_payloads,
+    demand_base,
+    demand_discovery_payloads,
+    demand_object_id,
     global_climate_health_discovery_payloads,
     global_tuning_discovery_payloads,
     room_health_discovery_payload,
@@ -206,6 +210,7 @@ class ClimateMqttFacade:
         rooms: Iterable[RoomConfig],
         command_queue: asyncio.Queue[MqttCommand],
         weather_enabled: bool = False,
+        actual_demand_sources: dict[str, str] | None = None,
     ) -> None:
         self.bridge = bridge
         self.app_version = app_version
@@ -213,6 +218,7 @@ class ClimateMqttFacade:
         self.rooms = {room.room_id: room for room in rooms}
         self.command_queue = command_queue
         self.weather_enabled = bool(weather_enabled)
+        self.actual_demand_sources = dict(actual_demand_sources or {})
         self._last_raw_temperature_publish_at = None
         self.bridge.set_message_handler(self._on_message)
 
@@ -232,6 +238,7 @@ class ClimateMqttFacade:
             "DigitalHouses/Global/dh_climate_app/rooms/+/targets/set/+"
         )
         self.publish_system_discovery()
+        self.publish_demand_discovery()
         self.bridge.publish(
             SYSTEM_AVAILABILITY_TOPIC,
             "online",
@@ -344,6 +351,81 @@ class ClimateMqttFacade:
             ),
             retain=True,
             force=True,
+        )
+
+    def publish_demand_discovery(self) -> None:
+        for (layer, direction, kind), (topic, payload) in demand_discovery_payloads(
+            self.app_version,
+            actual_sources=self.actual_demand_sources,
+        ).items():
+            self.bridge.publish(
+                topic, json.dumps(payload, ensure_ascii=False, sort_keys=True),
+                retain=True, force=True,
+            )
+        # An ACTUAL source removed from YAML must not leave an orphan entity.
+        for direction in ("heat", "cool"):
+            if not self.actual_demand_sources.get(direction):
+                object_id = demand_object_id("actual", direction)
+                self.bridge.publish(
+                    f"homeassistant/binary_sensor/{object_id}/config",
+                    "", retain=True, force=True,
+                )
+
+    def set_demand_available(self, available: bool) -> None:
+        # HA disconnected: retained ON/OFF must not be mistaken for truth.
+        for layer in ("room", "device", "actual"):
+            for direction in ("heat", "cool"):
+                if layer == "actual" and not self.actual_demand_sources.get(direction):
+                    continue
+                base = demand_base(layer, direction)
+                self.bridge.publish(
+                    f"{base}/availability",
+                    "online" if available else "offline", retain=True,
+                )
+                if layer != "actual":
+                    self.bridge.publish(
+                        f"{base}/count_availability",
+                        "online" if available else "offline", retain=True,
+                    )
+
+    def publish_demand(
+        self, layer: str, direction: str, demand: Demand | bool | None,
+    ) -> None:
+        base = demand_base(layer, direction)
+        if layer == "actual" and not self.actual_demand_sources.get(direction):
+            return
+        if layer == "actual":
+            active = demand
+            count = None
+            members = ()
+        else:
+            if not isinstance(demand, Demand):
+                raise TypeError("room/device demand must be Demand")
+            active = demand.active
+            count = demand.count
+            members = demand.members
+        if active is not None:
+            self.bridge.publish(
+                f"{base}/state", "ON" if active else "OFF", retain=True,
+            )
+        self.bridge.publish(
+            f"{base}/availability",
+            "online" if active is not None else "offline", retain=True,
+        )
+        if layer == "actual":
+            return
+        if count is not None:
+            self.bridge.publish(
+                f"{base}/attributes",
+                json.dumps(
+                    {"rooms" if layer == "room" else "devices": list(members)},
+                    ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+                ), retain=True,
+            )
+            self.bridge.publish(f"{base}/count", str(count), retain=True)
+        self.bridge.publish(
+            f"{base}/count_availability",
+            "online" if count is not None else "offline", retain=True,
         )
 
     def publish_season(self, state: OutdoorState) -> int:

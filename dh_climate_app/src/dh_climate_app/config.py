@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import re
 from typing import Any, Mapping, Sequence
 
@@ -100,6 +100,7 @@ class AppConfig:
     rooms: tuple[RoomConfig, ...]
     telemetry_enabled: bool
     log_level: str
+    actual_demand: Mapping[str, str] = field(default_factory=dict)
 
 
 def _as_mapping(value: Any, path: str) -> Mapping[str, Any]:
@@ -346,11 +347,22 @@ def parse_options(raw: Any) -> AppConfig:
     root = _as_mapping(raw, "options")
     allowed = {
         "night_mode", "we_at_home", "outdoor", "rooms",
-        "telemetry_enabled", "log_level",
+        "telemetry_enabled", "log_level", "actual_demand",
     }
     unknown = set(root) - allowed
     if unknown:
         raise ConfigError(f"options: obsolete or unknown keys: {sorted(unknown)}")
+
+    raw_actual = _as_mapping(root.get("actual_demand", {}), "actual_demand")
+    if set(raw_actual) - {"heat", "cool"}:
+        raise ConfigError("actual_demand: unknown keys")
+    actual_sources = {
+        direction: _entity(
+            raw_actual.get(direction), f"actual_demand.{direction}",
+            ("binary_sensor",), required=False,
+        )
+        for direction in ("heat", "cool")
+    }
 
     global_config = GlobalConfig(
         hysteresis=0.5,  # Persisted global tuning supersedes this initial seed.
@@ -464,6 +476,7 @@ def parse_options(raw: Any) -> AppConfig:
         rooms=tuple(rooms),
         telemetry_enabled=telemetry_enabled,
         log_level=log_level,
+        actual_demand=actual_sources,
     )
 
 
@@ -478,6 +491,7 @@ def configured_entity_ids(config: AppConfig) -> frozenset[str]:
 
     result.update(config.outdoor.temperature_sources)
     result.update(config.outdoor.humidity_sources)
+    result.update(entity for entity in config.actual_demand.values() if entity)
 
     for room in config.rooms:
         result.update(room.temperature_sensors)

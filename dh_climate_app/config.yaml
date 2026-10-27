@@ -1,5 +1,5 @@
 name: DigitalHouses Climate App
-version: 0.1.32
+version: 0.1.33
 slug: dh_climate_app
 description: Whole-house climate logic with room thermostats and direct Home Assistant device control.
 url: https://github.com/DigitalHouses/dh_climate_app
@@ -22,6 +22,9 @@ options:
     temperature_sources: []
     humidity_sources: []
   rooms: []
+  actual_demand:
+    heat: ""
+    cool: ""
   telemetry_enabled: false
   log_level: info
 schema:
@@ -51,5 +54,8 @@ schema:
           temperature_sensor: "str?"
           window_off: "bool?"
           reversible: "bool?"
+  actual_demand:
+    heat: "str?"
+    cool: "str?"
   telemetry_enabled: bool
   log_level: list(debug|info|warning|error)
