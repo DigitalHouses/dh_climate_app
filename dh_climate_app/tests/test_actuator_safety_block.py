@@ -135,6 +135,7 @@ class ActuatorSafetyBlockTests(unittest.IsolatedAsyncioTestCase):
             room_states=rooms,
             humidity_states={},
             outdoor_temperature=outdoor_temperature,
+            slow_targets={"living_room": 27.0},
         )
         return rooms, {item.entity_id: item for item in desired}
 
