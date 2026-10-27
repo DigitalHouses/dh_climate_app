@@ -40,6 +40,7 @@ class DeviceCompilerTests(unittest.TestCase):
             room_states=rooms,
             humidity_states=humidity,
             outdoor_temperature=5.0,
+            slow_targets={"living_room": 27.0},
         )
         by_id = {item.entity_id: item for item in desired}
 
@@ -67,6 +68,7 @@ class DeviceCompilerTests(unittest.TestCase):
             room_states=rooms,
             humidity_states=humidity,
             outdoor_temperature=5.0,
+            slow_targets={"living_room": 27.0},
         )
         by_id = {item.entity_id: item for item in desired}
 
