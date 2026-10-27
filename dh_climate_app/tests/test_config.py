@@ -46,160 +46,108 @@ def options() -> dict:
 
 
 class ConfigTests(unittest.TestCase):
-    def test_parse_valid_options(self) -> None:
-        config = parse_options(options())
-        self.assertEqual(0.5, config.global_config.hysteresis)
-        self.assertEqual(20.0, config.outdoor.temperature_ema_minutes)
-        self.assertEqual(
-            ("sensor.outdoor_temperature", "sensor.weather_temperature"),
-            config.outdoor.temperature_sources,
-        )
+    """Only the new declarative Supervisor contract is accepted at runtime."""
+
+    @staticmethod
+    def target() -> dict:
+        return {
+            "night_mode": "input_boolean.night_mode",
+            "we_at_home": "input_boolean.we_at_home",
+            "outdoor": {
+                "temperature_sources": [
+                    "sensor.outdoor_temperature", "weather.secondary",
+                    "sensor.outdoor_temperature",
+                ],
+                "humidity_sources": ["sensor.outdoor_humidity"],
+            },
+            "rooms": [{
+                "id": "living_room",
+                "name": "Гостиная",
+                "temperature_sensors": ["sensor.living_room_temperature"],
+                "humidity_sensors": ["sensor.living_room_humidity"],
+                "window_sensors": [],
+                "devices": [
+                    {"entity": "switch.radiator", "role": "fast_heat", "control": "app"},
+                    {"entity": "climate.floor", "role": "slow_heat", "control": "device"},
+                    {"entity": "climate.ac", "role": "fast_heat", "control": "app",
+                     "reversible": True},
+                ],
+                "humidity_mode": "dehumidifier",
+                "humidity_actuator": "switch.dehumidifier",
+            }],
+            "log_level": "info",
+        }
+
+    def test_parse_valid_options(self):
+        config = parse_options(self.target())
         self.assertEqual("living_room", config.rooms[0].room_id)
-        self.assertEqual(DeviceClass.FAST, config.rooms[0].devices[0].device_class)
-        self.assertEqual(DeviceClass.SLOW, config.rooms[0].devices[-1].device_class)
-        self.assertEqual(27.0, config.rooms[0].devices[-1].target_temperature)
-        self.assertEqual(10.0, config.rooms[0].targets.heat[Profile.ANTIFREEZE])
+        self.assertEqual(DeviceClass.SLOW, config.rooms[0].devices[1].device_class)
+        self.assertEqual(
+            ("sensor.outdoor_temperature", "weather.secondary"),
+            config.outdoor.temperature_sources,
+        )
+        self.assertEqual(
+            ("sensor.living_room_temperature",), config.rooms[0].temperature_sensors,
+        )
 
-    def test_outdoor_temperature_ema_range_is_validated(self) -> None:
-        raw = options()
-        raw["outdoor_temperature_ema_minutes"] = 0.5
-        with self.assertRaises(ConfigError):
-            parse_options(raw)
+    def test_configured_entity_ids_contains_all_bindings(self):
+        config = parse_options(self.target())
+        found = configured_entity_ids(config)
+        self.assertIn("climate.floor", found)
+        self.assertIn("sensor.outdoor_humidity", found)
+        self.assertIn("switch.dehumidifier", found)
 
-        raw["outdoor_temperature_ema_minutes"] = 30
-        config = parse_options(raw)
-        self.assertEqual(30.0, config.outdoor.temperature_ema_minutes)
-
-    def test_simplified_options_use_initial_targets(self) -> None:
-        raw = options()
-        for key in ("hysteresis", "heat_threshold_default", "cool_threshold_default",
-                    "ac_min_outdoor_temperature", "outdoor_temperature_ema_minutes"):
-            raw.pop(key, None)
-        raw["temperature_hysteresis"] = 0.5
-        for key in ("heat_day", "heat_night", "heat_away", "heat_antifreeze",
-                    "cool_day", "cool_night", "cool_away", "humidity_target"):
-            raw["rooms"][0].pop(key, None)
-        config = parse_options(raw)
-        self.assertEqual(10.0, config.outdoor.heat_threshold_default)
-        self.assertEqual(25.0, config.outdoor.cool_threshold_default)
-        self.assertEqual((23.0, 23.0, 18.0, 10.0),
-            tuple(config.rooms[0].targets.heat.values()))
-        self.assertEqual((25.0, 24.0, 30.0),
-            tuple(config.rooms[0].targets.cool.values()))
-        self.assertEqual(50.0, config.rooms[0].humidity.target_default)
-
-    def test_legacy_hysteresis_survives_new_schema_default(self) -> None:
-        raw = options()
-        raw["hysteresis"] = 0.8
-        raw["temperature_hysteresis"] = 0.5
-        self.assertEqual(0.8, parse_options(raw).global_config.hysteresis)
-
-    def test_configured_entity_ids_contains_all_bindings(self) -> None:
-        config = parse_options(options())
-        entity_ids = configured_entity_ids(config)
-        self.assertIn("sensor.outdoor_temperature", entity_ids)
-        self.assertIn("sensor.living_room_temperature", entity_ids)
-        self.assertIn("climate.floor", entity_ids)
-        self.assertIn("switch.dehumidifier", entity_ids)
-
-    def test_empty_installation_config_is_safe(self) -> None:
-        raw = options()
-        raw["outdoor_temperature_sources"] = ""
-        raw["outdoor_humidity_sources"] = ""
-        raw["rooms"] = []
-        config = parse_options(raw)
-        self.assertEqual((), config.outdoor.temperature_sources)
-        self.assertEqual((), config.outdoor.humidity_sources)
+    def test_initial_installation_without_rooms_is_safe(self):
+        data = self.target()
+        data["rooms"] = []
+        data["outdoor"] = {"temperature_sources": [], "humidity_sources": []}
+        config = parse_options(data)
         self.assertEqual((), config.rooms)
-        self.assertEqual(
-            frozenset(
-                {
-                    "input_boolean.night_mode",
-                    "input_boolean.we_at_home",
-                }
-            ),
-            configured_entity_ids(config),
-        )
+        self.assertEqual((), config.outdoor.temperature_sources)
 
-    def test_comma_lists_keep_order_and_deduplicate(self) -> None:
-        raw = options()
-        raw["outdoor_temperature_sources"] = (
-            "sensor.first, sensor.second, sensor.first"
-        )
-        config = parse_options(raw)
-        self.assertEqual(
-            ("sensor.first", "sensor.second"),
-            config.outdoor.temperature_sources,
-        )
-
-    def test_outdoor_temperature_sources_accept_mixed_priority_chain(self) -> None:
-        raw = options()
-        raw["outdoor_temperature_sources"] = (
-            "weather.primary, sensor.backup, weather.secondary"
-        )
-        config = parse_options(raw)
-        self.assertEqual(
-            (
-                "weather.primary",
-                "sensor.backup",
-                "weather.secondary",
-            ),
-            config.outdoor.temperature_sources,
-        )
-
-    def test_fast_climate_can_be_heat_and_cool(self) -> None:
-        raw = options()
-        raw["rooms"][0]["fast_heat"] = "climate.heatpump"
-        raw["rooms"][0]["fast_cool"] = "climate.heatpump"
-        config = parse_options(raw)
-        device = next(
-            item
-            for item in config.rooms[0].devices
-            if item.entity_id == "climate.heatpump"
-        )
-        self.assertEqual("heat_cool", device.function)
-
-    def test_switch_cannot_be_heat_and_cool(self) -> None:
-        raw = options()
-        raw["rooms"][0]["fast_heat"] = "switch.reversible"
-        raw["rooms"][0]["fast_cool"] = "switch.reversible"
+    def test_old_csv_and_operational_parameters_are_rejected(self):
+        data = self.target()
+        data["temperature_hysteresis"] = 0.5
+        with self.assertRaisesRegex(ConfigError, "obsolete"):
+            parse_options(data)
+        del data["temperature_hysteresis"]
+        data["rooms"][0]["temperature_sensors"] = "sensor.living_room_temperature"
         with self.assertRaises(ConfigError):
-            parse_options(raw)
+            parse_options(data)
 
-    def test_slow_requires_explicit_target(self) -> None:
-        raw = options()
-        raw["rooms"][0].pop("slow_target")
+    def test_legacy_room_device_keys_are_rejected(self):
+        data = self.target()
+        data["rooms"][0]["slow_target"] = 27
+        with self.assertRaisesRegex(ConfigError, "obsolete"):
+            parse_options(data)
+
+    def test_reversible_single_physical_owner(self):
+        config = parse_options(self.target())
+        ac = next(d for d in config.rooms[0].devices if d.entity_id == "climate.ac")
+        self.assertEqual("heat_cool", ac.function)
+        self.assertEqual(1, sum(d.entity_id == "climate.ac" for d in config.rooms[0].devices))
+
+    def test_duplicate_room_or_actuator_rejected(self):
+        data = self.target()
+        data["rooms"].append(dict(data["rooms"][0]))
+        with self.assertRaisesRegex(ConfigError, "duplicates"):
+            parse_options(data)
+        data = self.target()
+        data["rooms"][0]["devices"].append(
+            {"entity": "switch.radiator", "role": "fast_cool", "control": "app"}
+        )
+        with self.assertRaisesRegex(ConfigError, "duplicate physical"):
+            parse_options(data)
+
+    def test_humidity_requires_sensors_and_explicit_actuator(self):
+        data = self.target()
+        data["rooms"][0]["humidity_sensors"] = []
         with self.assertRaises(ConfigError):
-            parse_options(raw)
-
-    def test_active_humidity_uses_initial_target(self) -> None:
-        raw = options()
-        raw["rooms"][0].pop("humidity_target")
-        self.assertEqual(50.0, parse_options(raw).rooms[0].humidity.target_default)
-
-    def test_room_targets_follow_facade_range(self) -> None:
-        raw = options()
-        raw["rooms"][0]["heat_day"] = 40
-        with self.assertRaises(ConfigError):
-            parse_options(raw)
-
-    def test_slow_requires_climate_domain(self) -> None:
-        raw = options()
-        raw["rooms"][0]["slow_heat"] = "switch.floor"
-        with self.assertRaises(ConfigError):
-            parse_options(raw)
-
-    def test_humidity_control_requires_sensor(self) -> None:
-        raw = options()
-        raw["rooms"][0]["humidity_sensors"] = ""
-        with self.assertRaises(ConfigError):
-            parse_options(raw)
-
-    def test_same_actuator_cannot_be_owned_twice(self) -> None:
-        raw = options()
-        raw["rooms"][0]["humidity_actuator"] = "switch.radiator"
-        with self.assertRaises(ConfigError):
-            parse_options(raw)
+            parse_options(data)
+        data = self.target()
+        data["rooms"][0]["humidity_actuator"] = "switch.radiator"
+        with self.assertRaisesRegex(ConfigError, "owned"):
+            parse_options(data)
 
 
 if __name__ == "__main__":

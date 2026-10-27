@@ -7,7 +7,7 @@ from math import exp
 from pathlib import Path
 from types import SimpleNamespace
 
-from dh_climate_app.config import parse_options
+from legacy_fixtures import parse_legacy_fixture as parse_options
 from dh_climate_app.core import Season
 from dh_climate_app.outdoor import (
     TEMPERATURE_HISTORY_MODE_EMA_MINUTE_V1,
@@ -295,7 +295,7 @@ class OutdoorEngineTests(unittest.TestCase):
         self.assertEqual(10.0, state.avg_24h_temperature)
         self.assertEqual(Season.HEAT, state.season)
 
-    def test_all_live_sources_unavailable_forces_off(self) -> None:
+    def test_all_live_sources_unavailable_retains_last_season_as_stale(self) -> None:
         now = datetime(2026, 9, 25, 12, tzinfo=timezone.utc)
         self.engine.evaluate(self._states("5"), observed_at=now)
         state = self.engine.evaluate(
@@ -303,10 +303,12 @@ class OutdoorEngineTests(unittest.TestCase):
             observed_at=now + timedelta(minutes=1),
             record_sample=False,
         )
-        self.assertEqual(Season.OFF, state.season)
-        self.assertFalse(state.available)
+        self.assertEqual(Season.HEAT, state.season)
+        self.assertTrue(state.stale)
+        self.assertTrue(state.available)
         self.assertIsNone(state.raw_temperature)
-        self.assertIsNone(state.current_temperature)
+        self.assertIsNotNone(state.last_valid_at)
+        self.assertIsNotNone(state.current_temperature)
         self.assertIsNotNone(state.avg_24h_temperature)
 
     def test_threshold_change_is_persistent(self) -> None:

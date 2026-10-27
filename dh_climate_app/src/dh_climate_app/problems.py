@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from typing import Mapping
+
+from .config import AppConfig
+from .core import DeviceClass, Season, _numeric_state
 
 from .executor import ExecutionProblem
 from .humidity import HumidityState
@@ -31,9 +35,20 @@ def collect_problems(
     rooms: dict[str, RoomState],
     humidity: dict[str, HumidityState],
     execution: tuple[ExecutionProblem, ...],
+    config: AppConfig | None = None,
+    sensor_values: Mapping[str, object] | None = None,
+    slow_targets: Mapping[str, float | None] | None = None,
 ) -> tuple[Problem, ...]:
     problems: list[Problem] = []
 
+    if outdoor.stale and outdoor.last_valid_at is not None:
+        problems.append(
+            Problem(
+                code="outdoor_temperature_stale",
+                scope="outdoor", severity="warning",
+                details=f"last_valid_at={outdoor.last_valid_at}",
+            )
+        )
     if outdoor.current_temperature is None:
         problems.append(
             Problem(
@@ -62,6 +77,45 @@ def collect_problems(
                     room_id=room_id,
                 )
             )
+
+    if config is not None:
+        sensor_values = sensor_values or {}
+        slow_targets = slow_targets or {}
+        for room in config.rooms:
+            state = rooms.get(room.room_id)
+            if state is None or state.season is not Season.HEAT:
+                continue
+            for device in room.devices:
+                if device.device_class is not DeviceClass.SLOW:
+                    continue
+                needs_target = (
+                    device.control == "device"
+                    or device.temperature_sensor is not None
+                )
+                if needs_target and slow_targets.get(room.room_id) is None:
+                    problems.append(
+                        Problem(
+                            code="slow_target_missing",
+                            scope="room", severity="critical",
+                            room_id=room.room_id, entity_id=device.entity_id,
+                            details="No persisted screed target for active profile",
+                        )
+                    )
+                if (
+                    device.temperature_sensor is not None
+                    and _numeric_state(
+                        sensor_values.get(device.temperature_sensor)
+                    ) is None
+                ):
+                    problems.append(
+                        Problem(
+                            code="slow_screed_sensor_unavailable",
+                            scope="room", severity="warning",
+                            room_id=room.room_id,
+                            entity_id=device.temperature_sensor,
+                            details="valve logical state OPEN in HEAT",
+                        )
+                    )
 
     for room_id, state in humidity.items():
         if state.current_humidity is None:

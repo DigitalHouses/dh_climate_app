@@ -10,6 +10,9 @@ from typing import Callable, Iterable
 import paho.mqtt.client as mqtt
 
 from .config import RoomConfig
+from .core import DeviceClass
+from .health import ClimateHealth
+from .persistence import GLOBAL_TUNING_SEEDS
 from .discovery import (
     LEGACY_OUTDOOR_ATTRIBUTES_TOPIC,
     LEGACY_WEATHER_ATTRIBUTES_TOPIC,
@@ -21,6 +24,10 @@ from .discovery import (
     SYSTEM_PROBLEM_TOPIC,
     SYSTEM_EVENT_TOPIC,
     diagnostic_discovery_payloads,
+    global_climate_health_discovery_payloads,
+    global_tuning_discovery_payloads,
+    room_health_discovery_payload,
+    slow_target_discovery_payload,
     outdoor_discovery_payloads,
     outdoor_state_topics,
     room_climate_discovery_payload,
@@ -213,6 +220,8 @@ class ClimateMqttFacade:
         self.bridge.start()
         self.bridge.subscribe("DigitalHouses/Global/dh_climate_app/season/set/+")
         self.bridge.subscribe("DigitalHouses/Global/dh_climate_app/system/set/+")
+        self.bridge.subscribe("DigitalHouses/Global/dh_climate_app/settings/set/+")
+        self.bridge.subscribe("DigitalHouses/Global/dh_climate_app/rooms/+/slow_targets/set/+")
         self.bridge.subscribe(
             "DigitalHouses/Global/dh_climate_app/rooms/+/climate/set/+"
         )
@@ -259,6 +268,17 @@ class ClimateMqttFacade:
                 retain=True,
                 force=True,
             )
+
+        for payload_group in (
+            global_climate_health_discovery_payloads(self.app_version),
+            global_tuning_discovery_payloads(self.app_version),
+        ):
+            for topic, payload in payload_group.values():
+                self.bridge.publish(
+                    topic,
+                    json.dumps(payload, ensure_ascii=False, sort_keys=True),
+                    retain=True, force=True,
+                )
 
         for _, (topic, payload) in outdoor_discovery_payloads(
             self.app_version
@@ -371,6 +391,13 @@ class ClimateMqttFacade:
         profile_targets: dict[str, float | None],
     ) -> int:
         room = self.rooms[state.room_id]
+        health_topic, health_payload = room_health_discovery_payload(
+            room, self.app_version,
+        )
+        self.bridge.publish(
+            health_topic, json.dumps(health_payload, ensure_ascii=False, sort_keys=True),
+            retain=True,
+        )
         climate_state = room_climate_state_topics(
             state,
             published_profile=published_profile,
@@ -459,6 +486,55 @@ class ClimateMqttFacade:
             count += int(self.bridge.publish(topic, payload, retain=True))
         return count
 
+    def publish_health(self, health: ClimateHealth) -> int:
+        count = 0
+        base = "DigitalHouses/Global/dh_climate_app"
+        for key, status in (
+            ("global_health", health.global_state),
+            ("climate_health", health.climate_state),
+        ):
+            count += int(self.bridge.publish(
+                f"{base}/{key}", status, retain=True,
+            ))
+        for room_id, status in health.rooms.items():
+            count += int(self.bridge.publish(
+                f"{base}/rooms/{room_id}/health", status, retain=True,
+            ))
+        return count
+
+    def publish_tuning(self, tuning: dict[str, float]) -> None:
+        base = "DigitalHouses/Global/dh_climate_app/settings"
+        for key, value in tuning.items():
+            if key in GLOBAL_TUNING_SEEDS:
+                self.bridge.publish(f"{base}/{key}", str(value), retain=True)
+
+    def publish_slow_targets(
+        self, room_id: str, targets: dict[str, float | None],
+    ) -> None:
+        room = self.rooms[room_id]
+        needs_target = any(
+            d.device_class is DeviceClass.SLOW
+            and (d.control == "device" or d.temperature_sensor is not None)
+            for d in room.devices
+        )
+        if not needs_target:
+            return
+        for profile in ("day", "night", "away"):
+            topic, payload = slow_target_discovery_payload(
+                room, profile, self.app_version,
+            )
+            self.bridge.publish(
+                topic, json.dumps(payload, ensure_ascii=False, sort_keys=True),
+                retain=True,
+            )
+            value = targets.get(profile)
+            if value is not None:
+                self.bridge.publish(
+                    f"DigitalHouses/Global/dh_climate_app/rooms/"
+                    f"{room_id}/slow_targets/{profile}",
+                    str(value), retain=True,
+                )
+
     def publish_humidity(self, state: HumidityState) -> int:
         room = self.rooms[state.room_id]
         count = int(
@@ -532,6 +608,12 @@ class ClimateMqttFacade:
             )
             return
 
+        if len(parts) == 3 and parts[:2] == ["settings", "set"]:
+            self.command_queue.put_nowait(
+                MqttCommand(scope="tuning", command=parts[2], payload=payload.strip())
+            )
+            return
+
         if len(parts) == 3 and parts[:2] == ["system", "set"]:
             self.command_queue.put_nowait(
                 MqttCommand(
@@ -552,6 +634,8 @@ class ClimateMqttFacade:
                 scope = "humidity"
             elif parts[2] == "targets":
                 scope = "target"
+            elif parts[2] == "slow_targets":
+                scope = "slow_target"
             else:
                 return
             self.command_queue.put_nowait(
