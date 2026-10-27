@@ -6,7 +6,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
-from dh_climate_app.config import parse_options
+from legacy_fixtures import parse_legacy_fixture as parse_options
 from dh_climate_app.core import Season
 from dh_climate_app.devices import DesiredDeviceState, compile_room_devices
 from dh_climate_app.events import ClimateEventEngine
