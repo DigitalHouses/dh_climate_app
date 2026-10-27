@@ -60,8 +60,8 @@ def main() -> int:
                 "SELECT name FROM sqlite_master WHERE type='table'"
             )
         }
-        if "slow_room_targets" not in rooms or "room_runtime" not in rooms:
-            raise RuntimeError("target SQLite schema not installed; abort")
+        if "room_runtime" not in rooms:
+            raise RuntimeError("existing room_runtime missing; wrong database")
         known = {
             r[0] for r in db.execute("SELECT room_id FROM room_runtime")
         }
@@ -69,12 +69,15 @@ def main() -> int:
             raise RuntimeError(
                 f"unknown configured room(s): {sorted(set(values) - known)}"
             )
-        existing = {
-            (r["room_id"], r["profile"]): r["target"]
-            for r in db.execute(
-                "SELECT room_id, profile, target FROM slow_room_targets"
-            )
-        }
+        existing = (
+            {
+                (r["room_id"], r["profile"]): r["target"]
+                for r in db.execute(
+                    "SELECT room_id, profile, target FROM slow_room_targets"
+                )
+            }
+            if "slow_room_targets" in rooms else {}
+        )
         pending = [
             (room, profile, target)
             for room, target in values.items()
@@ -88,6 +91,8 @@ def main() -> int:
                 f"night:{existing.get((room, 'night'))}, "
                 f"away:{existing.get((room, 'away'))}}}"
             )
+        if "slow_room_targets" not in rooms:
+            print("SLOW profile table absent in old DB; will create on --apply")
         print(f"missing profiles to seed: {len(pending)}")
         if not args.apply:
             print("DRY-RUN ONLY: zero SQLite changes")
@@ -100,6 +105,14 @@ def main() -> int:
             db.backup(bdb)
         print(f"SQLite consistent backup: {backup}")
         with db:
+            db.execute(
+                """CREATE TABLE IF NOT EXISTS slow_room_targets (
+                    room_id TEXT NOT NULL,
+                    profile TEXT NOT NULL CHECK (profile IN ('day', 'night', 'away')),
+                    target REAL NOT NULL,
+                    PRIMARY KEY (room_id, profile)
+                )"""
+            )
             db.executemany(
                 """INSERT OR IGNORE INTO slow_room_targets(
                        room_id, profile, target) VALUES (?,?,?)""",
