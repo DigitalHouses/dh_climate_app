@@ -61,8 +61,12 @@ def _problem_payload(
         }
     )
     if problem.room_id is not None:
+        if not room_name:
+            raise ValueError(
+                f"room_name required for room event: {problem.room_id}"
+            )
         payload["room_id"] = problem.room_id
-        payload["room_name"] = room_name or problem.room_id
+        payload["room_name"] = room_name
     if problem.entity_id is not None:
         payload["entity_id"] = problem.entity_id
     if problem.details is not None:
