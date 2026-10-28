@@ -165,7 +165,7 @@ class SystemTreeTests(unittest.TestCase):
         self.assertIn('href="?more-info-entity-id=climate.bedroom_ac"', output)
         self.assertIn('href="?more-info-entity-id=sensor.outdoor"', output)
         self.assertIn("&lt;unsafe&gt; &amp; More Info", output)
-        self.assertIn("\\n└─ ", output)
+        self.assertIn("\n└─ ", output)
         self.assertEqual(2, output.count("<a href="))
 
     def test_discovery_stable_unique_id(self):
