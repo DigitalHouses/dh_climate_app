@@ -55,43 +55,29 @@ schema:
           reversible: "bool?"
   heating_source: "list(boiler|central_heating)?"
   vrf: "list(on|off)?"
-  resources:
-    boiler:
-      status: "str?"
-      dhw: "str?"
-      target: "str?"
-      aggregator: "str?"
-      pumps:
-        - id: str
-          name: str
-          state: "str?"
-          power: "str?"
-          rpm: "str?"
-      circuits:
-        - id: str
-          name: str
-          temperature: "str?"
-          pressure: "str?"
-    central_heating:
-      status: "str?"
-      aggregator: "str?"
-      pumps:
-        - id: str
-          name: str
-          state: "str?"
-          power: "str?"
-          rpm: "str?"
-      circuits:
-        - id: str
-          name: str
-          temperature: "str?"
-          pressure: "str?"
-    vrf:
-      status: "str?"
-      compressor: "str?"
-      fault: "str?"
-      restriction: "str?"
-      pumps: []
-      circuits: []
+  boiler:
+    status: "str?"
+    dhw: "str?"
+    target: "str?"
+    aggregator: "str?"
+  central_heating:
+    status: "str?"
+    aggregator: "str?"
+  vrf_monitor:
+    status: "str?"
+    compressor: "str?"
+    fault: "str?"
+    restriction: "str?"
+  pumps:
+    - id: str
+      name: str
+      state: "str?"
+      power: "str?"
+      rpm: "str?"
+  circuits:
+    - id: str
+      name: str
+      temperature: "str?"
+      pressure: "str?"
   telemetry_enabled: bool
   log_level: list(debug|info|warning|error)
