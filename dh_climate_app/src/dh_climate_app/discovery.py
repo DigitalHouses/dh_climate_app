@@ -23,6 +23,8 @@ SYSTEM_AVAILABILITY_TOPIC = f"{BASE_TOPIC}/availability"
 SYSTEM_PROBLEM_TOPIC = f"{BASE_TOPIC}/problem"
 SYSTEM_PROBLEM_ATTRIBUTES_TOPIC = f"{BASE_TOPIC}/problem_attributes"
 SYSTEM_EVENT_TOPIC = f"{BASE_TOPIC}/event"
+TOPOLOGY_STATE_TOPIC = f"{BASE_TOPIC}/topology/state"
+TOPOLOGY_ATTRIBUTES_TOPIC = f"{BASE_TOPIC}/topology/attributes"
 OUTDOOR_BASE = f"{BASE_TOPIC}/outdoor"
 OUTDOOR_RAW_TEMPERATURE_TOPIC = f"{OUTDOOR_BASE}/temperature_raw"
 OUTDOOR_TEMPERATURE_ATTRIBUTES_TOPIC = f"{OUTDOOR_BASE}/temperature/attributes"
@@ -177,6 +179,26 @@ def diagnostic_discovery_payloads(app_version: str) -> dict[str, tuple[str, dict
             },
         ),
     }
+
+
+def topology_discovery_payload(app_version: str) -> tuple[str, dict[str, Any]]:
+    """One non-Recorder read model for the entire System Tree."""
+    object_id = "dh_climate_app_topology"
+    return (
+        f"{DISCOVERY_PREFIX}/sensor/{object_id}/config",
+        {
+            "name": "System Tree",
+            "unique_id": object_id,
+            "default_entity_id": f"sensor.{object_id}",
+            "state_topic": TOPOLOGY_STATE_TOPIC,
+            "json_attributes_topic": TOPOLOGY_ATTRIBUTES_TOPIC,
+            "availability_topic": SYSTEM_AVAILABILITY_TOPIC,
+            "entity_category": "diagnostic",
+            "icon": "mdi:family-tree",
+            "device": system_device(app_version),
+            "origin": _origin(app_version),
+        },
+    )
 
 
 def outdoor_discovery_payloads(
