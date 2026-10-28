@@ -1,0 +1,117 @@
+# DH Climate App 0.2.0 — Supervisor options
+# Основано на действующем семикомнатном стенде 0.1.33.
+# Перед установкой подтвердить heating_source: boiler | central_heating.
+# resource: home_heating добавлять только для реально подключённых
+# к отопительному агрегатору устройств; без этого REQUEST остаётся UNKNOWN.
+night_mode: input_boolean.ib_night_time
+we_at_home: input_boolean.ib_we_at_home
+
+heating_source: boiler
+vrf: 'off'
+
+outdoor:
+  temperature_sources:
+    - weather.forecast_home_assistant
+  humidity_sources:
+    - weather.forecast_home_assistant
+
+# Не добавляем несуществующие котлы, насосы, датчики давления, VRF.
+# При наличии телеметрии добавить элементы resources (boiler, central_heating, vrf),
+# pumps и circuits; данные появляются в HOME только при наличии сущностей.
+resources: []
+pumps: []
+circuits: []
+
+rooms:
+  - id: livingroom
+    name: Living Room
+    temperature_sensors:
+      - sensor.th_livingroom_temperature
+    humidity_sensors:
+      - sensor.th_livingroom_humidity
+    window_sensors: []
+    humidity_mode: humidifier
+    humidity_actuator: switch.socket_humidifier
+    devices:
+      - entity: climate.termostat_livingroom
+        role: fast_heat
+        device_type: hardware
+        # resource: home_heating — только после подтверждения подключения к общему источнику
+
+  - id: bedroom
+    name: Спальня
+    temperature_sensors:
+      - sensor.th_bedroom_temperature
+    humidity_sensors:
+      - sensor.th_bedroom_humidity
+    window_sensors: []
+    humidity_mode: 'off'
+    devices:
+      - entity: climate.bedroom_ac
+        role: fast_heat
+        device_type: virtual
+        reversible: true
+
+  - id: lab_cool
+    name: LAB COOL
+    temperature_sensors:
+      - sensor.dh_climate_lab_cool_temperature
+    humidity_sensors:
+      - sensor.dh_climate_lab_cool_humidity
+    window_sensors: []
+    humidity_mode: 'off'
+    devices:
+      - entity: climate.dh_climate_lab_cool_ac
+        role: fast_cool
+        device_type: virtual
+
+  - id: lab_heat
+    name: LAB HEAT
+    temperature_sensors:
+      - sensor.dh_climate_lab_heat_temperature
+    humidity_sensors:
+      - sensor.dh_climate_lab_heat_humidity
+    window_sensors: []
+    humidity_mode: 'off'
+    devices:
+      - entity: climate.dh_climate_lab_heat_heater
+        role: fast_heat
+        device_type: virtual
+      - entity: climate.dh_climate_lab_slow_floor
+        role: slow_heat
+        device_type: hardware
+
+  - id: lab_humidifier
+    name: LAB HUMIDIFIER
+    temperature_sensors:
+      - sensor.dh_climate_lab_humidifier_temperature
+    humidity_sensors:
+      - sensor.dh_climate_lab_humidifier_humidity
+    window_sensors: []
+    humidity_mode: humidifier
+    humidity_actuator: switch.dh_climate_lab_humidifier_relay
+    devices: []
+
+  - id: lab_dehumidifier
+    name: LAB DEHUMIDIFIER
+    temperature_sensors:
+      - sensor.dh_climate_lab_dehumidifier_temperature
+    humidity_sensors:
+      - sensor.dh_climate_lab_dehumidifier_humidity
+    window_sensors: []
+    humidity_mode: dehumidifier
+    humidity_actuator: humidifier.dh_climate_lab_dehumidifier_device
+    devices: []
+
+  - id: lab_ventilation
+    name: LAB VENTILATION
+    temperature_sensors:
+      - sensor.dh_climate_lab_ventilation_temperature
+    humidity_sensors:
+      - sensor.dh_climate_lab_ventilation_humidity
+    window_sensors: []
+    humidity_mode: 'off'
+    devices: []
+
+telemetry_enabled: false
+log_level: info
