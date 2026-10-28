@@ -238,6 +238,7 @@ class ClimateRuntime:
             self.facade.set_season_available(False)
             self.facade.set_rooms_available(False)
             self.facade.set_demand_available(False)
+            self.facade.set_topology_available(False)
             return
 
         await self._recalculate(
