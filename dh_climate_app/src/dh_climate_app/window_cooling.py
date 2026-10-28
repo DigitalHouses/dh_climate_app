@@ -34,6 +34,12 @@ class WindowCoolingGuard:
         deadlines: dict[str, float] = {}
 
         for room_id, room in rooms.items():
+            # Windows are irrelevant to every heating device, including
+            # reversible AC operating in HEAT season.
+            if room.season.value != "cool":
+                self._opened_at.pop(room_id, None)
+                blocked[room_id] = False
+                continue
             if room.window_state in ("closed", "not_configured"):
                 self._opened_at.pop(room_id, None)
                 blocked[room_id] = False
