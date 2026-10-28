@@ -74,6 +74,34 @@ def tree(config, snapshot=None, demands=None, slices=None):
 
 
 class ResourceModelTests(unittest.TestCase):
+    def test_full_seven_room_supervisor_yaml_parses_unchanged(self):
+        from pathlib import Path
+        import yaml
+        root = Path(__file__).resolve().parents[1]
+        path = root / "examples/dh_climate_app_0.2.0_options.yaml"
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+        config = parse_options(raw)
+        self.assertEqual(7, len(config.rooms))
+        self.assertEqual("boiler", config.heating_source)
+        self.assertIs(config.vrf_enabled, False)
+        self.assertEqual("hardware", config.rooms[0].devices[0].device_type)
+        self.assertEqual("heat_cool", config.rooms[1].devices[0].function)
+        self.assertFalse(any(d.resource == "home_heating"
+                             for r in config.rooms for d in r.devices))
+        self.assertEqual([], raw["resources"])
+
+    def test_generic_documented_supervisor_example_is_valid(self):
+        from pathlib import Path
+        import yaml
+        root = Path(__file__).resolve().parents[1]
+        raw = yaml.safe_load(
+            (root / "docs/CONFIG_EXAMPLE.yaml").read_text(encoding="utf-8")
+        )
+        config = parse_options(raw)
+        self.assertEqual("central_heating", config.heating_source)
+        self.assertIs(config.vrf_enabled, True)
+        self.assertIn("vrf", config.resources)
+        self.assertEqual("open", config.rooms[0].devices[1].screed_sensor_unavailable)
     def test_boiler_inside_home_with_live_telemetry(self):
         raw = opts(devices=[{
             "entity": "climate.wall", "role": "fast_heat",
