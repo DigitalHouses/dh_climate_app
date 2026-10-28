@@ -630,7 +630,7 @@ class ClimateMqttFacade:
         room = self.rooms[room_id]
         needs_target = any(
             d.device_class is DeviceClass.SLOW
-            and (d.control == "device" or d.temperature_sensor is not None)
+            and (d.device_type == "hardware" or d.temperature_sensor is not None)
             for d in room.devices
         )
         if not needs_target:
