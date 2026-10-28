@@ -60,9 +60,23 @@ SQLite в `/data/dh_climate.db` хранит только долговремен
 - поддержка DigitalHouses Telemetry Protocol v1;
 - канонический multi-architecture workflow публикации GHCR; доставка Supervisor из registry пока остаётся отдельным gate выравнивания со стандартами Experimental-канала.
 
+## Operations Ingress (начиная с 0.2.1)
+
+В App включён штатный Home Assistant Ingress. В меню приложения появляется
+«Open Web UI» и, при желании администратора, панель DH Climate.
+Это read-only инженерная среда: System / Weather / Home / Resources /
+Season / Rooms / Devices, Inspector, состояния HA и Problems.
+Интерфейс переключается между русским и английским; словари расширяемы.
+[Контракт и E2E-план Operations](docs/INGRESS_OPERATIONS_V1.md).
+
+Изменений формата Supervisor options **нет**: используется существующий
+контракт 0.2.0. Приложение не создаёт новую базу настроек и не изменяет
+HA Area. Runtime не зависит от Ingress; физические команды из UI запрещены.
+HAOS ingress smoke остаётся обязательной проверкой перед установкой клиентам.
+
 ## Конфигурация
 
-**Версия 0.2.0 — несовместимый формат Supervisor options.** Перед установкой
+**Начиная с версии 0.2.0 — несовместимый формат Supervisor options.** Перед установкой
 скопируйте текущий YAML, сохраните штатный backup App (/data с SQLite), затем
 вставьте **полный** [YAML для семи комнат](examples/dh_climate_app_0.2.0_options.yaml).
 Текущая версия 0.1.33 не примет новый YAML, а 0.2.0 не примет старый `control`.

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>DH Climate · Operations</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">DH <strong>CLIMATE</strong></span>
+    <span class="section-title" id="top-title">Operations</span>
+    <span class="grow"></span>
+    <span class="connection" id="connection" role="status"></span>
+    <label for="language" class="sr-only">Language</label>
+    <select id="language" aria-label="Interface language">
+      <option value="en">English</option>
+      <option value="ru">Русский</option>
+    </select>
+  </header>
+  <div class="workbench">
+    <nav id="rail" class="rail" aria-label="Main sections"></nav>
+    <aside id="context" class="context"></aside>
+    <main class="workspace" id="workspace"></main>
+    <aside class="inspector" id="inspector"></aside>
+  </div>
+  <footer class="statusbar"><span id="foot-status">DH Climate · Operations</span><span>Read only</span></footer>
+</body>
+</html>
