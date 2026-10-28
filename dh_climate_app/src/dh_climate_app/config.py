@@ -428,7 +428,8 @@ def parse_options(raw: Any) -> AppConfig:
     root = _as_mapping(raw, "options")
     allowed = {
         "night_mode", "we_at_home", "outdoor", "rooms",
-        "telemetry_enabled", "log_level", "heating_source", "vrf", "resources",
+        "telemetry_enabled", "log_level", "heating_source", "vrf",
+        "boiler", "central_heating", "vrf_monitor", "pumps", "circuits",
     }
     unknown = set(root) - allowed
     if unknown:
@@ -441,18 +442,26 @@ def parse_options(raw: Any) -> AppConfig:
     if vrf not in (None, "on", "off"):
         raise ConfigError("vrf must be on or off")
     vrf_enabled = None if vrf is None else vrf == "on"
-    raw_resources = _as_mapping(root.get("resources", {}), "resources")
-    if set(raw_resources) - set(_RESOURCE_SIGNALS):
-        raise ConfigError("resources: unknown resource")
-    if heating_source == "central_heating" and "boiler" in raw_resources:
+    if heating_source == "central_heating" and "boiler" in root:
         raise ConfigError("CENTRAL_HEATING cannot configure BOILER")
-    if heating_source == "boiler" and "central_heating" in raw_resources:
+    if heating_source == "boiler" and "central_heating" in root:
         raise ConfigError("BOILER cannot configure CENTRAL_HEATING")
-    if not heating_source and any(k in raw_resources for k in ("boiler", "central_heating")):
-        raise ConfigError("resources: heating_source is required for water heating")
-    if vrf_enabled is not True and "vrf" in raw_resources:
-        raise ConfigError("resources.vrf requires vrf: on")
-    resources = {name: _resource_config(value, name) for name, value in raw_resources.items()}
+    if heating_source is None and any(key in root for key in (
+        "boiler", "central_heating", "pumps", "circuits"
+    )):
+        raise ConfigError("heating_source required for hydraulic resources")
+    if vrf_enabled is not True and "vrf_monitor" in root:
+        raise ConfigError("vrf_monitor requires vrf: on")
+    resources = {}
+    if heating_source is not None:
+        source_raw = dict(_as_mapping(root.get(heating_source, {}), heating_source))
+        source_raw["pumps"] = _as_list(root.get("pumps", []), "pumps")
+        source_raw["circuits"] = _as_list(root.get("circuits", []), "circuits")
+        resources[heating_source] = _resource_config(source_raw, heating_source)
+    if "vrf_monitor" in root:
+        resources["vrf"] = _resource_config(
+            _as_mapping(root["vrf_monitor"], "vrf_monitor"), "vrf",
+        )
 
     global_config = GlobalConfig(
         hysteresis=0.5,  # Persisted global tuning supersedes this initial seed.
