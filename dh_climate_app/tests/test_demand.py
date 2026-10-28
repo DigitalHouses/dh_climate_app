@@ -38,7 +38,7 @@ def config():
                 ],
             },
         ],
-        "boiler": {"aggregator": "binary_sensor.salus_heat"},
+        "resources": [{"id": "boiler", "aggregator": "binary_sensor.salus_heat"}],
     })
 
 
@@ -159,7 +159,7 @@ class DemandReductionTests(unittest.TestCase):
         with self.assertRaisesRegex(ConfigError, "obsolete"):
             parse_options({"actual_demand": {"heat": "binary_sensor.salus"}})
         with self.assertRaises(ConfigError):
-            parse_options({"heating_source": "central_heating", "boiler": {}})
+            parse_options({"heating_source": "central_heating", "resources": [{"id": "boiler"}]})
 
 
 class DemandDiscoveryTests(unittest.TestCase):
