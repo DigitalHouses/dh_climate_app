@@ -59,7 +59,7 @@ class ProductContractTests(unittest.TestCase):
         self.assertIn("outdoor", schema)
         self.assertIn("temperature_sources", schema["outdoor"])
         self.assertIn("devices", schema["rooms"][0])
-        self.assertEqual([{"entity": "str", "role": "list(slow_heat|fast_heat|fast_cool)", "control": "list(app|device)", "actuator": "list(normal_open|normal_closed)?", "temperature_sensor": "str?", "window_off": "bool?", "reversible": "bool?"}], schema["rooms"][0]["devices"])
+        self.assertEqual([{"entity": "str", "role": "list(slow_heat|fast_heat|fast_cool)", "control": "list(app|device)", "actuator": "list(normal_open|normal_closed)?", "temperature_sensor": "str?", "reversible": "bool?"}], schema["rooms"][0]["devices"])
         self.assertNotIn("temperature_hysteresis", schema)
         for key in ("hysteresis", "heat_threshold_default", "cool_threshold_default",
                     "ac_min_outdoor_temperature", "outdoor_temperature_ema_minutes"):
