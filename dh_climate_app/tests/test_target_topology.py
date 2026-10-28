@@ -29,7 +29,11 @@ def options(*devices, sensors=None, outdoor=None):
 
 
 def device(entity, role, control, **extra):
-    return {"entity": entity, "role": role, "control": control, **extra}
+    payload = {"entity": entity, "role": role,
+               "device_type": "virtual" if control == "app" else "hardware", **extra}
+    if role == "slow_heat" and control == "app" and entity.startswith("switch."):
+        payload.setdefault("screed_sensor_unavailable", "open")
+    return payload
 
 
 def state(season=Season.HEAT, action=HvacAction.IDLE, target=23.0):
@@ -80,7 +84,7 @@ class TargetTopologyTests(unittest.TestCase):
             parse_options(options(device("switch.floor", "slow_heat", "app")))
 
     def test_slow_climate_app_is_not_assumed_autonomous(self):
-        with self.assertRaisesRegex(ConfigError, "requires control=device"):
+        with self.assertRaisesRegex(ConfigError, "requires device_type=hardware"):
             parse_options(options(device("climate.floor", "slow_heat", "app")))
 
     def test_external_screed_sensor_requires_slow_switch(self):
