@@ -429,7 +429,7 @@ def parse_options(raw: Any) -> AppConfig:
     allowed = {
         "night_mode", "we_at_home", "outdoor", "rooms",
         "telemetry_enabled", "log_level", "heating_source", "vrf",
-        "boiler", "central_heating", "vrf_monitor", "pumps", "circuits",
+        "resources", "pumps", "circuits",
     }
     unknown = set(root) - allowed
     if unknown:
@@ -442,25 +442,34 @@ def parse_options(raw: Any) -> AppConfig:
     if vrf not in (None, "on", "off"):
         raise ConfigError("vrf must be on or off")
     vrf_enabled = None if vrf is None else vrf == "on"
-    if heating_source == "central_heating" and "boiler" in root:
-        raise ConfigError("CENTRAL_HEATING cannot configure BOILER")
-    if heating_source == "boiler" and "central_heating" in root:
-        raise ConfigError("BOILER cannot configure CENTRAL_HEATING")
-    if heating_source is None and any(key in root for key in (
-        "boiler", "central_heating", "pumps", "circuits"
-    )):
-        raise ConfigError("heating_source required for hydraulic resources")
-    if vrf_enabled is not True and "vrf_monitor" in root:
-        raise ConfigError("vrf_monitor requires vrf: on")
-    resources = {}
+    configured_resources = {}
+    for index, item in enumerate(_as_list(root.get("resources", []), "resources")):
+        entry = _as_mapping(item, f"resources[{index}]")
+        resource_name = str(entry.get("id", "")).strip()
+        if resource_name not in _RESOURCE_SIGNALS:
+            raise ConfigError(f"resources[{index}].id must be boiler, central_heating or vrf")
+        if resource_name in configured_resources:
+            raise ConfigError(f"resources[{index}].id duplicates {resource_name}")
+        if resource_name in {"boiler", "central_heating"} and resource_name != heating_source:
+            raise ConfigError(f"resources[{index}]: selected heating_source is not {resource_name}")
+        if resource_name == "vrf" and vrf_enabled is not True:
+            raise ConfigError(f"resources[{index}]: vrf: on is required")
+        configured_resources[resource_name] = _resource_config(
+            {key: value for key, value in entry.items() if key != "id"},
+            resource_name,
+        )
+    pumps = _as_list(root.get("pumps", []), "pumps")
+    circuits = _as_list(root.get("circuits", []), "circuits")
+    if heating_source is None and (pumps or circuits):
+        raise ConfigError("hydraulic pumps/circuits require heating_source")
+    resources = dict(configured_resources)
     if heating_source is not None:
-        source_raw = dict(_as_mapping(root.get(heating_source, {}), heating_source))
-        source_raw["pumps"] = _as_list(root.get("pumps", []), "pumps")
-        source_raw["circuits"] = _as_list(root.get("circuits", []), "circuits")
-        resources[heating_source] = _resource_config(source_raw, heating_source)
-    if "vrf_monitor" in root:
-        resources["vrf"] = _resource_config(
-            _as_mapping(root["vrf_monitor"], "vrf_monitor"), "vrf",
+        source = configured_resources.get(heating_source, ResourceConfig({}))
+        resource_parts = _resource_config(
+            {"pumps": pumps, "circuits": circuits}, heating_source,
+        )
+        resources[heating_source] = ResourceConfig(
+            source.signals, resource_parts.pumps, resource_parts.circuits,
         )
 
     global_config = GlobalConfig(
