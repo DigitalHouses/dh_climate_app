@@ -67,9 +67,9 @@ class ConfigTests(unittest.TestCase):
                 "humidity_sensors": ["sensor.living_room_humidity"],
                 "window_sensors": [],
                 "devices": [
-                    {"entity": "switch.radiator", "role": "fast_heat", "control": "app"},
-                    {"entity": "climate.floor", "role": "slow_heat", "control": "device"},
-                    {"entity": "climate.ac", "role": "fast_heat", "control": "app",
+                    {"entity": "switch.radiator", "role": "fast_heat", "device_type": "virtual"},
+                    {"entity": "climate.floor", "role": "slow_heat", "device_type": "hardware"},
+                    {"entity": "climate.ac", "role": "fast_heat", "device_type": "virtual",
                      "reversible": True},
                 ],
                 "humidity_mode": "dehumidifier",
@@ -134,7 +134,7 @@ class ConfigTests(unittest.TestCase):
             parse_options(data)
         data = self.target()
         data["rooms"][0]["devices"].append(
-            {"entity": "switch.radiator", "role": "fast_cool", "control": "app"}
+            {"entity": "switch.radiator", "role": "fast_cool", "device_type": "virtual"}
         )
         with self.assertRaisesRegex(ConfigError, "duplicate physical"):
             parse_options(data)
