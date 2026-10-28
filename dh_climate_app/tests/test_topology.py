@@ -23,8 +23,8 @@ def room(rid, devices=(), humidity=False):
     return NS(room_id=rid, name="Комната " + rid, devices=devices, humidity=hum)
 
 
-def device(entity, control="device", role="fast_heat", function="heat"):
-    return NS(entity_id=entity, control=control, device_class=NS(value="slow" if role=="slow_heat" else "fast"), function=function)
+def device(entity, device_type="hardware", role="fast_heat", function="heat"):
+    return NS(entity_id=entity, device_type=device_type, device_class=NS(value="slow" if role=="slow_heat" else "fast"), function=function)
 
 
 def scenario(rooms=(), snapshot=None, temperature_sources=(), humidity_sources=(), season="heat", window_cooling_blocked=False):
@@ -74,19 +74,19 @@ class SystemTreeTests(unittest.TestCase):
                             for l in t["lines"] for p in l["parts"]))
 
     def test_reversible_climate_displays_heat_and_cool_capability(self):
-        r = room("bedroom", [device("climate.bedroom_ac", control="app", function="heat_cool")])
+        r = room("bedroom", [device("climate.bedroom_ac", device_type="virtual", function="heat_cool")])
         tree = plain(scenario((r,), snapshot={"climate.bedroom_ac": state("heat", hvac_action="idle")}))
         self.assertIn("FAST HEAT/COOL · VIRTUAL", tree)
         self.assertIn("🔥 HEAT · IDLE", tree)
 
     def test_cooling_device_has_cold_emoji(self):
-        r = room("cool", [device("climate.cooler", control="app", function="cool")])
+        r = room("cool", [device("climate.cooler", device_type="virtual", function="cool")])
         output = plain(scenario((r,), snapshot={"climate.cooler": state("cool", hvac_action="cooling")}, season="cool"))
         self.assertIn("❄️ climate.cooler", output)
         self.assertIn("❄️ COOL · COOLING", output)
 
     def test_window_cooling_block_is_visible_but_not_confused_with_room_action(self):
-        r = room("bedroom", [device("climate.bedroom_ac", control="app", function="heat_cool")])
+        r = room("bedroom", [device("climate.bedroom_ac", device_type="virtual", function="heat_cool")])
         t = scenario((r,), season="cool", window_cooling_blocked=True)
         output = plain(t)
         self.assertIn("🚪 WINDOW OPEN · ❄️ COOLING INHIBITED", output)
@@ -98,7 +98,7 @@ class SystemTreeTests(unittest.TestCase):
         ))
 
     def test_switch_never_invents_hvac_action(self):
-        r = room("bedroom", [device("switch.valve", control="app")])
+        r = room("bedroom", [device("switch.valve", device_type="virtual")])
         output = plain(scenario((r,), snapshot={"switch.valve": state("on")}))
         self.assertIn("VIRTUAL", output)
         self.assertIn("🔌 ON", output)
@@ -133,7 +133,7 @@ class SystemTreeTests(unittest.TestCase):
         self.assertIn("VIRTUAL · OFF", output)
 
     def test_approved_tree_emoji_and_compact_targets(self):
-        r = room("bedroom", [device("climate.bedroom_ac", control="app", function="heat_cool")])
+        r = room("bedroom", [device("climate.bedroom_ac", device_type="virtual", function="heat_cool")])
         output = plain(scenario((r,), season="heat"))
         self.assertIn("🔥 Season: HEAT", output)
         self.assertIn("📊 Average 24h: 11.7°C", output)
