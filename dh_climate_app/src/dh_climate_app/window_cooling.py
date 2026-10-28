@@ -34,14 +34,22 @@ class WindowCoolingGuard:
         deadlines: dict[str, float] = {}
 
         for room_id, room in rooms.items():
-            if room.window_state != "open":
+            if room.window_state in ("closed", "not_configured"):
                 self._opened_at.pop(room_id, None)
                 blocked[room_id] = False
                 continue
+            if room.window_state == "open":
+                # First evidence of OPEN starts the delay; unknown states
+                # do not independently start new cooling inhibition.
+                self._opened_at.setdefault(room_id, now)
 
-            # Opening predates this process only if verified by actual runtime
-            # observation, never by inventing a past timestamp.
-            began = self._opened_at.setdefault(room_id, now)
+            # UNKNOWN is not a confirmed CLOSED. If the room had already
+            # observed OPEN, hold the pending/active inhibition until a
+            # confirmed CLOSED arrives. If no OPEN was seen, do not guess.
+            began = self._opened_at.get(room_id)
+            if began is None:
+                blocked[room_id] = False
+                continue
             deadline = began + delay_seconds
             blocked[room_id] = now >= deadline
             if not blocked[room_id]:
