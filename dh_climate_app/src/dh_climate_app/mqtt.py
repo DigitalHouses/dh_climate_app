@@ -25,6 +25,9 @@ from .discovery import (
     SYSTEM_PROBLEM_TOPIC,
     SYSTEM_EVENT_TOPIC,
     diagnostic_discovery_payloads,
+    topology_discovery_payload,
+    TOPOLOGY_STATE_TOPIC,
+    TOPOLOGY_ATTRIBUTES_TOPIC,
     demand_base,
     demand_discovery_payloads,
     demand_object_id,
@@ -276,6 +279,13 @@ class ClimateMqttFacade:
                 force=True,
             )
 
+        topology_topic, topology_payload = topology_discovery_payload(self.app_version)
+        self.bridge.publish(
+            topology_topic,
+            json.dumps(topology_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+            retain=True, force=True,
+        )
+
         for payload_group in (
             global_climate_health_discovery_payloads(self.app_version),
             global_tuning_discovery_payloads(self.app_version),
@@ -427,6 +437,25 @@ class ClimateMqttFacade:
             f"{base}/count_availability",
             "online" if count is not None else "offline", retain=True,
         )
+
+    def publish_topology(self, topology: dict[str, object]) -> bool:
+        """Retained push read model; never publish a partially truncated tree."""
+        payload = json.dumps(
+            topology, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        )
+        payload_bytes = len(payload.encode("utf-8"))
+        if payload_bytes > 32_000:
+            LOGGER.error("System Tree attributes exceed 32000 bytes: %s", payload_bytes)
+            payload = json.dumps(
+                {"schema_version": 1, "error": "topology_too_large", "bytes": payload_bytes},
+                separators=(",", ":"),
+            )
+            state = "too_large"
+        else:
+            state = "ready"
+        changed = self.bridge.publish(TOPOLOGY_ATTRIBUTES_TOPIC, payload, retain=True)
+        self.bridge.publish(TOPOLOGY_STATE_TOPIC, state, retain=True)
+        return changed
 
     def publish_season(self, state: OutdoorState) -> int:
         count = 0
