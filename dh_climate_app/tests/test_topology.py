@@ -167,7 +167,7 @@ class SystemTreeTests(unittest.TestCase):
         self.assertIn("&lt;unsafe&gt; &amp; More Info", output)
         self.assertIn("\n└─ ", output)
         self.assertEqual(2, output.count("<a href="))
-        self.assertEqual(1, output.count("\\n"))
+        self.assertEqual(1, output.count("\n"))
         self.assertEqual(1, output.count("<pre "))
         self.assertEqual(1, output.count("</pre>"))
         self.assertIn("line-height:1;", output)
