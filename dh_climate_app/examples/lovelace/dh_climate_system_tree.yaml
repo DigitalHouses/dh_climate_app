@@ -1,0 +1,2 @@
+type: custom:dh-climate-tree-card
+entity: sensor.dh_climate_app_topology
