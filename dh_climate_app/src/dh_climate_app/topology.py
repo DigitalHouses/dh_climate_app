@@ -128,7 +128,9 @@ def _device_node(device: Any, snapshot: Mapping[str, Any]) -> dict:
     online = "🟢 AVAILABLE" if state is not None else "⚪ UNKNOWN"
     children = []
     control = "HARDWARE" if device.control == "device" else "VIRTUAL"
-    kind = "SLOW HEAT" if device.device_class.value == "slow" else "FAST COOL" if device.function == "cool" else "FAST HEAT"
+    kind = ("SLOW HEAT" if device.device_class.value == "slow" else
+            "FAST HEAT/COOL" if device.function == "heat_cool" else
+            "FAST COOL" if device.function == "cool" else "FAST HEAT")
     children.append(_node(_part(f"{kind} · {control}")))
     if state is not None:
         if domain == "climate":
