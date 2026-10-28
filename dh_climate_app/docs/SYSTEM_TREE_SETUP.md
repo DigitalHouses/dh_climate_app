@@ -35,6 +35,10 @@ curl -fsSL https://raw.githubusercontent.com/DigitalHouses/dh_climate_app/main/d
   -o /config/www/dh-climate-tree-card.js
 ```
 
+Если каталог `/config/www` создан впервые после запуска Home Assistant,
+для включения `/local/` требуется один перезапуск Home Assistant.
+Файлы в `/config/www` доступны по URL без авторизации: никаких секретов там не хранить.
+
 В Home Assistant: **Настройки → Панели управления → Ресурсы**.
 Добавить URL `/local/dh-climate-tree-card.js?v=1`, тип **JavaScript module**.
 После установки обновить браузер с очисткой кэша при необходимости.
