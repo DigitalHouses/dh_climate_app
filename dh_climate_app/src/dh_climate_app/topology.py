@@ -129,7 +129,7 @@ def _device_node(device: Any, snapshot: Mapping[str, Any]) -> dict:
     name = str(friendly).strip() if isinstance(friendly, str) and friendly.strip() else entity
     online = "🟢 AVAILABLE" if state is not None else "⚪ UNKNOWN"
     children = []
-    control = "HARDWARE" if device.control == "device" else "VIRTUAL"
+    control = "HARDWARE" if device.device_type == "hardware" else "VIRTUAL"
     kind = ("SLOW HEAT" if device.device_class.value == "slow" else
             "FAST HEAT/COOL" if device.function == "heat_cool" else
             "FAST COOL" if device.function == "cool" else "FAST HEAT")
