@@ -6,15 +6,15 @@
 ## Контракт
 
 - Единственный источник дерева: `sensor.dh_climate_app_topology`.
-- MQTT: `DigitalHouses/Global/dh_climate_app/topology/state` — `ready | too_large`;
+- MQTT: `DigitalHouses/Global/dh_climate_app/topology/state` — `ready | offline | too_large`;
   `.../topology/attributes` — объект `{schema_version: 1, lines: [...]}`.
 - `lines[]` содержит `prefix` с уже рассчитанными линиями `├─ │ └─` и
   `parts[]` вида `{text, entity_id?}`. `entity_id` — настоящий HA entity_id.
 - UI не строит логику источников, климата и Demand. Это презентационный слой;
   клик по конкретному span вызывает стандартный `hass-more-info`.
 - Обновление через штатные HA push-state события, без JS polling.
-- MQTT retained публикация только при изменении payload, системная availability
-  при потере связи исключает показ устаревшего дерева как актуального.
+- MQTT retained публикация только при изменении payload, статус `offline` при потере HA-соединения
+  исключает показ устаревшего дерева как актуального.
 - Полное дерево ограничено 32 000 байт UTF-8. При превышении `too_large`,
   сообщение в логе и явная ошибка в карточке вместо обрезанного или ложного дерева.
 - Диагностический sensor не предназначен для Recorder. Добавить локально
