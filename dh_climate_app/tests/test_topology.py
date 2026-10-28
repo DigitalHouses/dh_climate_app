@@ -136,10 +136,37 @@ class SystemTreeTests(unittest.TestCase):
         self.assertEqual("markdown", card["type"])
         self.assertEqual(["sensor.dh_climate_app_topology"], card["entity_id"])
         self.assertEqual(12, card["grid_options"]["columns"])
-        self.assertIn("map(attribute='text')", card["content"])
-        self.assertIn("ns.lines | join", card["content"])
         self.assertIn("<pre style=", card["content"])
+        self.assertIn('<a href="?more-info-entity-id=', card["content"])
+        self.assertIn("part['entity_id'] | urlencode", card["content"])
+        self.assertIn("part['text'] | e", card["content"])
         self.assertNotIn("states.sensor", card["content"])
+
+    def test_native_markdown_more_info_links_and_escaping(self):
+        from pathlib import Path
+        from jinja2 import Environment
+        import yaml
+
+        card_path = Path(__file__).resolve().parents[1] / "examples/lovelace/dh_climate_system_tree.yaml"
+        card = yaml.safe_load(card_path.read_text(encoding="utf-8"))
+        sample = [
+            {"prefix": "├─ ", "parts": [
+                {"text": "☀️ <unsafe> & More Info", "entity_id": "climate.bedroom_ac"},
+                {"text": " · MODE: HEAT"},
+            ]},
+            {"prefix": "└─ ", "parts": [
+                {"text": "sensor.outdoor", "entity_id": "sensor.outdoor"}
+            ]},
+        ]
+        output = Environment(autoescape=True).from_string(card["content"]).render(
+            state_attr=lambda e, attr: sample,
+            is_state=lambda e, value: value == "ready",
+        )
+        self.assertIn('href="?more-info-entity-id=climate.bedroom_ac"', output)
+        self.assertIn('href="?more-info-entity-id=sensor.outdoor"', output)
+        self.assertIn("&lt;unsafe&gt; &amp; More Info", output)
+        self.assertIn("\\n└─ ", output)
+        self.assertEqual(2, output.count("<a href="))
 
     def test_discovery_stable_unique_id(self):
         topic, payload = topology_discovery_payload("0.1.33")
