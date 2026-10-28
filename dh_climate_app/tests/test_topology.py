@@ -90,6 +90,7 @@ class SystemTreeTests(unittest.TestCase):
         t = scenario((r,), season="cool", window_cooling_blocked=True)
         output = plain(t)
         self.assertIn("🚪 WINDOW OPEN · ❄️ COOLING INHIBITED", output)
+        self.assertNotIn("COOLING INHIBITED", plain(scenario((r,), season="heat", window_cooling_blocked=True)))
         self.assertTrue(any(
             part.get("entity_id") == "climate.dh_climate_app_bedroom"
             for line in t["lines"] for part in line["parts"]
