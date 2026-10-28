@@ -1,0 +1,277 @@
+# DigitalHouses Climate App 0.2.0 — Lovelace Storage / Raw configuration
+# System Tree — подтверждённая работающая Markdown-карточка.
+# Для действующего dashboard используйте append/upsert, не перезапись без backup.
+title: DH Climate
+views:
+  - type: panel
+    title: Система
+    path: system
+    icon: mdi:home-thermometer-outline
+    cards:
+      - type: markdown
+        content: >-
+          {%- set entity = 'sensor.dh_climate_app_topology' -%} {%- set topology = state_attr(entity, 'lines') -%}
+
+          <pre style="margin:0; padding:0; line-height:1; font-family:'Courier New',monospace; white-space:pre;">{%- if is_state(entity, 'ready') and topology is sequence -%} {%- for line in topology -%} {% if not loop.first %}{{ '\n' }}{% endif %}{{ line['prefix'] | default('') | e }}{%- for part in line['parts'] %}{% if part['entity_id'] is defined and part['entity_id'] %}<a href="./?more-info-entity-id={{ part['entity_id'] | urlencode }}">{{ part['text'] | e }}</a>{% else %}{{ part['text'] | e }}{% endif %}{%- endfor %} {%- endfor -%} {%- elif is_state(entity, 'too_large') -%} ⚠️ DH Climate System Tree · размер данных превышен {%- else -%} ⚪ DH Climate System Tree · данные недоступны {%- endif -%}</pre>
+        entity_id:
+          - sensor.dh_climate_app_topology
+        grid_options:
+          columns: 12
+  - type: panel
+    title: Комнаты
+    path: climate
+    icon: mdi:home-thermometer
+    cards:
+      - type: custom:auto-entities
+        show_empty: false
+        unique: true
+        card:
+          type: grid
+          columns: 2
+          square: false
+        card_param: cards
+        filter:
+          template: |-
+            {% set ns = namespace(areas=[], first=true) %}
+            [
+            {% for t in states.climate %}
+              {% if t.entity_id.startswith('climate.dh_climate_app_') and t.entity_id != 'climate.dh_climate_app_season' and not t.entity_id.startswith('climate.dh_climate_app_lab_') %}
+                {% set area = area_name(t.entity_id) %}
+                {% if area and area not in ns.areas %}
+                  {% set ns.areas = ns.areas + [area] %}
+                  {% if not ns.first %},{% endif %}{% set ns.first = false %}
+                  {"type":"vertical-stack","cards":[
+                    {"type":"heading","heading":"{{ area | replace('\\', '\\\\') | replace('"', '\\"') }}","heading_style":"title"}
+                    {% for c in states.climate %}
+                      {% if c.entity_id.startswith('climate.dh_climate_app_') and c.entity_id != 'climate.dh_climate_app_season' and not c.entity_id.startswith('climate.dh_climate_app_lab_') and area_name(c.entity_id) == area %}
+                      ,{"type":"tile","entity":"{{ c.entity_id }}","name":"Термостат","features":[{"type":"target-temperature"}]}
+                      {% set humidifier_id = 'humidifier.' ~ c.entity_id[8:] %}
+                      {% for h in states.humidifier %}
+                        {% if h.entity_id == humidifier_id and area_name(h.entity_id) == area %}
+                        ,{"type":"tile","entity":"{{ h.entity_id }}","name":"Влажность","features":[{"type":"target-humidity","style":"buttons"}]}
+                        {% endif %}
+                      {% endfor %}
+                      {% endif %}
+                    {% endfor %}
+                  ]}
+                {% endif %}
+              {% endif %}
+            {% endfor %}
+            ]
+  - type: sections
+    title: Улица
+    path: outdoor
+    icon: mdi:weather-partly-cloudy
+    max_columns: 2
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: Сезон и наружные данные
+            heading_style: title
+            icon: mdi:thermometer
+          - type: grid
+            columns: 2
+            square: false
+            cards:
+              - type: tile
+                entity: climate.dh_climate_app_season
+                name: Сезон
+              - type: tile
+                entity: sensor.dh_climate_app_outdoor_temperature
+                name: Температура EMA
+              - type: tile
+                entity: sensor.dh_climate_app_outdoor_temperature_raw
+                name: Температура RAW
+              - type: tile
+                entity: sensor.dh_climate_app_outdoor_temperature_avg24
+                name: Средняя за 24 ч
+              - type: tile
+                entity: sensor.dh_climate_app_outdoor_humidity
+                name: Наружная влажность
+          - type: entities
+            title: Осадки · текущие факты
+            show_header_toggle: false
+            entities:
+              - sensor.dh_climate_app_precipitation_type
+              - sensor.dh_climate_app_precipitation_amount
+      - type: grid
+        cards:
+          - type: heading
+            heading: Температура · последние 72 часа
+            heading_style: title
+            icon: mdi:chart-line
+          - type: history-graph
+            hours_to_show: 72
+            entities:
+              - entity: sensor.dh_climate_app_outdoor_temperature
+                name: EMA
+              - entity: sensor.dh_climate_app_outdoor_temperature_avg24
+                name: 24 ч
+              - entity: sensor.dh_climate_app_outdoor_temperature_raw
+                name: RAW
+          - type: history-graph
+            hours_to_show: 72
+            entities:
+              - entity: sensor.dh_climate_app_outdoor_humidity
+                name: Влажность
+  - type: sections
+    title: Администрирование
+    path: admin
+    icon: mdi:cog-outline
+    max_columns: 3
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: Общий статус и журнал
+            heading_style: title
+            icon: mdi:shield-check
+          - type: entities
+            title: DH Climate · диагностика
+            show_header_toggle: false
+            entities:
+              - binary_sensor.dh_climate_app_problem
+              - sensor.dh_climate_app_global_health
+              - sensor.dh_climate_app_climate_health
+              - sensor.dh_climate_app_version
+              - sensor.dh_climate_app_started_at
+              - event.dh_climate_app_event
+          - type: logbook
+            hours_to_show: 24
+            entities:
+              - event.dh_climate_app_event
+      - type: grid
+        cards:
+          - type: heading
+            heading: Сезон и глобальные параметры
+            heading_style: title
+            icon: mdi:thermometer-cog
+          - type: thermostat
+            entity: climate.dh_climate_app_season
+            name: Границы сезонов HEAT / COOL
+          - type: entities
+            title: Профиль дома
+            show_header_toggle: false
+            entities:
+              - entity: input_boolean.ib_night_time
+                name: Ночной режим
+              - entity: input_boolean.ib_we_at_home
+                name: Мы дома
+          - type: entities
+            title: Глобальные настройки · SQLite
+            show_header_toggle: false
+            entities:
+              - number.dh_climate_app_season_hysteresis
+              - number.dh_climate_app_fast_heat_hysteresis
+              - number.dh_climate_app_fast_cool_hysteresis
+              - number.dh_climate_app_slow_heat_hysteresis
+              - number.dh_climate_app_slow_heat_min_on_time
+              - number.dh_climate_app_slow_heat_min_off_time
+              - number.dh_climate_app_humidity_hysteresis
+              - number.dh_climate_app_window_open_delay_seconds
+      - type: grid
+        cards:
+          - type: heading
+            heading: Уставки комнат · SQLite
+            heading_style: title
+            icon: mdi:tune-vertical
+          - type: custom:auto-entities
+            show_empty: false
+            unique: true
+            card:
+              type: entities
+              title: Профили HEAT / COOL
+              show_header_toggle: false
+            filter:
+              include:
+                - entity_id: number.dh_climate_app_*_heat_day
+                - entity_id: number.dh_climate_app_*_heat_night
+                - entity_id: number.dh_climate_app_*_heat_away
+                - entity_id: number.dh_climate_app_*_heat_antifreeze
+                - entity_id: number.dh_climate_app_*_cool_day
+                - entity_id: number.dh_climate_app_*_cool_night
+                - entity_id: number.dh_climate_app_*_cool_away
+              exclude:
+                - entity_id: number.dh_climate_app_*_slow_heat_day
+                - entity_id: number.dh_climate_app_*_slow_heat_night
+                - entity_id: number.dh_climate_app_*_slow_heat_away
+            sort:
+              method: entity_id
+          - type: custom:auto-entities
+            show_empty: false
+            unique: true
+            card:
+              type: entities
+              title: SLOW HEAT · температура стяжки
+              show_header_toggle: false
+            filter:
+              include:
+                - entity_id: number.dh_climate_app_*_slow_heat_day
+                - entity_id: number.dh_climate_app_*_slow_heat_night
+                - entity_id: number.dh_climate_app_*_slow_heat_away
+            sort:
+              method: entity_id
+      - type: grid
+        cards:
+          - type: heading
+            heading: Запросы ROOM / HARDWARE / VIRTUAL и ресурсы
+            heading_style: title
+            icon: mdi:source-branch
+          - type: custom:auto-entities
+            show_empty: false
+            unique: true
+            card:
+              type: entities
+              title: Demand / Request · факты
+              show_header_toggle: false
+            filter:
+              include:
+                - entity_id: binary_sensor.dh_climate_app_*_demand
+                - entity_id: binary_sensor.dh_climate_app_*_request
+            sort:
+              method: entity_id
+          - type: custom:auto-entities
+            show_empty: false
+            unique: true
+            card:
+              type: entities
+              title: Состав запроса (count)
+              show_header_toggle: false
+            filter:
+              include:
+                - entity_id: sensor.dh_climate_app_*_demand_count
+                - entity_id: sensor.dh_climate_app_*_request_count
+            sort:
+              method: entity_id
+      - type: grid
+        cards:
+          - type: heading
+            heading: LAB · тестовые комнаты
+            heading_style: title
+            icon: mdi:test-tube
+          - type: custom:auto-entities
+            show_empty: false
+            unique: true
+            card:
+              type: entities
+              title: LAB climate / humidity
+              show_header_toggle: false
+            filter:
+              include:
+                - entity_id: climate.dh_climate_app_lab_*
+                - entity_id: humidifier.dh_climate_app_lab_*
+            sort:
+              method: entity_id
+          - type: custom:auto-entities
+            show_empty: false
+            unique: true
+            card:
+              type: entities
+              title: LAB health
+              show_header_toggle: false
+            filter:
+              include:
+                - entity_id: sensor.dh_climate_app_lab_*_health
+            sort:
+              method: entity_id
