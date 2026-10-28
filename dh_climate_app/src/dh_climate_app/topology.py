@@ -39,8 +39,9 @@ def _snapshot_state(snapshot: Mapping[str, Any], entity_id: str) -> Any | None:
     return state
 
 
-def _source_parts(entity: str, snapshot: Mapping[str, Any], weather: Any | None) -> list[dict[str, str]]:
-    parts = [_part(("🌤️ " if entity.startswith("weather.") else "🌡️ " if entity.startswith("sensor.") else "🔗 ") + entity, entity)]
+def _source_parts(entity: str, snapshot: Mapping[str, Any], weather: Any | None, *, kind: str) -> list[dict[str, str]]:
+    source_icon = "🌤️" if entity.startswith("weather.") else "💧" if kind == "humidity" else "🌡️" if entity.startswith("sensor.") else "🔗"
+    parts = [_part(f"{source_icon} {entity}", entity)]
     state = _snapshot_state(snapshot, entity)
     if state is None:
         parts.append(_part(" · UNKNOWN"))
@@ -67,7 +68,7 @@ def _source_chain(
 ) -> list[dict]:
     chain: dict | None = None
     for entity in reversed(ids):
-        parts = _source_parts(entity, snapshot, weather)
+        parts = _source_parts(entity, snapshot, weather, kind=kind)
         state = _snapshot_state(snapshot, entity)
         if state is not None and not entity.startswith("weather."):
             val = _measurement(state.state, "°C" if kind in ("temperature", "both") else "%")
@@ -141,7 +142,8 @@ def _device_node(device: Any, snapshot: Mapping[str, Any]) -> dict:
                 children.append(_node(_part("🌡️ " + (current or "?") + " / " + (target or "?"), entity)))
             action = state.attributes.get("hvac_action")
             action_text = f" · {str(action).upper()}" if action in ("heating", "cooling", "idle", "off") else ""
-            children.append(_node(_part("🔥 " + state.state.upper() + action_text, entity)))
+            mode_icon = "🔥" if state.state == "heat" else "❄️" if state.state == "cool" else "⚪"
+            children.append(_node(_part(f"{mode_icon} {state.state.upper()}{action_text}", entity)))
         elif domain == "switch":
             children.append(_node(_part("🔌 " + state.state.upper(), entity)))
     device_icon = "❄️" if device.function == "cool" else "🔥"
