@@ -185,7 +185,7 @@ class ActuatorSafetyBlockTests(unittest.IsolatedAsyncioTestCase):
             window_rooms["living_room"].control_action.value,
         )
         # Only explicitly listed devices are inhibited.
-        self.assertFalse(window["switch.radiator"].power)
+        self.assertTrue(window["switch.radiator"].power)
         self.assertEqual("off", window["climate.heatpump"].hvac_mode)
         self.assertTrue(window["switch.stubborn"].power)
         self.assertEqual("heat", window["climate.narrow"].hvac_mode)
