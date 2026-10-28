@@ -73,6 +73,11 @@ class SystemTreeTests(unittest.TestCase):
         self.assertTrue(any(p.get("entity_id")=="climate.wall_thermostat"
                             for l in t["lines"] for p in l["parts"]))
 
+    def test_reversible_climate_displays_heat_and_cool_capability(self):
+        r = room("bedroom", [device("climate.bedroom_ac", control="app", function="heat_cool")])
+        tree = plain(scenario((r,), snapshot={"climate.bedroom_ac": state("heat", hvac_action="idle")}))
+        self.assertIn("FAST HEAT/COOL · VIRTUAL", tree)
+
     def test_switch_never_invents_hvac_action(self):
         r = room("bedroom", [device("switch.valve", control="app")])
         output = plain(scenario((r,), snapshot={"switch.valve": state("on")}))
