@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import asyncio
+from unittest.mock import AsyncMock
+import time
 from pathlib import Path
 from types import SimpleNamespace
 import tempfile
@@ -122,6 +125,31 @@ class WindowActuatorTests(unittest.TestCase):
     def test_cool_window_does_not_force_non_requested_devices_on(self):
         commands = self._desired(season=Season.COOL, action=HvacAction.IDLE, blocked=False)
         self.assertEqual("off", commands["climate.virtual_ac"].hvac_mode)
+
+
+class WindowRuntimeTimerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_expiry_recalculates_without_polling(self):
+        from dh_climate_app.app import ClimateRuntime
+        runtime = object.__new__(ClimateRuntime)
+        runtime._ha_connected = True
+        runtime._window_recheck_tasks = {}
+        runtime._recalculate = AsyncMock()
+        runtime._sync_window_rechecks({"bedroom": time.monotonic() + 0.02})
+        await asyncio.sleep(0.05)
+        runtime._recalculate.assert_awaited_once()
+        self.assertEqual({}, runtime._window_recheck_tasks)
+
+    async def test_closed_before_deadline_cancels_event(self):
+        from dh_climate_app.app import ClimateRuntime
+        runtime = object.__new__(ClimateRuntime)
+        runtime._ha_connected = True
+        runtime._window_recheck_tasks = {}
+        runtime._recalculate = AsyncMock()
+        runtime._sync_window_rechecks({"bedroom": time.monotonic() + 0.12})
+        runtime._sync_window_rechecks({})
+        await asyncio.sleep(0.15)
+        runtime._recalculate.assert_not_awaited()
+        self.assertEqual({}, runtime._window_recheck_tasks)
 
 
 class WindowSettingsTests(unittest.TestCase):
