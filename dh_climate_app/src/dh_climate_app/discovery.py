@@ -536,6 +536,7 @@ def room_climate_state_topics(
         "climate_control_enabled": state.climate_control_enabled,
         "control_action": state.control_action.value,
         "window_state": state.window_state,
+        "window_cooling_blocked": state.window_cooling_blocked,
     }
     return {
         f"{base}/climate/availability": "online" if state.available else "offline",
