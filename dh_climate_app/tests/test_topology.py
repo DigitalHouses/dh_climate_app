@@ -149,7 +149,10 @@ class SystemTreeTests(unittest.TestCase):
         self.assertEqual(["sensor.dh_climate_app_topology"], card["entity_id"])
         self.assertEqual(12, card["grid_options"]["columns"])
         self.assertIn("<pre style=", card["content"])
-        self.assertIn('<a href="?more-info-entity-id=', card["content"])
+        self.assertIn('<a href="./?more-info-entity-id=', card["content"])
+        self.assertNotIn('href="?more-info-entity-id=', card["content"])
+        # js-xss safeAttrValue drops query-only href but permits ./? href.
+        self.assertIn('./?more-info-entity-id=', card["content"])
         self.assertIn("part['entity_id'] | urlencode", card["content"])
         self.assertIn("part['text'] | e", card["content"])
         self.assertNotIn("states.sensor", card["content"])
@@ -174,8 +177,8 @@ class SystemTreeTests(unittest.TestCase):
             state_attr=lambda e, attr: sample,
             is_state=lambda e, value: value == "ready",
         )
-        self.assertIn('href="?more-info-entity-id=climate.bedroom_ac"', output)
-        self.assertIn('href="?more-info-entity-id=sensor.outdoor"', output)
+        self.assertIn('href="./?more-info-entity-id=climate.bedroom_ac"', output)
+        self.assertIn('href="./?more-info-entity-id=sensor.outdoor"', output)
         self.assertIn("&lt;unsafe&gt; &amp; More Info", output)
         self.assertIn("\n└─ ", output)
         self.assertEqual(2, output.count("<a href="))

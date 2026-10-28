@@ -1,6 +1,8 @@
 # DigitalHouses Climate App · System Tree (штатная Markdown-карточка HA)
 # Дерево/эмодзи/статусы вычисляет App; Jinja только выводит готовые строки.
-# Ссылки More Info: штатные относительные query URL Home Assistant.
+# Ссылки More Info: ./?more-info-entity-id=..., не ?more-info-entity-id=...
+# В HA Markdown-парсере XSS-фильтр удаляет href с начальным ?, но разрешает ./.
+# Относительная ссылка открывает More Info из корня текущего dashboard.
 # Нет JS-ресурсов, дополнительных конфигураций и списков комнат в Lovelace.
 type: markdown
 content: >-
@@ -9,7 +11,7 @@ content: >-
 
   <pre style="margin:0; padding:0; line-height:1; font-family:'Courier New',monospace; white-space:pre;">{%- if is_state(entity, 'ready') and topology is sequence -%}
   {%- for line in topology -%}
-  {% if not loop.first %}{{ '\n' }}{% endif %}{{ line['prefix'] | default('') | e }}{%- for part in line['parts'] %}{% if part['entity_id'] is defined and part['entity_id'] %}<a href="?more-info-entity-id={{ part['entity_id'] | urlencode }}">{{ part['text'] | e }}</a>{% else %}{{ part['text'] | e }}{% endif %}{%- endfor %}
+  {% if not loop.first %}{{ '\n' }}{% endif %}{{ line['prefix'] | default('') | e }}{%- for part in line['parts'] %}{% if part['entity_id'] is defined and part['entity_id'] %}<a href="./?more-info-entity-id={{ part['entity_id'] | urlencode }}">{{ part['text'] | e }}</a>{% else %}{{ part['text'] | e }}{% endif %}{%- endfor %}
   {%- endfor -%}
   {%- elif is_state(entity, 'too_large') -%}
   ⚠️ DH Climate System Tree · размер данных превышен
