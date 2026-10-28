@@ -716,6 +716,7 @@ def global_tuning_discovery_payloads(
     result = {}
     for key in GLOBAL_TUNING_SEEDS:
         is_time = key.endswith("_time")
+        is_window_delay = key == "window_open_delay_seconds"
         is_humidity = key == "humidity_hysteresis"
         object_id = f"dh_climate_app_{key}"
         result[key] = (
@@ -727,11 +728,11 @@ def global_tuning_discovery_payloads(
                 "state_topic": f"{BASE_TOPIC}/settings/{key}",
                 "command_topic": f"{BASE_TOPIC}/settings/set/{key}",
                 "unit_of_measurement": (
-                    "min" if is_time else "%RH" if is_humidity else "°C"
+                    "s" if is_window_delay else "min" if is_time else "%RH" if is_humidity else "°C"
                 ),
                 "min": 0,
-                "max": 120 if is_time else 25 if is_humidity else 5,
-                "step": 1 if is_time else 0.5 if is_humidity else 0.1,
+                "max": 300 if is_window_delay else 120 if is_time else 25 if is_humidity else 5,
+                "step": 1 if is_window_delay or is_time else 0.5 if is_humidity else 0.1,
                 "mode": "box",
                 "entity_category": "config",
                 "visible_by_default": False,
