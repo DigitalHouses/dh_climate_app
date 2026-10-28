@@ -438,6 +438,11 @@ class ClimateMqttFacade:
             "online" if count is not None else "offline", retain=True,
         )
 
+    def set_topology_available(self, available: bool) -> None:
+        """Prevent stale retained topology being shown after HA disconnect."""
+        if not available:
+            self.bridge.publish(TOPOLOGY_STATE_TOPIC, "offline", retain=True)
+
     def publish_topology(self, topology: dict[str, object]) -> bool:
         """Retained push read model; never publish a partially truncated tree."""
         payload = json.dumps(
