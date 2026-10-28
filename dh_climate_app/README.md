@@ -51,7 +51,7 @@ SQLite в `/data/dh_climate.db` хранит только долговремен
 - автоматическая физическая уставка реверсивных FAST climate по комнатной температурной ошибке без пользовательских offset; уставка стабильна в течение активного цикла;
 - SLOW тёплый пол: сезонные релейные клапаны NO/NC и автономные климатические термостаты с отдельными persisted дневной/ночной/away целями стяжки;
 - опциональное управление увлажнителем/осушителем;
-- опциональный контекст окон комнаты с отключением выбранных устройств при открытом окне;
+- оконные контакты комнат с event-driven задержкой (начально 10 сек), отключающей только FAST_COOL; FAST_HEAT/SLOW_HEAT работают независимо;
 - унаследованная защита реверсивных heat/cool climate-устройств от отопления при слишком низкой наружной температуре;
 - прямое идемпотентное согласование через сервисы Home Assistant с отложенной event-driven проверкой состояния HA;
 - ограниченные повторы и агрегированная диагностика Problem;
@@ -62,27 +62,38 @@ SQLite в `/data/dh_climate.db` хранит только долговремен
 
 ## Конфигурация
 
-**Версия 0.1.32:** новый формат настроек, тестирование на HAOS. Перед нажатием Update
-сделайте штатный backup App с `/data` и сохраните старые Supervisor options.
-После обновления вставьте полный YAML нового формата до запуска App.
+**Версия 0.2.0 — несовместимый формат Supervisor options.** Перед установкой
+скопируйте текущий YAML, сохраните штатный backup App (/data с SQLite), затем
+вставьте **полный** [YAML для семи комнат](examples/dh_climate_app_0.2.0_options.yaml).
+Текущая версия 0.1.33 не примет новый YAML, а 0.2.0 не примет старый `control`.
 
-В целевой модели YAML Supervisor определяет только bindings и оборудование:
-вложенный Outdoor, внутри каждого элемента `rooms[]` — отдельные списки
-датчиков и `devices[]` с `role/control/actuator`. Пользователь
-редактирует оборудование **внутри комнаты**, а не в отдельном общем списке.
-Оперативные FAST/SLOW/season/humidity уставки, выдержки и hysteresis хранятся
-в SQLite и управляются через retained MQTT Number в админ-интерфейсе.
+- `device_type: virtual|hardware` независим от `role: fast_heat|fast_cool|slow_heat`.
+  Для каждого SLOW VIRTUAL обязателен явный `screed_sensor_unavailable: open|closed`;
+  `actuator` задаёт полярность NO/NC.
+- `heating_source: boiler|central_heating` — глобальный выбор водяного источника,
+  `vrf: 'on'|'off'` — отдельный глобальный выбор наличия VRF.
+- `resource: home_heating|vrf|independent` у устройства — **только проверенная
+  принадлежность**; без неё App не приписывает прибор котлу/ЦО/VRF.
+  В противном случае запрос ресурса честно UNKNOWN, а не фиктивный OFF.
+- `resources[]`, `pumps[]`, `circuits[]` перечисляют **только реальные**
+  существующие датчики и агрегаты. В CENTRAL_HEATING дерево котла отсутствует.
+- Изменяемые уставки, гистерезисы, min ON/OFF и задержка окна — MQTT Number
+  и SQLite, **не** Supervisor YAML. `window_open_delay_seconds` по умолчанию
+  10 секунд, диапазон 0–300 секунд.
+- Ресурсные REQUEST — **наблюдение**, App не добавляет команд на запуск
+  SALUS, котла, компрессора или насосов. HARDWARE-цепь сохраняет автономность.
+- System Tree — одна нативная Markdown-карточка:
+  [YAML Lovelace](examples/lovelace/dh_climate_system_tree.yaml).
+  Никаких дополнительных JS-карт и YAML-списков комнат внутри Dashboard.
+  Подробнее: [System Tree](docs/SYSTEM_TREE_SETUP.md).
 
-Прежние CSV options **не поддерживаются** новым парсером. Миграцию YAML
-автоматически App не выполняет; требуется полная ручная замена options
-после backup и подтверждённого GUI smoke тестового App. Все существующие
-значения SQLite должны сохраниться. Значение старого `slow_target`
-берётся из **фактических** старых options и переносится отдельным
-явным offline seed без перезаписи уже существующих целей.
+**Важная граница:** unit/CI-тесты не подтверждают фактическую работу
+HAOS и физического оборудования; первый реальный E2E выполняется после
+явного обновления App и сохранения новой конфигурации. Проект всё ещё
+экспериментальный. Старые пользовательские SQLite targets не пересоздаются.
 
-**Runbook TARGET:**
-[Ручная замена options, безопасность SQLite и release gates](docs/TARGET_MANUAL_UPGRADE_RUNBOOK.md).
-Пример в TARGET-документе не является живым конфигом пользователя.
+**Ручная установка и безопасность:**
+[Runbook](docs/TARGET_MANUAL_UPGRADE_RUNBOOK.md).
 
 ## Документация
 
@@ -92,16 +103,17 @@ SQLite в `/data/dh_climate.db` хранит только долговремен
 
 Документация этого проекта ведётся на русском языке.
 
-- [Следующий этап реализации: ручная замена YAML, сохранение SQLite](docs/NEXT_IMPLEMENTATION_HANDOFF_2026-10-27.md)
-- [Целевая модель System Tree, HARDWARE/VIRTUAL Demand и ресурсов дома (2026-10-28)](docs/SYSTEM_TREE_AND_HEAT_RESOURCE_VISION_2026-10-28.md) — новые решения; пока не реализованы в 0.1.33
-- [System Tree: экспериментальный read-model, Lovelace и приёмка](docs/SYSTEM_TREE_SETUP.md) — только feature-ветка, ещё не установлен
+- [Исторический план миграции (0.1.33)](docs/NEXT_IMPLEMENTATION_HANDOFF_2026-10-27.md)
+- [Целевая архитектура System Tree, Demand и HOME ресурсов](docs/SYSTEM_TREE_AND_HEAT_RESOURCE_VISION_2026-10-28.md) — реализация первой версии в 0.2.0
+- [System Tree: Markdown, MQTT read-model и HAOS приёмка](docs/SYSTEM_TREE_SETUP.md)
 - [Целевая матрица климатических комнат (TARGET, реализация в отдельной ветке)](docs/TARGET_ROOM_CLIMATE_MODEL.md)
 - [Проверка вложенных списков Supervisor 2026.10.4](docs/SUPERVISOR_NESTED_SCHEMA_PROBE.md)
 - [GAP-анализ версии 0.1.31 относительно целевой матрицы](docs/TARGET_ROOM_CLIMATE_GAP.md)
 - [Манифест продукта и конфигурации](docs/PRODUCT_CONFIGURATION_MANIFEST.md)
 - [Архитектура](docs/ARCHITECTURE.md)
 - [Контракт поведения legacy-системы](docs/LEGACY_BEHAVIOR.md)
-- [Пример конфигурации](docs/CONFIG_EXAMPLE.yaml)
+- [Пример нового YAML](docs/CONFIG_EXAMPLE.yaml)
+- [Полный YAML живого 7-комнатного стенда 0.2.0](examples/dh_climate_app_0.2.0_options.yaml)
 - [Машинные события](docs/EVENTS.md)
 - [План реализации](docs/IMPLEMENTATION_PLAN.md)
 - [План приёмочного тестирования HAOS](HAOS_TEST_PLAN.md)
@@ -137,8 +149,14 @@ ghcr.io/digitalhouses/digitalhouses_climate_app:<version>
 
 Публикация релиза контролируется репозиторием. `dh_climate_app/RELEASE` должен содержать точный канонический tag для версии из `config.yaml`. После проверенного merge в `main` workflow валидирует датированный changelog, создаёт канонический tag, проверяет отсутствие уже существующих immutable GHCR version tag и GitHub Release, затем публикует multi-architecture image и GitHub Release.
 
-## Demand (0.1.33)
+## Demand и ресурсы (0.2.0)
 
-Наблюдение ROOM / DEVICE / ACTUAL запросов тепла и холода через MQTT Discovery.
-ROOM — по `hvac_action` всех комнатных термостатов; DEVICE — по `hvac_action` аппаратных `control: device`; ACTUAL — по явно указанным в `actual_demand` внешним `binary_sensor`.
-Полный контракт, имена сущностей, особенности Recorder: [docs/DEMAND_CONTRACT.md](docs/DEMAND_CONTRACT.md).
+Наблюдение ROOM HEAT/COOL, HARDWARE HEAT/COOL, VIRTUAL HEAT/COOL,
+а также вычисляемых `BOILER_HEAT_REQUEST` / `CENTRAL_HEAT_REQUEST` /
+`VRF_COOL_REQUEST` по явно привязанным устройствам.
+ROOM не становится независимым физическим выходом агрегатора.
+REQUEST ≠ подтверждение SALUS и ≠ работа котла. Для неизвестных источников —
+unavailable/UNKNOWN, точный count только для полного наблюдения.
+Устаревший `ACTUAL` удалён как неоднозначный термин. Ранее выпущенный
+фактический контракт 0.1.33 сохранён для истории:
+[DEMAND_CONTRACT.md](docs/DEMAND_CONTRACT.md).
