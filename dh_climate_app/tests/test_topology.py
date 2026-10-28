@@ -77,6 +77,13 @@ class SystemTreeTests(unittest.TestCase):
         r = room("bedroom", [device("climate.bedroom_ac", control="app", function="heat_cool")])
         tree = plain(scenario((r,), snapshot={"climate.bedroom_ac": state("heat", hvac_action="idle")}))
         self.assertIn("FAST HEAT/COOL · VIRTUAL", tree)
+        self.assertIn("🔥 HEAT · IDLE", tree)
+
+    def test_cooling_device_has_cold_emoji(self):
+        r = room("cool", [device("climate.cooler", control="app", function="cool")])
+        output = plain(scenario((r,), snapshot={"climate.cooler": state("cool", hvac_action="cooling")}, season="cool"))
+        self.assertIn("❄️ climate.cooler", output)
+        self.assertIn("❄️ COOL · COOLING", output)
 
     def test_switch_never_invents_hvac_action(self):
         r = room("bedroom", [device("switch.valve", control="app")])
@@ -94,6 +101,7 @@ class SystemTreeTests(unittest.TestCase):
         self.assertIn("HUMIDITY SOURCES", output)
         self.assertIn("sensor.backup · 🌡️ 12.2°C", output)
         self.assertIn("sensor.hum_backup · 💧 42.0%", output)
+        self.assertIn("💧 sensor.hum_backup", output)
 
     def test_missing_physical_device_not_healthy(self):
         r = room("lab", [device("climate.offline")])
