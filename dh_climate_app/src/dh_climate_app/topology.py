@@ -226,7 +226,7 @@ def build_topology(
             action_icon = {"heating": "🔥", "cooling": "❄️", "idle": "💤", "off": "⚪"}.get(state.hvac_action.value, "⚪")
             profile_icon = {"day": "☀️", "night": "🌙", "away": "🧳"}.get(state.effective_profile.value, "🎯")
             thermostat_children.append(_node(_part(f"{mode_icon} {state.hvac_mode.upper()} · {action_icon} {state.hvac_action.value.upper()} · {profile_icon} {state.effective_profile.value.upper()}", climate)))
-            if getattr(state, "window_cooling_blocked", False):
+            if getattr(state, "window_cooling_blocked", False) and state.season.value == "cool":
                 thermostat_children.append(_node(_part("🚪 WINDOW OPEN · ❄️ COOLING INHIBITED", climate)))
         else:
             thermostat_children = [_node(_part("⚪ UNKNOWN", climate))]
