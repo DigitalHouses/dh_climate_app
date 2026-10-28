@@ -180,12 +180,110 @@ def _flatten(root: dict) -> list[dict]:
     return lines
 
 
+def _demand_node(label: str, demand: Any | None, entity_id: str | None = None) -> dict:
+    state = ("ON" if demand.active else "OFF" if demand.active is False else "UNKNOWN") if demand is not None else "UNKNOWN"
+    count = "" if demand is None or demand.count is None else f" · {demand.count}"
+    return _node(_part(f"{label}: {state}{count}", entity_id))
+
+
+def _resource_signal(label: str, entity: str, snapshot: Mapping[str, Any]) -> dict:
+    sample = _snapshot_state(snapshot, entity)
+    value = str(sample.state).upper() if sample is not None else "UNKNOWN"
+    if sample is not None:
+        unit = str(sample.attributes.get("unit_of_measurement", "")).strip()
+        if unit:
+            value += f" {unit}"
+    return _node(_part(f"{label}: {value}", entity))
+
+
+def _resource_part(name: str, signals: Mapping[str, str], snapshot: Mapping[str, Any]) -> dict:
+    labels = {
+        "state": "State", "power": "⚡ Power", "rpm": "🔁 RPM",
+        "temperature": "🌡️ Temperature", "pressure": "Pressure",
+    }
+    children = [
+        _resource_signal(labels.get(key, key.title()), entity, snapshot)
+        for key, entity in signals.items()
+    ]
+    return _node(_part(name), children=children)
+
+
+def _home_resource_nodes(
+    config: Any, snapshot: Mapping[str, Any],
+    demands: Mapping[tuple[str, str], Any],
+    resource_slices: Mapping[str, Any],
+) -> list[dict]:
+    home: list[dict] = []
+    heating_source = getattr(config, "heating_source", None)
+    resources = getattr(config, "resources", {}) or {}
+    if heating_source in {"boiler", "central_heating"}:
+        label = "🔥 BOILER" if heating_source == "boiler" else "♨️ CENTRAL_HEATING"
+        request_id = (
+            "binary_sensor.dh_climate_app_boiler_heat_request"
+            if heating_source == "boiler"
+            else "binary_sensor.dh_climate_app_central_heat_request"
+        )
+        request = _demand_node(
+            f"🔥 {heating_source.upper()} HEAT REQUEST",
+            demands.get((heating_source, "heat")), request_id,
+        )
+        for layer, icon, title in (
+            ("room", "🏠", "ROOM HEAT DEMAND"),
+            ("hardware", "🎛️", "HARDWARE HEAT DEMAND"),
+            ("virtual", "🧠", "VIRTUAL HEAT DEMAND"),
+        ):
+            request["children"].append(_demand_node(
+                f"{icon} {title}", resource_slices.get(layer),
+                None if layer == "room" else f"binary_sensor.dh_climate_app_heat_{layer}_demand",
+            ))
+        resource_children = [request]
+        configured = resources.get(heating_source)
+        if configured is not None:
+            signal_titles = {
+                "status": "🏭 Status", "dhw": "🚿 DHW",
+                "target": "🎯 Target", "aggregator": "🔌 Aggregator",
+            }
+            for key, entity in configured.signals.items():
+                resource_children.append(_resource_signal(signal_titles.get(key, key), entity, snapshot))
+            if configured.pumps:
+                resource_children.append(_node(
+                    _part("🔄 PUMPS"),
+                    children=[_resource_part(item.name, item.signals, snapshot) for item in configured.pumps],
+                ))
+            if configured.circuits:
+                resource_children.append(_node(
+                    _part("🌡️ CIRCUITS"),
+                    children=[_resource_part(item.name, item.signals, snapshot) for item in configured.circuits],
+                ))
+        home.append(_node(_part(label), children=resource_children))
+    if getattr(config, "vrf_enabled", None) is True:
+        resource = resources.get("vrf")
+        # No common measurements: indoor units remain under their rooms.
+        if resource is not None and resource.signals:
+            titles = {
+                "status": "Status", "compressor": "🔄 Compressor",
+                "fault": "⚠️ Fault", "restriction": "🥶 Restriction",
+            }
+            nodes = [
+                _resource_signal(titles.get(key, key), entity, snapshot)
+                for key, entity in resource.signals.items()
+            ]
+            nodes.insert(0, _demand_node(
+                "❄️ VRF COOL REQUEST", demands.get(("vrf", "cool")),
+                "binary_sensor.dh_climate_app_vrf_cool_request",
+            ))
+            home.append(_node(_part("❄️ VRF"), children=nodes))
+    return home
+
+
 def build_topology(
     *, config: Any, outdoor: Any, weather: Any | None,
     room_states: Mapping[str, Any], humidity_states: Mapping[str, Any],
     health: Any, snapshot: Mapping[str, Any], app_version: str,
     started_at: datetime, observed_at: datetime, ha_connected: bool,
     room_targets: Mapping[str, Mapping[str, float | None]],
+    demands: Mapping[tuple[str, str], Any] | None = None,
+    resource_slices: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Stable click-addressable lines built from authoritative runtime inputs."""
     uptime_seconds = max(0, int((observed_at - started_at).total_seconds()))
@@ -205,6 +303,9 @@ def build_topology(
         if entity:
             state = _snapshot_state(snapshot, entity)
             home.append(_node(_part(f"{title}: " + (state.state.upper() if state is not None else "UNKNOWN"), entity)))
+    home.extend(_home_resource_nodes(
+        config, snapshot, demands or {}, resource_slices or {},
+    ))
     root["children"].append(_node(_part("🏡 HOME · " + _health_text(health.global_state)), children=home))
 
     room_nodes = []
