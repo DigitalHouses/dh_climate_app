@@ -89,7 +89,7 @@ def collect_problems(
                 if device.device_class is not DeviceClass.SLOW:
                     continue
                 needs_target = (
-                    device.control == "device"
+                    device.device_type == "hardware"
                     or device.temperature_sensor is not None
                 )
                 if needs_target and slow_targets.get(room.room_id) is None:
@@ -113,7 +113,7 @@ def collect_problems(
                             scope="room", severity="warning",
                             room_id=room.room_id,
                             entity_id=device.temperature_sensor,
-                            details="valve logical state OPEN in HEAT",
+                            details=f"valve fallback {device.screed_sensor_unavailable.upper()} in HEAT",
                         )
                     )
 

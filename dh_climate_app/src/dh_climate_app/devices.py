@@ -130,11 +130,9 @@ def _thermal_inhibited(
     room_state: RoomState,
     outdoor_temperature: float | None,
     heating: bool,
+    cooling: bool = False,
 ) -> bool:
-    if (
-        device.window_policy == "turn_off"
-        and room_state.window_state == "open"
-    ):
+    if cooling and room_state.window_cooling_blocked:
         return True
 
     minimum = device.min_heating_outdoor_temperature
@@ -182,8 +180,11 @@ def compile_room_devices(
                 ):
                     heating = False
                 target = slow_targets.get(room.room_id)
-                valve_open = heating
-                if device.control == "device":
+                valve_open = heating and (
+                    device.temperature_sensor is not None or
+                    device.screed_sensor_unavailable == "open"
+                )
+                if device.device_type == "hardware":
                     # The local floor thermostat owns PWM and its screed sensor.
                     # Without persisted slab target, inhibit rather than guess.
                     active = heating and target is not None
@@ -201,7 +202,7 @@ def compile_room_devices(
                         screed_values.get(device.temperature_sensor)
                     )
                     if slab is None:
-                        valve_open = True  # contractual degraded fail-open
+                        valve_open = device.screed_sensor_unavailable == "open"
                     elif target is None:
                         valve_open = False  # missing seed: no invented setpoint
                     elif slab <= target - slow_hysteresis:
@@ -223,7 +224,7 @@ def compile_room_devices(
                 )
                 continue
 
-            if device.control == "device":
+            if device.device_type == "hardware":
                 # Independent local air thermostat; room hysteresis must never
                 # pulse its heat/off or cool/off mode.
                 requested = (
@@ -238,6 +239,7 @@ def compile_room_devices(
                     device, room_state=state,
                     outdoor_temperature=outdoor_temperature,
                     heating=requested == "heat",
+                    cooling=requested == "cool",
                 ):
                     requested = "off"
                 desired.append(
@@ -258,6 +260,7 @@ def compile_room_devices(
             if active and _thermal_inhibited(
                 device, room_state=state,
                 outdoor_temperature=outdoor_temperature, heating=heating,
+                cooling=state.control_action is HvacAction.COOLING,
             ):
                 active = False
             if domain == "switch":
@@ -320,8 +323,8 @@ def compile_room_devices(
 class SlowValveIntervalGuard:
     """Apply min ON/OFF to observed SLOW valve transitions only.
 
-    Normal heating cycles respect minimum durations. Seasonal shutdown,
-    open-window inhibit and configured screed sensor outage bypass timers.
+    Normal heating cycles respect minimum durations. Seasonal shutdown
+    and configured screed sensor outage bypass timers.
     The first observed state has UNKNOWN transition time; it is never
     assigned a fabricated startup timestamp.
     """
@@ -344,7 +347,7 @@ class SlowValveIntervalGuard:
             device.entity_id: (room.room_id, device)
             for room in config.rooms for device in room.devices
             if device.device_class is DeviceClass.SLOW
-            and device.control == "app"
+            and device.device_type == "virtual"
             and device.temperature_sensor is not None
         }
         output: list[DesiredDeviceState] = []
@@ -378,8 +381,6 @@ class SlowValveIntervalGuard:
             safety = (
                 room.season is not Season.HEAT
                 or sensor_lost
-                or (device.window_policy == "turn_off"
-                    and room.window_state == "open")
             )
             if safety or last_change is None:
                 output.append(requested)

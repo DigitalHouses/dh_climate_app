@@ -23,6 +23,8 @@ SYSTEM_AVAILABILITY_TOPIC = f"{BASE_TOPIC}/availability"
 SYSTEM_PROBLEM_TOPIC = f"{BASE_TOPIC}/problem"
 SYSTEM_PROBLEM_ATTRIBUTES_TOPIC = f"{BASE_TOPIC}/problem_attributes"
 SYSTEM_EVENT_TOPIC = f"{BASE_TOPIC}/event"
+TOPOLOGY_STATE_TOPIC = f"{BASE_TOPIC}/topology/state"
+TOPOLOGY_ATTRIBUTES_TOPIC = f"{BASE_TOPIC}/topology/attributes"
 OUTDOOR_BASE = f"{BASE_TOPIC}/outdoor"
 OUTDOOR_RAW_TEMPERATURE_TOPIC = f"{OUTDOOR_BASE}/temperature_raw"
 OUTDOOR_TEMPERATURE_ATTRIBUTES_TOPIC = f"{OUTDOOR_BASE}/temperature/attributes"
@@ -177,6 +179,26 @@ def diagnostic_discovery_payloads(app_version: str) -> dict[str, tuple[str, dict
             },
         ),
     }
+
+
+def topology_discovery_payload(app_version: str) -> tuple[str, dict[str, Any]]:
+    """One non-Recorder read model for the entire System Tree."""
+    object_id = "dh_climate_app_topology"
+    return (
+        f"{DISCOVERY_PREFIX}/sensor/{object_id}/config",
+        {
+            "name": "System Tree",
+            "unique_id": object_id,
+            "default_entity_id": f"sensor.{object_id}",
+            "state_topic": TOPOLOGY_STATE_TOPIC,
+            "json_attributes_topic": TOPOLOGY_ATTRIBUTES_TOPIC,
+            "availability_topic": SYSTEM_AVAILABILITY_TOPIC,
+            "entity_category": "diagnostic",
+            "icon": "mdi:family-tree",
+            "device": system_device(app_version),
+            "origin": _origin(app_version),
+        },
+    )
 
 
 def outdoor_discovery_payloads(
@@ -514,6 +536,7 @@ def room_climate_state_topics(
         "climate_control_enabled": state.climate_control_enabled,
         "control_action": state.control_action.value,
         "window_state": state.window_state,
+        "window_cooling_blocked": state.window_cooling_blocked,
     }
     return {
         f"{base}/climate/availability": "online" if state.available else "offline",
@@ -694,6 +717,7 @@ def global_tuning_discovery_payloads(
     result = {}
     for key in GLOBAL_TUNING_SEEDS:
         is_time = key.endswith("_time")
+        is_window_delay = key == "window_open_delay_seconds"
         is_humidity = key == "humidity_hysteresis"
         object_id = f"dh_climate_app_{key}"
         result[key] = (
@@ -705,11 +729,11 @@ def global_tuning_discovery_payloads(
                 "state_topic": f"{BASE_TOPIC}/settings/{key}",
                 "command_topic": f"{BASE_TOPIC}/settings/set/{key}",
                 "unit_of_measurement": (
-                    "min" if is_time else "%RH" if is_humidity else "°C"
+                    "s" if is_window_delay else "min" if is_time else "%RH" if is_humidity else "°C"
                 ),
                 "min": 0,
-                "max": 120 if is_time else 25 if is_humidity else 5,
-                "step": 1 if is_time else 0.5 if is_humidity else 0.1,
+                "max": 300 if is_window_delay else 120 if is_time else 25 if is_humidity else 5,
+                "step": 1 if is_window_delay or is_time else 0.5 if is_humidity else 0.1,
                 "mode": "box",
                 "entity_category": "config",
                 "visible_by_default": False,
@@ -754,17 +778,20 @@ def slow_target_discovery_payload(
 # Consolidated Demand. Binary entities intentionally have no JSON attributes:
 # Recorder stores their compact transitions. Count entities carry UI details.
 def demand_object_id(layer: str, direction: str) -> str:
-    if layer not in {"room", "device", "actual"}:
-        raise ValueError(f"invalid demand layer: {layer}")
-    if direction not in {"heat", "cool"}:
-        raise ValueError(f"invalid demand direction: {direction}")
-    key = (
-        f"{direction}_demand" if layer == "room"
-        else f"{direction}_device_demand" if layer == "device"
-        else f"actual_{direction}_demand"
-    )
-    return f"dh_climate_app_{key}"
-
+    accepted = {
+        ("room", "heat"): "heat_demand",
+        ("room", "cool"): "cool_demand",
+        ("hardware", "heat"): "heat_hardware_demand",
+        ("hardware", "cool"): "cool_hardware_demand",
+        ("virtual", "heat"): "heat_virtual_demand",
+        ("virtual", "cool"): "cool_virtual_demand",
+        ("boiler", "heat"): "boiler_heat_request",
+        ("central_heating", "heat"): "central_heat_request",
+        ("vrf", "cool"): "vrf_cool_request",
+    }
+    if (layer, direction) not in accepted:
+        raise ValueError(f"invalid demand layer/direction: {layer}/{direction}")
+    return f"dh_climate_app_{accepted[(layer, direction)]}"
 
 def demand_base(layer: str, direction: str) -> str:
     demand_object_id(layer, direction)  # Validate topology.
@@ -772,57 +799,60 @@ def demand_base(layer: str, direction: str) -> str:
 
 
 def demand_discovery_payloads(
-    app_version: str,
-    *,
-    actual_sources: dict[str, str] | None = None,
+    app_version: str, *,
+    heating_source: str | None = None,
+    vrf_enabled: bool | None = None,
 ) -> dict[tuple[str, str, str], tuple[str, dict[str, Any]]]:
     result: dict[tuple[str, str, str], tuple[str, dict[str, Any]]] = {}
-    sources = actual_sources or {}
-    for layer in ("room", "device", "actual"):
-        for direction in ("heat", "cool"):
-            if layer == "actual" and not sources.get(direction):
-                continue
-            object_id = demand_object_id(layer, direction)
-            base = demand_base(layer, direction)
-            availability = [
-                {"topic": SYSTEM_AVAILABILITY_TOPIC},
-                {"topic": f"{base}/availability"},
-            ]
-            result[(layer, direction, "binary")] = (
-                f"{DISCOVERY_PREFIX}/binary_sensor/{object_id}/config",
-                {
-                    "name": object_id.removeprefix("dh_climate_app_").replace("_", " ").title(),
-                    "unique_id": object_id,
-                    "default_entity_id": f"binary_sensor.{object_id}",
-                    "state_topic": f"{base}/state",
-                    "payload_on": "ON",
-                    "payload_off": "OFF",
-                    "availability": availability,
-                    "availability_mode": "all",
-                    "retain": True,
-                    "device": system_device(app_version),
-                    "origin": _origin(app_version),
-                },
-            )
-            if layer == "actual":
-                continue
-            count_id = f"{object_id}_count"
-            result[(layer, direction, "count")] = (
-                f"{DISCOVERY_PREFIX}/sensor/{count_id}/config",
-                {
-                    "name": count_id.removeprefix("dh_climate_app_").replace("_", " ").title(),
-                    "unique_id": count_id,
-                    "default_entity_id": f"sensor.{count_id}",
-                    "state_topic": f"{base}/count",
-                    "json_attributes_topic": f"{base}/attributes",
-                    "availability": [
-                        {"topic": SYSTEM_AVAILABILITY_TOPIC},
-                        {"topic": f"{base}/count_availability"},
-                    ],
-                    "availability_mode": "all",
-                    "retain": True,
-                    "device": system_device(app_version),
-                    "origin": _origin(app_version),
-                },
-            )
+    layers = [
+        ("room", "heat"), ("room", "cool"),
+        ("hardware", "heat"), ("hardware", "cool"),
+        ("virtual", "heat"), ("virtual", "cool"),
+    ]
+    if heating_source is not None:
+        layers.append((heating_source, "heat"))
+    if vrf_enabled is True:
+        layers.append(("vrf", "cool"))
+    for layer, direction in layers:
+        object_id = demand_object_id(layer, direction)
+        base = demand_base(layer, direction)
+        availability = [
+            {"topic": SYSTEM_AVAILABILITY_TOPIC},
+            {"topic": f"{base}/availability"},
+        ]
+        result[(layer, direction, "binary")] = (
+            f"{DISCOVERY_PREFIX}/binary_sensor/{object_id}/config",
+            {
+                "name": object_id.removeprefix("dh_climate_app_").replace("_", " ").title(),
+                "unique_id": object_id,
+                "default_entity_id": f"binary_sensor.{object_id}",
+                "state_topic": f"{base}/state",
+                "payload_on": "ON",
+                "payload_off": "OFF",
+                "availability": availability,
+                "availability_mode": "all",
+                "retain": True,
+                "device": system_device(app_version),
+                "origin": _origin(app_version),
+            },
+        )
+        count_id = f"{object_id}_count"
+        result[(layer, direction, "count")] = (
+            f"{DISCOVERY_PREFIX}/sensor/{count_id}/config",
+            {
+                "name": count_id.removeprefix("dh_climate_app_").replace("_", " ").title(),
+                "unique_id": count_id,
+                "default_entity_id": f"sensor.{count_id}",
+                "state_topic": f"{base}/count",
+                "json_attributes_topic": f"{base}/attributes",
+                "availability": [
+                    {"topic": SYSTEM_AVAILABILITY_TOPIC},
+                    {"topic": f"{base}/count_availability"},
+                ],
+                "availability_mode": "all",
+                "retain": True,
+                "device": system_device(app_version),
+                "origin": _origin(app_version),
+            },
+        )
     return result

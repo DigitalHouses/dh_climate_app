@@ -21,6 +21,7 @@ GLOBAL_TUNING_SEEDS = {
     "slow_heat_min_on_time": 5.0,
     "slow_heat_min_off_time": 5.0,
     "humidity_hysteresis": 3.0,
+    "window_open_delay_seconds": 10.0,
 }
 
 
@@ -217,6 +218,7 @@ class StateStore:
             "slow_heat_min_on_time": (0.0, 120.0),
             "slow_heat_min_off_time": (0.0, 120.0),
             "humidity_hysteresis": (0.0, 25.0),
+            "window_open_delay_seconds": (0.0, 300.0),
         }
         if key not in bounds:
             raise KeyError(key)

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
+import time
 from datetime import datetime, timezone
 import json
 import logging
@@ -11,7 +13,7 @@ import signal
 from .climate_log import ClimateLog
 from .config import AppConfig, SEASON_MIN_TEMP, SEASON_MAX_TEMP, configured_entity_ids, parse_options
 from .core import Profile, Season
-from .demand import actual_demand, device_demand, room_demand
+from .demand import device_demand, room_demand, resource_request
 from .devices import StartupActuatorGate, SlowValveIntervalGuard, compile_room_devices
 from .auto_fast import AutoFastClimateTargets
 from .events import ClimateEventEngine
@@ -26,7 +28,9 @@ from .persistence import StateStore
 from .problems import Problem, collect_problems
 from .rooms import ProfileEditOverlay, RoomEngine, RoomState
 from .telemetry import TelemetryClient, TelemetryRunner
+from .topology import build_topology
 from .weather import WeatherState, build_weather_state, select_weather_source
+from .window_cooling import WindowCoolingGuard
 
 
 LOGGER = logging.getLogger(__name__)
@@ -96,6 +100,8 @@ class ClimateRuntime:
         self._weather_forecast_fetched_at: datetime | None = None
         self.startup_gate = StartupActuatorGate()
         self.slow_valve_guard = SlowValveIntervalGuard(self.store)
+        self.window_cooling = WindowCoolingGuard()
+        self._window_recheck_tasks: dict[str, tuple[float, asyncio.Task[None]]] = {}
         self._last_startup_deferred: tuple[str, ...] = ()
         self._last_reconcile = ReconcileSummary(commands=0, problems=())
         self._last_problems: tuple[Problem, ...] = ()
@@ -117,7 +123,8 @@ class ClimateRuntime:
             rooms=config.rooms,
             command_queue=self.command_queue,
             weather_enabled=self.weather_source is not None,
-            actual_demand_sources=dict(config.actual_demand),
+            heating_source=config.heating_source,
+            vrf_enabled=config.vrf_enabled,
         )
         self.ha = HomeAssistantClient(
             token=os.environ["SUPERVISOR_TOKEN"],
@@ -141,6 +148,7 @@ class ClimateRuntime:
         self.facade.set_season_available(False)
         self.facade.set_rooms_available(False)
         self.facade.set_demand_available(False)
+        self.facade.set_topology_available(False)
 
         tasks = [
             asyncio.create_task(
@@ -162,6 +170,7 @@ class ClimateRuntime:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
             await self._cancel_device_rechecks()
+            await self._cancel_window_rechecks()
             self.telemetry_runner.stop()
             await self.climate_log.close()
             self.facade.stop()
@@ -220,6 +229,49 @@ class ClimateRuntime:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
+    def _sync_window_rechecks(self, deadlines: dict[str, float]) -> None:
+        """Create one cancellable timer per open room, never poll windows."""
+        if not self._ha_connected:
+            return
+        for room_id, (deadline, task) in tuple(self._window_recheck_tasks.items()):
+            if room_id not in deadlines or abs(deadlines[room_id] - deadline) > 0.001:
+                task.cancel()
+                self._window_recheck_tasks.pop(room_id, None)
+        for room_id, deadline in deadlines.items():
+            if room_id not in self._window_recheck_tasks:
+                task = asyncio.create_task(
+                    self._delayed_window_recheck(room_id, deadline),
+                    name=f"window-cooling:{room_id}",
+                )
+                self._window_recheck_tasks[room_id] = (deadline, task)
+
+    async def _delayed_window_recheck(self, room_id: str, deadline: float) -> None:
+        current = asyncio.current_task()
+        try:
+            await asyncio.sleep(max(0.0, deadline - time.monotonic()))
+            item = self._window_recheck_tasks.get(room_id)
+            if item is not None and item[1] is current:
+                self._window_recheck_tasks.pop(room_id, None)
+            if self._ha_connected:
+                await self._recalculate(
+                    observed_at=datetime.now(timezone.utc),
+                    record_outdoor_sample=False,
+                )
+        except asyncio.CancelledError:
+            raise
+        finally:
+            item = self._window_recheck_tasks.get(room_id)
+            if item is not None and item[1] is current:
+                self._window_recheck_tasks.pop(room_id, None)
+
+    async def _cancel_window_rechecks(self) -> None:
+        tasks = [item[1] for item in self._window_recheck_tasks.values()]
+        self._window_recheck_tasks.clear()
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
     async def _on_connection(self, connected: bool) -> None:
         self._ha_connected = connected
         if not connected:
@@ -229,6 +281,8 @@ class ClimateRuntime:
             self.startup_gate.reset()
             self._last_startup_deferred = ()
             await self._cancel_device_rechecks()
+            await self._cancel_window_rechecks()
+            self.window_cooling.reset()
             self.events.reset()
             self._weather_source_last_updated = None
             self._weather_forecast_fetched_at = None
@@ -236,6 +290,7 @@ class ClimateRuntime:
             self.facade.set_season_available(False)
             self.facade.set_rooms_available(False)
             self.facade.set_demand_available(False)
+            self.facade.set_topology_available(False)
             return
 
         await self._recalculate(
@@ -338,6 +393,15 @@ class ClimateRuntime:
                 values,
                 season=outdoor_state.season,
             )
+            window_blocked, window_deadlines = self.window_cooling.evaluate(
+                room_states,
+                delay_seconds=self.store.get_global_tuning("window_open_delay_seconds"),
+            )
+            room_states = {
+                room_id: replace(state, window_cooling_blocked=window_blocked[room_id])
+                for room_id, state in room_states.items()
+            }
+            self._sync_window_rechecks(window_deadlines)
             humidity_states = self.humidity.evaluate_all(values)
             slow_targets = {
                 room_id: self.store.get_slow_target(
@@ -401,6 +465,7 @@ class ClimateRuntime:
                     room_state.control_action.value,
                     room_state.control_target_temperature,
                     room_state.window_state,
+                    room_state.window_cooling_blocked,
                 )
                 if self._last_room_log_signatures.get(room_id) != signature:
                     self._last_room_log_signatures[room_id] = signature
@@ -414,6 +479,7 @@ class ClimateRuntime:
                             f" control={room_state.control_action.value}"
                             f" enabled={room_state.climate_control_enabled}"
                             f" window={room_state.window_state}"
+                            f" window_cooling_blocked={room_state.window_cooling_blocked}"
                         ),
                     )
 
@@ -426,6 +492,7 @@ class ClimateRuntime:
             if weather_state is not None:
                 self.facade.publish_weather(weather_state)
 
+            published_room_targets: dict[str, dict[str, float | None]] = {}
             for room_id, room_state in room_states.items():
                 published_profile = self.profile_overlay.selected(
                     room_id,
@@ -445,6 +512,7 @@ class ClimateRuntime:
                     key: self.store.get_room_target(room_id, season, profile)
                     for key, (season, profile) in ROOM_TARGET_COMMANDS.items()
                 }
+                published_room_targets[room_id] = profile_targets
                 self.facade.publish_room(
                     room_state,
                     published_profile=published_profile.value,
@@ -452,22 +520,39 @@ class ClimateRuntime:
                     profile_targets=profile_targets,
                 )
 
-            # Demand is a read-only projection of the same event snapshot.
-            # No actuator commands, no independent hysteresis, no polling.
+            # All demand layers are read-only observations of this one snapshot.
+            # Room demand never creates a third independent resource input.
+            demands = {}
             for direction in ("heat", "cool"):
-                self.facade.publish_demand(
-                    "room", direction,
-                    room_demand(self.config, room_states, direction),
+                demands[("room", direction)] = room_demand(
+                    self.config, room_states, direction,
                 )
-                self.facade.publish_demand(
-                    "device", direction,
-                    device_demand(self.config, snapshot, direction),
-                )
-                if self.config.actual_demand.get(direction):
-                    self.facade.publish_demand(
-                        "actual", direction,
-                        actual_demand(self.config.actual_demand[direction], snapshot),
+                for device_type in ("hardware", "virtual"):
+                    demands[(device_type, direction)] = device_demand(
+                        self.config, snapshot, direction,
+                        device_type=device_type, room_states=room_states,
                     )
+            resource_slices = {}
+            if self.config.heating_source:
+                resource_slices["room"] = room_demand(
+                    self.config, room_states, "heat", resource="home_heating",
+                )
+                for device_type in ("hardware", "virtual"):
+                    resource_slices[device_type] = device_demand(
+                        self.config, snapshot, "heat", resource="home_heating",
+                        device_type=device_type, room_states=room_states,
+                    )
+                demands[(self.config.heating_source, "heat")] = resource_request(
+                    self.config, snapshot, "heat",
+                    resource="home_heating", room_states=room_states,
+                )
+            if self.config.vrf_enabled is True:
+                demands[("vrf", "cool")] = resource_request(
+                    self.config, snapshot, "cool",
+                    resource="vrf", room_states=room_states,
+                )
+            for (layer, direction), demand in demands.items():
+                self.facade.publish_demand(layer, direction, demand)
 
             for humidity_state in humidity_states.values():
                 self.facade.publish_humidity(humidity_state)
@@ -565,6 +650,22 @@ class ClimateRuntime:
                 problems=self._last_problems,
             )
             self.facade.publish_health(health)
+            self.facade.publish_topology(build_topology(
+                config=self.config,
+                outdoor=outdoor_state,
+                weather=weather_state,
+                room_states=room_states,
+                humidity_states=humidity_states,
+                health=health,
+                snapshot=snapshot,
+                app_version=APP_VERSION,
+                started_at=self.started_at,
+                observed_at=datetime.now(timezone.utc),
+                ha_connected=self._ha_connected,
+                room_targets=published_room_targets,
+                demands=demands,
+                resource_slices=resource_slices,
+            ))
 
             for event in self.events.observe(
                 outdoor=outdoor_state,

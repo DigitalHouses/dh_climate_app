@@ -49,11 +49,10 @@ class DeviceCompilerTests(unittest.TestCase):
         self.assertTrue(by_id["switch.radiator"].power)
         self.assertTrue(by_id["switch.dehumidifier"].power)
 
-    def test_open_window_inhibits_only_selected_device(self) -> None:
+    def test_open_window_does_not_inhibit_heating_devices(self) -> None:
         raw = options()
         room = raw["rooms"][0]
         room["window_sensors"] = "binary_sensor.window"
-        room["window_off_devices"] = "switch.radiator"
 
         states = {
             "sensor.living_room_temperature": "21",
@@ -72,10 +71,9 @@ class DeviceCompilerTests(unittest.TestCase):
         )
         by_id = {item.entity_id: item for item in desired}
 
-        # SLOW floor is not listed in window_off_devices.
+        # The window never inhibits SLOW floor or FAST HEAT radiator.
         self.assertEqual("heat", by_id["climate.floor"].hvac_mode)
-        # FAST radiator is explicitly stopped.
-        self.assertFalse(by_id["switch.radiator"].power)
+        self.assertTrue(by_id["switch.radiator"].power)
         # Window is context only: thermostat truth remains heating.
         self.assertEqual("heating", rooms["living_room"].control_action.value)
 

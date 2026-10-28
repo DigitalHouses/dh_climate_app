@@ -1,0 +1,22 @@
+# DigitalHouses Climate App · System Tree (штатная Markdown-карточка HA)
+# Дерево/эмодзи/статусы вычисляет App; Jinja только выводит готовые строки.
+# Ссылки More Info: штатные относительные query URL Home Assistant.
+# Нет JS-ресурсов, дополнительных конфигураций и списков комнат в Lovelace.
+type: markdown
+content: >-
+  {%- set entity = 'sensor.dh_climate_app_topology' -%}
+  {%- set topology = state_attr(entity, 'lines') -%}
+
+  <pre style="margin:0; padding:0; line-height:1; font-family:'Courier New',monospace; white-space:pre;">{%- if is_state(entity, 'ready') and topology is sequence -%}
+  {%- for line in topology -%}
+  {% if not loop.first %}{{ '\n' }}{% endif %}{{ line['prefix'] | default('') | e }}{%- for part in line['parts'] %}{% if part['entity_id'] is defined and part['entity_id'] %}<a href="?more-info-entity-id={{ part['entity_id'] | urlencode }}">{{ part['text'] | e }}</a>{% else %}{{ part['text'] | e }}{% endif %}{%- endfor %}
+  {%- endfor -%}
+  {%- elif is_state(entity, 'too_large') -%}
+  ⚠️ DH Climate System Tree · размер данных превышен
+  {%- else -%}
+  ⚪ DH Climate System Tree · данные недоступны
+  {%- endif -%}</pre>
+entity_id:
+  - sensor.dh_climate_app_topology
+grid_options:
+  columns: 12

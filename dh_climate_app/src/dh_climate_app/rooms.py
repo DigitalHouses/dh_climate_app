@@ -32,6 +32,7 @@ class RoomState:
     control_profile: Profile = Profile.DAY
     control_target_temperature: float | None = None
     window_state: str = "not_configured"
+    window_cooling_blocked: bool = False
 
     @property
     def available(self) -> bool:
