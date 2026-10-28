@@ -1,74 +1,74 @@
-# Пример options DigitalHouses Climate App.
-#
-# Списки сущностей задаются через запятую, потому что схема конфигурации
-# Home Assistant App поддерживает ограниченную глубину вложенности.
-# Где это указано, порядок определяет приоритет.
-
-temperature_hysteresis: 0.5
-humidity_hysteresis: 3.0
-
+# DH Climate App 0.2.0 — шаблон Supervisor options (НЕ реальные entity_id)
+# В YAML только физические привязки. Оперативные targets настраиваются через MQTT.
 night_mode: input_boolean.night_mode
 we_at_home: input_boolean.we_at_home
+heating_source: central_heating
+vrf: 'on'
 
-# Сезонные пороги: initial HEAT 10 °C, COOL 25 °C, затем SQLite/MQTT.
-# RAW-защита реверсивного обогрева кондиционером: −10 °C, фиксирована в коде.
-
-# Упорядоченная priority-цепочка: используется первый текущий валидный источник.
-# sensor.* читается из numeric state; weather.* — из текущего атрибута temperature.
-# Переключения источника журналируются и публикуются как machine Event.
-outdoor_temperature_sources: >-
-  sensor.outdoor_temperature,
-  weather.primary_provider,
-  weather.forecast_home_assistant
-
-# Приоритет влажности независим от приоритета температуры.
-# Для weather.* используется текущий атрибут humidity.
-outdoor_humidity_sources: >-
-  sensor.outdoor_humidity,
-  weather.forecast_home_assistant
+outdoor:
+  temperature_sources:
+    - weather.forecast_home_assistant
+    - sensor.outdoor_fallback
+  humidity_sources:
+    - weather.forecast_home_assistant
+    - sensor.outdoor_humidity
 
 rooms:
-  - id: living_room
+  - id: livingroom
     name: Гостиная
+    temperature_sensors:
+      - sensor.livingroom_temperature
+    humidity_sensors:
+      - sensor.livingroom_humidity
+    window_sensors:
+      - binary_sensor.livingroom_window
+    humidity_mode: 'off'
+    devices:
+      - entity: climate.livingroom_radiator
+        role: fast_heat
+        device_type: hardware
+        resource: home_heating
+      - entity: switch.floor_valve
+        role: slow_heat
+        device_type: virtual
+        actuator: normal_closed
+        # Если не указан датчик стяжки, OPEN в HEAT определяется ЯВНО.
+        screed_sensor_unavailable: open
+        resource: home_heating
 
-    # Несколько комнатных датчиков температуры усредняются.
-    temperature_sensors: >-
-      sensor.living_room_temperature
+  - id: bedroom
+    name: Спальня
+    temperature_sensors:
+      - sensor.bedroom_temperature
+    humidity_sensors: []
+    window_sensors:
+      - binary_sensor.bedroom_window
+    humidity_mode: 'off'
+    devices:
+      - entity: climate.bedroom_vrf
+        role: fast_heat
+        device_type: hardware
+        reversible: true
+        resource: vrf
 
-    humidity_sensors: >-
-      sensor.living_room_humidity
-
-    # Опциональные оконные контакты. Любой открытый контакт делает window state комнаты open.
-    window_sensors: >-
-      binary_sensor.living_room_window
-
-    # Только перечисленные тепловые устройства принудительно выключаются
-    # при открытом окне.
-    window_off_devices: >-
-      climate.living_room_ac
-
-    # Day/Night/Away/Antifreeze настроены через HA, хранятся в SQLite.
-    # FAST-устройства следуют demand комнатного термостата.
-    # Одна climate entity может присутствовать в обоих списках и тогда
-    # считается heat_cool.
-    fast_heat: >-
-      switch.living_room_radiator,
-      climate.living_room_ac
-
-    fast_cool: >-
-      climate.living_room_ac
-
-    # SLOW принимает только локальные climate-термостаты.
-    # Все SLOW-термостаты комнаты используют отдельный floor/comfort target.
-    # По продуктовому манифесту slow_target в дальнейшем должен стать
-    # persisted HA config entity, а не operational YAML-параметром.
-    slow_heat: >-
-      climate.living_room_floor
-
-    slow_target: 27.0
-
-    humidity_mode: dehumidifier
-    humidity_actuator: switch.living_room_dehumidifier
+# Не добавляйте блок resources для несуществующих или неподключённых датчиков.
+resources:
+  - id: central_heating
+    status: binary_sensor.central_heating_supply_available
+  - id: vrf
+    compressor: binary_sensor.vrf_compressor_running
+    fault: binary_sensor.vrf_alarm
+    restriction: sensor.vrf_restriction
+pumps:
+  - id: pump1
+    name: Циркуляционный насос
+    state: switch.heating_pump
+    power: sensor.heating_pump_power
+circuits:
+  - id: supply
+    name: Подача
+    temperature: sensor.central_supply_temperature
+    pressure: sensor.central_supply_pressure
 
 telemetry_enabled: false
 log_level: info
