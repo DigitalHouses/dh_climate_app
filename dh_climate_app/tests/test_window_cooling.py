@@ -19,7 +19,7 @@ from dh_climate_app.window_cooling import WindowCoolingGuard
 
 
 def window(value):
-    return {"bedroom": SimpleNamespace(window_state=value)}
+    return {"bedroom": SimpleNamespace(window_state=value, season=Season.COOL)}
 
 
 def room(season=Season.COOL, action=HvacAction.COOLING, *, blocked=False):
