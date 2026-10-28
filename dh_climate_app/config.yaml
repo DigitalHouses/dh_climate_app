@@ -22,6 +22,9 @@ options:
     temperature_sources: []
     humidity_sources: []
   rooms: []
+  resources: []
+  pumps: []
+  circuits: []
   # heating_source / vrf are selected explicitly for each installation.
   telemetry_enabled: false
   log_level: info
@@ -55,19 +58,15 @@ schema:
           reversible: "bool?"
   heating_source: "list(boiler|central_heating)?"
   vrf: "list(on|off)?"
-  boiler:
-    status: "str?"
-    dhw: "str?"
-    target: "str?"
-    aggregator: "str?"
-  central_heating:
-    status: "str?"
-    aggregator: "str?"
-  vrf_monitor:
-    status: "str?"
-    compressor: "str?"
-    fault: "str?"
-    restriction: "str?"
+  resources:
+    - id: list(boiler|central_heating|vrf)
+      status: "str?"
+      dhw: "str?"
+      target: "str?"
+      aggregator: "str?"
+      compressor: "str?"
+      fault: "str?"
+      restriction: "str?"
   pumps:
     - id: str
       name: str
