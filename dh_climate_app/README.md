@@ -94,6 +94,7 @@ SQLite в `/data/dh_climate.db` хранит только долговремен
 
 - [Следующий этап реализации: ручная замена YAML, сохранение SQLite](docs/NEXT_IMPLEMENTATION_HANDOFF_2026-10-27.md)
 - [Целевая модель System Tree, HARDWARE/VIRTUAL Demand и ресурсов дома (2026-10-28)](docs/SYSTEM_TREE_AND_HEAT_RESOURCE_VISION_2026-10-28.md) — новые решения; пока не реализованы в 0.1.33
+- [System Tree: экспериментальный read-model, Lovelace и приёмка](docs/SYSTEM_TREE_SETUP.md) — только feature-ветка, ещё не установлен
 - [Целевая матрица климатических комнат (TARGET, реализация в отдельной ветке)](docs/TARGET_ROOM_CLIMATE_MODEL.md)
 - [Проверка вложенных списков Supervisor 2026.10.4](docs/SUPERVISOR_NESTED_SCHEMA_PROBE.md)
 - [GAP-анализ версии 0.1.31 относительно целевой матрицы](docs/TARGET_ROOM_CLIMATE_GAP.md)
