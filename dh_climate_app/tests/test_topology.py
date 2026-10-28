@@ -27,7 +27,7 @@ def device(entity, control="device", role="fast_heat", function="heat"):
     return NS(entity_id=entity, control=control, device_class=NS(value="slow" if role=="slow_heat" else "fast"), function=function)
 
 
-def scenario(rooms=(), snapshot=None, temperature_sources=(), humidity_sources=(), season="heat"):
+def scenario(rooms=(), snapshot=None, temperature_sources=(), humidity_sources=(), season="heat", window_cooling_blocked=False):
     snapshot = snapshot or {}
     outdoor = NS(current_temperature=13, avg_24h_temperature=11.7, last_valid_at=None, stale=False, season=NS(value=season))
     config = NS(global_config=NS(night_mode="input_boolean.night", we_at_home="input_boolean.presence"),
@@ -36,7 +36,7 @@ def scenario(rooms=(), snapshot=None, temperature_sources=(), humidity_sources=(
                            "cool_day": 25, "cool_night": 24, "cool_away": 28} for r in rooms}
     room_states = {r.room_id: NS(season=NS(value=season), current_temperature=22.5, target_temperature=20,
                                 hvac_mode=season, hvac_action=NS(value="idle"),
-                                effective_profile=NS(value="night")) for r in rooms}
+                                effective_profile=NS(value="night"), window_cooling_blocked=window_cooling_blocked) for r in rooms}
     health = NS(climate_state="healthy", global_state="healthy", rooms={r.room_id: "healthy" for r in rooms})
     return build_topology(
         config=config, outdoor=outdoor, weather=None, room_states=room_states,
@@ -84,6 +84,17 @@ class SystemTreeTests(unittest.TestCase):
         output = plain(scenario((r,), snapshot={"climate.cooler": state("cool", hvac_action="cooling")}, season="cool"))
         self.assertIn("❄️ climate.cooler", output)
         self.assertIn("❄️ COOL · COOLING", output)
+
+    def test_window_cooling_block_is_visible_but_not_confused_with_room_action(self):
+        r = room("bedroom", [device("climate.bedroom_ac", control="app", function="heat_cool")])
+        t = scenario((r,), season="cool", window_cooling_blocked=True)
+        output = plain(t)
+        self.assertIn("🚪 WINDOW OPEN · ❄️ COOLING INHIBITED", output)
+        self.assertTrue(any(
+            part.get("entity_id") == "climate.dh_climate_app_bedroom"
+            for line in t["lines"] for part in line["parts"]
+            if "COOLING INHIBITED" in part.get("text", "")
+        ))
 
     def test_switch_never_invents_hvac_action(self):
         r = room("bedroom", [device("switch.valve", control="app")])
