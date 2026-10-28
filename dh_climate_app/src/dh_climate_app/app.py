@@ -532,7 +532,16 @@ class ClimateRuntime:
                         self.config, snapshot, direction,
                         device_type=device_type, room_states=room_states,
                     )
+            resource_slices = {}
             if self.config.heating_source:
+                resource_slices["room"] = room_demand(
+                    self.config, room_states, "heat", resource="home_heating",
+                )
+                for device_type in ("hardware", "virtual"):
+                    resource_slices[device_type] = device_demand(
+                        self.config, snapshot, "heat", resource="home_heating",
+                        device_type=device_type, room_states=room_states,
+                    )
                 demands[(self.config.heating_source, "heat")] = resource_request(
                     self.config, snapshot, "heat",
                     resource="home_heating", room_states=room_states,
@@ -655,6 +664,7 @@ class ClimateRuntime:
                 ha_connected=self._ha_connected,
                 room_targets=published_room_targets,
                 demands=demands,
+                resource_slices=resource_slices,
             ))
 
             for event in self.events.observe(
