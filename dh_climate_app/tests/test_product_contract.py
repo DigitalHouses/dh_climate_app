@@ -62,7 +62,11 @@ class ProductContractTests(unittest.TestCase):
         self.assertEqual([{"entity": "str", "role": "list(slow_heat|fast_heat|fast_cool)", "device_type": "list(virtual|hardware)", "resource": "list(home_heating|vrf|independent)?", "screed_sensor_unavailable": "list(open|closed)?", "actuator": "list(normal_open|normal_closed)?", "temperature_sensor": "str?", "reversible": "bool?"}], schema["rooms"][0]["devices"])
         self.assertIn("heating_source", schema)
         self.assertIn("vrf", schema)
-        self.assertIn("resources", schema)
+        self.assertIn("boiler", schema)
+        self.assertIn("central_heating", schema)
+        self.assertIn("vrf_monitor", schema)
+        self.assertIn("pumps", schema)
+        self.assertIn("circuits", schema)
         self.assertNotIn("temperature_hysteresis", schema)
         for key in ("hysteresis", "heat_threshold_default", "cool_threshold_default",
                     "ac_min_outdoor_temperature", "outdoor_temperature_ema_minutes"):
