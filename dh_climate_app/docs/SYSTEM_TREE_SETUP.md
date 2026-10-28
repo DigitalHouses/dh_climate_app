@@ -31,7 +31,13 @@ DigitalHouses PVE Agent. Собственного `custom:dh-climate-tree-card`,
 - `prefix` уже содержит соответствующую ветвь и отступ; `parts[].text` —
   готовые фрагменты строки. Jinja только соединяет их.
 - `parts[].entity_id` используется для генерации **штатной Markdown-ссылки**:
-  `<a href="?more-info-entity-id=climate.example">climate.example</a>`.
+  `<a href="./?more-info-entity-id=climate.example">climate.example</a>`.
+  **Важно:** query-only `href="?more-info-entity-id=..."` фильтр
+  `js-xss` внутри Markdown HA удаляет из `<a>`; допустимый вариант —
+  `href="./?more-info-entity-id=..."`. Он разрешён фильтром и передаёт
+  запрос More Info фронтенду. Такая ссылка ведёт на корень текущей панели,
+  поэтому при открытии диалога может измениться выбранная вкладка dashboard.
+  Это исправление Lovelace-карточки, не требует обновления App 0.2.0.
   URL-параметр `more-info-entity-id` обрабатывается frontend Home Assistant
   и открывает стандартное More Info; текущая страница сохраняется за счёт
   относительного query URL. Нет JS-обработчиков или дополнительных карточек.
@@ -124,7 +130,7 @@ MQTT Number. В production оборудование не затрагивать 
   рисование всех ветвей, подстановку real HA states, изменение температуры,
   уставок, профиля и health без ручного обновления страницы, unknown/unavailable,
   MQTT HA reconnect, Recorder exclusion.
-- Проверка отдельных More Info кликов через `?more-info-entity-id=`
+- Проверка отдельных More Info кликов через `./?more-info-entity-id=`
   **ещё не пройдена на живом HAOS**; автоматический Jinja-render и факт
   поддержки ссылки в штатном frontend не заменяют реальную приёмку.
 - До отдельной приёмки не обновлять установленную 0.1.33, не трогать
