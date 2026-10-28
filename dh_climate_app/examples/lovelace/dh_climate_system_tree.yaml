@@ -1,2 +1,27 @@
-type: custom:dh-climate-tree-card
-entity: sensor.dh_climate_app_topology
+# DigitalHouses Climate App · System Tree (штатная Markdown-карточка HA)
+# Дерево/эмодзи/статусы вычисляет App; Jinja только соединяет готовые строки.
+# Одна карточка; нет дополнительных JS-ресурсов и списков комнат в Lovelace.
+type: markdown
+content: >-
+  {%- set ns = namespace(lines=[]) -%}
+  {%- set entity = 'sensor.dh_climate_app_topology' -%}
+  {%- set topology = state_attr(entity, 'lines') -%}
+
+  {%- if is_state(entity, 'ready') and topology is sequence -%}
+    {%- for line in topology -%}
+      {%- set ns.lines = ns.lines + [
+        (line['prefix'] | default('')) ~
+        (line['parts'] | map(attribute='text') | join(''))
+      ] -%}
+    {%- endfor -%}
+  {%- elif is_state(entity, 'too_large') -%}
+    {%- set ns.lines = ['⚠️ DH Climate System Tree · размер данных превышен'] -%}
+  {%- else -%}
+    {%- set ns.lines = ['⚪ DH Climate System Tree · данные недоступны'] -%}
+  {%- endif -%}
+
+  <pre style="margin:0; padding:0; line-height:1; font-family:'Courier New',monospace; white-space:pre;">{{ ns.lines | join('\n') | e }}</pre>
+entity_id:
+  - sensor.dh_climate_app_topology
+grid_options:
+  columns: 12
