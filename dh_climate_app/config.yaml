@@ -52,7 +52,6 @@ schema:
           control: list(app|device)
           actuator: "list(normal_open|normal_closed)?"
           temperature_sensor: "str?"
-          window_off: "bool?"
           reversible: "bool?"
   actual_demand:
     heat: "str?"
