@@ -167,6 +167,11 @@ class SystemTreeTests(unittest.TestCase):
         self.assertIn("&lt;unsafe&gt; &amp; More Info", output)
         self.assertIn("\n└─ ", output)
         self.assertEqual(2, output.count("<a href="))
+        self.assertEqual(1, output.count("\\n"))
+        self.assertEqual(1, output.count("<pre "))
+        self.assertEqual(1, output.count("</pre>"))
+        self.assertIn("line-height:1;", output)
+        self.assertNotIn("<br", output)
 
     def test_discovery_stable_unique_id(self):
         topic, payload = topology_discovery_payload("0.1.33")
