@@ -106,6 +106,7 @@ HAOS и физического оборудования; первый реаль
 - [Исторический план миграции (0.1.33)](docs/NEXT_IMPLEMENTATION_HANDOFF_2026-10-27.md)
 - [Целевая архитектура System Tree, Demand и HOME ресурсов](docs/SYSTEM_TREE_AND_HEAT_RESOURCE_VISION_2026-10-28.md) — реализация первой версии в 0.2.0
 - [System Tree: Markdown, MQTT read-model и HAOS приёмка](docs/SYSTEM_TREE_SETUP.md)
+- [Единый dashboard 0.2 — System Tree, Комнаты, Улица, Администрирование](docs/UNIFIED_DASHBOARD_0.2.md)
 - [Целевая матрица климатических комнат (TARGET, реализация в отдельной ветке)](docs/TARGET_ROOM_CLIMATE_MODEL.md)
 - [Проверка вложенных списков Supervisor 2026.10.4](docs/SUPERVISOR_NESTED_SCHEMA_PROBE.md)
 - [GAP-анализ версии 0.1.31 относительно целевой матрицы](docs/TARGET_ROOM_CLIMATE_GAP.md)
