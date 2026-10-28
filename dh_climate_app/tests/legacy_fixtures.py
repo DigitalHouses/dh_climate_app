@@ -38,13 +38,14 @@ def parse_legacy_fixture(raw):
             devices.append({
                 "entity": entity,
                 "role": "fast_heat" if heat else "fast_cool",
-                "control": "app",
+                "device_type": "virtual",
                 "reversible": heat and cool,
             })
         for entity in slow_heat:
             devices.append({
                 "entity": entity, "role": "slow_heat",
-                "control": "device" if entity.startswith("climate.") else "app",
+                "device_type": "hardware" if entity.startswith("climate.") else "virtual",
+                **({"screed_sensor_unavailable": "open"} if entity.startswith("switch.") else {}),
                 **({"actuator": "normal_closed"} if entity.startswith("switch.") else {}),
             })
         new_rooms.append({
