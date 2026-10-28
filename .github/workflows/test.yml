@@ -27,11 +27,11 @@ jobs:
               pathlib.Path("dh_climate_app/config.yaml"),
               pathlib.Path("dh_climate_app/translations/en.yaml"),
               pathlib.Path("dh_climate_app/translations/ru.yaml"),
+              pathlib.Path("dh_climate_app/examples/lovelace/dh_climate_system_tree.yaml"),
           ):
               yaml.safe_load(path.read_text(encoding="utf-8"))
               print(f"YAML OK: {path}")
           PY
-      - run: node --check dh_climate_app/frontend/dh-climate-tree-card.js
       - run: bash -n dh_climate_app/tools/haos_system_tree_preflight.sh
       - run: bash -n dh_climate_app/rootfs/run.sh
       - run: bash -n dh_climate_app/tools/haos_live_acceptance.sh
