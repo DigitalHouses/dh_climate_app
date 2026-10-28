@@ -56,9 +56,11 @@ class DeviceConfig:
     function: str
     target_temperature: float | None
     min_heating_outdoor_temperature: float | None = None
-    control: str = "app"
+    device_type: str = "virtual"
     actuator: str | None = None
     temperature_sensor: str | None = None
+    screed_sensor_unavailable: str | None = None
+    resource: str | None = None
 
 
 @dataclass(frozen=True)
@@ -93,13 +95,29 @@ class RoomConfig:
 
 
 @dataclass(frozen=True)
+class ResourcePartConfig:
+    part_id: str
+    name: str
+    signals: Mapping[str, str]
+
+
+@dataclass(frozen=True)
+class ResourceConfig:
+    signals: Mapping[str, str]
+    pumps: tuple[ResourcePartConfig, ...] = ()
+    circuits: tuple[ResourcePartConfig, ...] = ()
+
+
+@dataclass(frozen=True)
 class AppConfig:
     global_config: GlobalConfig
     outdoor: OutdoorConfig
     rooms: tuple[RoomConfig, ...]
     telemetry_enabled: bool
     log_level: str
-    actual_demand: Mapping[str, str] = field(default_factory=dict)
+    heating_source: str | None = None
+    vrf_enabled: bool | None = None
+    resources: Mapping[str, ResourceConfig] = field(default_factory=dict)
 
 
 def _as_mapping(value: Any, path: str) -> Mapping[str, Any]:
@@ -210,6 +228,8 @@ def _room_devices(
     path: str,
     *,
     ac_min_outdoor_temperature: float,
+    heating_source: str | None = None,
+    vrf_enabled: bool | None = None,
 ) -> tuple[DeviceConfig, ...]:
     """Strict room-local topology. One entry is one physical owner.
 
@@ -223,8 +243,8 @@ def _room_devices(
         device_path = f"{path}.devices[{index}]"
         entry = _as_mapping(raw, device_path)
         unknown = set(entry) - {
-            "entity", "role", "control", "actuator", "temperature_sensor",
-            "reversible",
+            "entity", "role", "device_type", "actuator", "temperature_sensor",
+            "screed_sensor_unavailable", "resource", "reversible",
         }
         if unknown:
             raise ConfigError(f"{device_path}: unknown keys: {sorted(unknown)}")
@@ -236,24 +256,24 @@ def _room_devices(
         seen.add(entity_id)
         domain = entity_id.split(".", 1)[0]
         role = str(entry.get("role", "")).strip()
-        control = str(entry.get("control", "")).strip()
+        device_type = str(entry.get("device_type", "")).strip()
         if role not in {"slow_heat", "fast_heat", "fast_cool"}:
             raise ConfigError(f"{device_path}.role must be slow_heat, fast_heat or fast_cool")
-        if control not in {"app", "device"}:
-            raise ConfigError(f"{device_path}.control must be app or device")
-        if control == "device" and domain != "climate":
-            raise ConfigError(f"{device_path}: device control requires climate.*")
-        if role == "slow_heat" and domain == "climate" and control != "device":
+        if device_type not in {"virtual", "hardware"}:
+            raise ConfigError(f"{device_path}.device_type must be virtual or hardware")
+        if device_type == "hardware" and domain != "climate":
+            raise ConfigError(f"{device_path}: hardware thermostat requires climate.*")
+        if role == "slow_heat" and domain == "climate" and device_type != "hardware":
             raise ConfigError(
-                f"{device_path}: slow_heat climate requires control=device"
+                f"{device_path}: slow_heat climate requires device_type=hardware"
             )
 
         actuator = entry.get("actuator") or None
         if actuator is not None:
             if actuator not in {"normal_open", "normal_closed"}:
                 raise ConfigError(f"{device_path}.actuator must be normal_open or normal_closed")
-            if domain != "switch" or control != "app":
-                raise ConfigError(f"{device_path}: actuator polarity requires app-controlled switch")
+            if domain != "switch" or device_type != "virtual":
+                raise ConfigError(f"{device_path}: actuator polarity requires virtual switch")
         if role == "slow_heat" and domain == "switch" and actuator is None:
             raise ConfigError(
                 f"{device_path}: slow_heat switch requires explicit actuator polarity"
@@ -266,11 +286,30 @@ def _room_devices(
             required=False,
         ) or None
         if temperature_sensor and not (
-            role == "slow_heat" and domain == "switch" and control == "app"
+            role == "slow_heat" and domain == "switch" and device_type == "virtual"
         ):
             raise ConfigError(
-                f"{device_path}: external screed sensor is only for slow_heat switch/app"
+                f"{device_path}: external screed sensor is only for slow_heat virtual switch"
             )
+        fallback = entry.get("screed_sensor_unavailable")
+        if role == "slow_heat" and device_type == "virtual":
+            if fallback not in {"open", "closed"}:
+                raise ConfigError(
+                    f"{device_path}: slow_heat virtual requires explicit "
+                    "screed_sensor_unavailable: open|closed"
+                )
+        elif fallback is not None:
+            raise ConfigError(f"{device_path}: screed_sensor_unavailable only for slow_heat virtual")
+
+        resource = entry.get("resource")
+        if resource is not None and resource not in {"home_heating", "vrf", "independent"}:
+            raise ConfigError(f"{device_path}.resource must be home_heating, vrf or independent")
+        if resource == "home_heating" and not heating_source:
+            raise ConfigError(f"{device_path}.resource home_heating requires heating_source")
+        if resource == "vrf" and vrf_enabled is not True:
+            raise ConfigError(f"{device_path}.resource vrf requires vrf: on")
+        if resource == "home_heating" and role == "fast_cool":
+            raise ConfigError(f"{device_path}: COOL-only device cannot request home heating")
         reversible = entry.get("reversible", False)
         if type(reversible) is not bool:
             raise ConfigError(f"{device_path}.reversible must be boolean")
@@ -294,9 +333,11 @@ def _room_devices(
                 min_heating_outdoor_temperature=(
                     ac_min_outdoor_temperature if reversible else None
                 ),
-                control=control,
+                device_type=device_type,
                 actuator=actuator,
                 temperature_sensor=temperature_sensor,
+                screed_sensor_unavailable=fallback,
+                resource=resource,
             )
         )
     return tuple(devices)
@@ -337,27 +378,81 @@ def _room_humidity(
     return HumidityConfig(True, mode, target, actuator)
 
 
+_RESOURCE_SIGNALS = {
+    "boiler": {"status", "dhw", "target", "aggregator"},
+    "central_heating": {"status", "aggregator"},
+    "vrf": {"status", "compressor", "fault", "restriction"},
+}
+_RESOURCE_PART_FIELDS = {
+    "pumps": {"state", "power", "rpm"},
+    "circuits": {"temperature", "pressure"},
+}
+
+
+def _resource_config(raw: Any, resource: str) -> ResourceConfig:
+    path = f"resources.{resource}"
+    value = _as_mapping(raw, path)
+    allowed = _RESOURCE_SIGNALS[resource] | {"pumps", "circuits"}
+    if set(value) - allowed:
+        raise ConfigError(f"{path}: unknown keys: {sorted(set(value) - allowed)}")
+    signals = {
+        key: _entity(v, f"{path}.{key}", ("sensor", "binary_sensor", "climate", "switch", "number"), required=False)
+        for key, v in value.items() if key in _RESOURCE_SIGNALS[resource] and str(v or "").strip()
+    }
+    parts = {}
+    for kind in ("pumps", "circuits"):
+        items = []
+        used = set()
+        for index, item in enumerate(_as_list(value.get(kind, []), f"{path}.{kind}")):
+            part_path = f"{path}.{kind}[{index}]"
+            item = _as_mapping(item, part_path)
+            if set(item) - ({"id", "name"} | _RESOURCE_PART_FIELDS[kind]):
+                raise ConfigError(f"{part_path}: unknown fields")
+            part_id = str(item.get("id", "")).strip()
+            name = str(item.get("name", "")).strip()
+            if not ROOM_ID_RE.fullmatch(part_id) or not name or part_id in used:
+                raise ConfigError(f"{part_path}: unique id and name required")
+            used.add(part_id)
+            part_signals = {
+                key: _entity(v, f"{part_path}.{key}", ("sensor", "binary_sensor", "switch", "climate"), required=False)
+                for key, v in item.items() if key in _RESOURCE_PART_FIELDS[kind] and str(v or "").strip()
+            }
+            if part_signals:
+                items.append(ResourcePartConfig(part_id, name, part_signals))
+        parts[kind] = tuple(items)
+    return ResourceConfig(signals, parts["pumps"], parts["circuits"])
+
+
 def parse_options(raw: Any) -> AppConfig:
     """Only the target Supervisor contract; legacy options are not migrated."""
     root = _as_mapping(raw, "options")
     allowed = {
         "night_mode", "we_at_home", "outdoor", "rooms",
-        "telemetry_enabled", "log_level", "actual_demand",
+        "telemetry_enabled", "log_level", "heating_source", "vrf", "resources",
     }
     unknown = set(root) - allowed
     if unknown:
         raise ConfigError(f"options: obsolete or unknown keys: {sorted(unknown)}")
 
-    raw_actual = _as_mapping(root.get("actual_demand", {}), "actual_demand")
-    if set(raw_actual) - {"heat", "cool"}:
-        raise ConfigError("actual_demand: unknown keys")
-    actual_sources = {
-        direction: _entity(
-            raw_actual.get(direction), f"actual_demand.{direction}",
-            ("binary_sensor",), required=False,
-        )
-        for direction in ("heat", "cool")
-    }
+    heating_source = root.get("heating_source") or None
+    if heating_source not in (None, "boiler", "central_heating"):
+        raise ConfigError("heating_source must be boiler or central_heating")
+    vrf = root.get("vrf")
+    if vrf not in (None, "on", "off"):
+        raise ConfigError("vrf must be on or off")
+    vrf_enabled = None if vrf is None else vrf == "on"
+    raw_resources = _as_mapping(root.get("resources", {}), "resources")
+    if set(raw_resources) - set(_RESOURCE_SIGNALS):
+        raise ConfigError("resources: unknown resource")
+    if heating_source == "central_heating" and "boiler" in raw_resources:
+        raise ConfigError("CENTRAL_HEATING cannot configure BOILER")
+    if heating_source == "boiler" and "central_heating" in raw_resources:
+        raise ConfigError("BOILER cannot configure CENTRAL_HEATING")
+    if not heating_source and any(k in raw_resources for k in ("boiler", "central_heating")):
+        raise ConfigError("resources: heating_source is required for water heating")
+    if vrf_enabled is not True and "vrf" in raw_resources:
+        raise ConfigError("resources.vrf requires vrf: on")
+    resources = {name: _resource_config(value, name) for name, value in raw_resources.items()}
 
     global_config = GlobalConfig(
         hysteresis=0.5,  # Persisted global tuning supersedes this initial seed.
@@ -432,6 +527,8 @@ def parse_options(raw: Any) -> AppConfig:
                 devices=_room_devices(
                     room, path,
                     ac_min_outdoor_temperature=DEFAULT_AC_MIN_OUTDOOR_TEMPERATURE,
+                    heating_source=heating_source,
+                    vrf_enabled=vrf_enabled,
                 ),
                 humidity=_room_humidity(room, path, humidity_sensors),
             )
@@ -471,7 +568,9 @@ def parse_options(raw: Any) -> AppConfig:
         rooms=tuple(rooms),
         telemetry_enabled=telemetry_enabled,
         log_level=log_level,
-        actual_demand=actual_sources,
+        heating_source=heating_source,
+        vrf_enabled=vrf_enabled,
+        resources=resources,
     )
 
 
@@ -486,7 +585,10 @@ def configured_entity_ids(config: AppConfig) -> frozenset[str]:
 
     result.update(config.outdoor.temperature_sources)
     result.update(config.outdoor.humidity_sources)
-    result.update(entity for entity in config.actual_demand.values() if entity)
+    for resource in config.resources.values():
+        result.update(resource.signals.values())
+        for part in (*resource.pumps, *resource.circuits):
+            result.update(part.signals.values())
 
     for room in config.rooms:
         result.update(room.temperature_sensors)
