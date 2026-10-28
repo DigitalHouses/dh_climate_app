@@ -29,6 +29,8 @@ def room_demand(
     config: AppConfig,
     states: Mapping[str, RoomState],
     direction: str,
+    *,
+    resource: str | None = None,
 ) -> Demand:
     if direction not in {"heat", "cool"}:
         raise ValueError("direction must be heat or cool")
@@ -36,6 +38,11 @@ def room_demand(
     known: list[dict[str, str]] = []
     unknown = False
     for room in config.rooms:
+        if resource is not None and not any(
+            device.resource == resource and device.function in {direction, "heat_cool"}
+            for device in room.devices
+        ):
+            continue
         state = states.get(room.room_id)
         if state is None or not state.available:
             unknown = True
