@@ -22,9 +22,7 @@ options:
     temperature_sources: []
     humidity_sources: []
   rooms: []
-  actual_demand:
-    heat: ""
-    cool: ""
+  # heating_source / vrf are selected explicitly for each installation.
   telemetry_enabled: false
   log_level: info
 schema:
@@ -49,12 +47,51 @@ schema:
       devices:
         - entity: str
           role: list(slow_heat|fast_heat|fast_cool)
-          control: list(app|device)
+          device_type: list(virtual|hardware)
+          resource: "list(home_heating|vrf|independent)?"
+          screed_sensor_unavailable: "list(open|closed)?"
           actuator: "list(normal_open|normal_closed)?"
           temperature_sensor: "str?"
           reversible: "bool?"
-  actual_demand:
-    heat: "str?"
-    cool: "str?"
+  heating_source: "list(boiler|central_heating)?"
+  vrf: "list(on|off)?"
+  resources:
+    boiler:
+      status: "str?"
+      dhw: "str?"
+      target: "str?"
+      aggregator: "str?"
+      pumps:
+        - id: str
+          name: str
+          state: "str?"
+          power: "str?"
+          rpm: "str?"
+      circuits:
+        - id: str
+          name: str
+          temperature: "str?"
+          pressure: "str?"
+    central_heating:
+      status: "str?"
+      aggregator: "str?"
+      pumps:
+        - id: str
+          name: str
+          state: "str?"
+          power: "str?"
+          rpm: "str?"
+      circuits:
+        - id: str
+          name: str
+          temperature: "str?"
+          pressure: "str?"
+    vrf:
+      status: "str?"
+      compressor: "str?"
+      fault: "str?"
+      restriction: "str?"
+      pumps: []
+      circuits: []
   telemetry_enabled: bool
   log_level: list(debug|info|warning|error)
