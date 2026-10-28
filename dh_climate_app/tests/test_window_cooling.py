@@ -49,10 +49,10 @@ def config():
             "temperature_sensors": ["sensor.bedroom_temp"],
             "window_sensors": ["binary_sensor.bedroom_window"],
             "devices": [
-                {"entity": "climate.virtual_ac", "role": "fast_heat", "control": "app", "reversible": True},
-                {"entity": "climate.wall_ac", "role": "fast_cool", "control": "device"},
-                {"entity": "switch.radiator", "role": "fast_heat", "control": "app"},
-                {"entity": "switch.floor", "role": "slow_heat", "control": "app", "actuator": "normal_closed"},
+                {"entity": "climate.virtual_ac", "role": "fast_heat", "device_type": "virtual", "reversible": True},
+                {"entity": "climate.wall_ac", "role": "fast_cool", "device_type": "hardware"},
+                {"entity": "switch.radiator", "role": "fast_heat", "device_type": "virtual"},
+                {"entity": "switch.floor", "role": "slow_heat", "device_type": "virtual", "actuator": "normal_closed", "screed_sensor_unavailable": "open"},
             ],
         }],
     })
@@ -176,7 +176,7 @@ class WindowSettingsTests(unittest.TestCase):
             parse_options({"rooms": [{
                 "id": "bedroom", "name": "Bedroom",
                 "temperature_sensors": ["sensor.bedroom"],
-                "devices": [{"entity": "climate.ac", "role": "fast_cool", "control": "app", "window_off": True}],
+                "devices": [{"entity": "climate.ac", "role": "fast_cool", "device_type": "virtual", "window_off": True}],
             }]})
 
 
