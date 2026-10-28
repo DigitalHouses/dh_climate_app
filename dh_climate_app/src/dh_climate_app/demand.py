@@ -181,6 +181,13 @@ def resource_request(
             raise ValueError("VRF cool request needs vrf: on")
     else:
         raise ValueError("unknown resource")
+    if not any(
+        device.resource == resource and device.function in {direction, "heat_cool"}
+        for room in config.rooms for device in room.devices
+    ):
+        # A configured source without any bound input has no known request
+        # state.  Do not publish a fabricated OFF for the building resource.
+        return Demand(None, None)
     return device_demand(
         config, states, direction,
         resource=resource, room_states=room_states,
