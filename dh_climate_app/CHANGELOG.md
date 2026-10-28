@@ -1,5 +1,37 @@
 # История изменений
 
+## 0.2.0 — 2026-10-28
+
+- Несовместимый **новый Supervisor YAML**: `device_type: virtual|hardware`
+  вместо `control: app|device`. Роли `fast_heat`, `fast_cool`, `slow_heat`
+  независимы от типа регулятора; один реверсивный AC остаётся одним устройством.
+- Для каждого **SLOW_HEAT VIRTUAL** требуется явная
+  `screed_sensor_unavailable: open|closed`, как при отсутствии датчика стяжки
+  по проекту, так и при его отказе. Сохранены NO/NC, сезонные ограничения,
+  SLOW targets и таймеры; для потери существующего датчика сохраняется Problem.
+- Окно блокирует **только FAST_COOL**, включая охлаждение реверсивного
+  устройства, через `window_open_delay_seconds`: глобальная MQTT Number,
+  SQLite seed 10 сек, диапазон 0–300 сек; отменяемая event-driven выдержка.
+  FAST_HEAT и SLOW_HEAT не закрываются оконной политикой.
+- Глобальные `heating_source: boiler|central_heating` и `vrf: on|off`;
+  ресурсные запросы разрешены только явно связанным устройствам
+  (`resource: home_heating|vrf|independent`). Нет выдуманных входов,
+  нулевой телеметрии и команд запускать котёл/насосы из Demand.
+- MQTT Demand: независимые ROOM, HARDWARE, VIRTUAL и вычисляемые
+  `BOILER_HEAT_REQUEST` / `CENTRAL_HEAT_REQUEST` / `VRF_COOL_REQUEST`.
+  Прежние диагностические DEVICE/ACTUAL discovery удаляются.
+  `REQUEST` не тождественен обратной связи SALUS.
+- Полное дерево в штатном Lovelace Markdown из единого read-model:
+  HOME → BOILER либо CENTRAL_HEATING, необязательные агрегатор/насосы/
+  контуры, общая VRF телеметрия при наличии; комнатные FAST/SLOW
+  остаются под Room Climate. Кликабельные HA More Info ссылки,
+  непрерывные соединительные линии и плотный `<pre>`.
+- Использовать полную новую конфигурацию из
+  `examples/dh_climate_app_0.2.0_options.yaml`. SQLite /data и действующие
+  комнатные MQTT climate/целевые уставки сохраняются; **миграции YAML нет**.
+  До HAOS acceptance считать выпуск экспериментальным.
+
+
 ## 0.1.33 — 2026-10-28
 
 - Добавлено агрегирование запросов ROOM HEAT/COOL строго по {hvac_mode, hvac_action} комнатных термостатов (гистерезис уже внутри ROOM), без зависимости от физических устройств.
