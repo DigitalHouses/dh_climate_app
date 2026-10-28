@@ -55,7 +55,6 @@ class DeviceConfig:
     device_class: DeviceClass
     function: str
     target_temperature: float | None
-    window_policy: str = "ignore"
     min_heating_outdoor_temperature: float | None = None
     control: str = "app"
     actuator: str | None = None
@@ -225,7 +224,7 @@ def _room_devices(
         entry = _as_mapping(raw, device_path)
         unknown = set(entry) - {
             "entity", "role", "control", "actuator", "temperature_sensor",
-            "window_off", "reversible",
+            "reversible",
         }
         if unknown:
             raise ConfigError(f"{device_path}: unknown keys: {sorted(unknown)}")
@@ -279,9 +278,6 @@ def _room_devices(
             raise ConfigError(
                 f"{device_path}: reversible requires fast_heat climate"
             )
-        window_off = entry.get("window_off", False)
-        if type(window_off) is not bool:
-            raise ConfigError(f"{device_path}.window_off must be boolean")
         device_class = (
             DeviceClass.SLOW if role == "slow_heat" else DeviceClass.FAST
         )
@@ -295,7 +291,6 @@ def _room_devices(
                 device_class=device_class,
                 function=function,
                 target_temperature=None,
-                window_policy="turn_off" if window_off else "ignore",
                 min_heating_outdoor_temperature=(
                     ac_min_outdoor_temperature if reversible else None
                 ),
