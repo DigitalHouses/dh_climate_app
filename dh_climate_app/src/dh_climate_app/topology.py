@@ -40,7 +40,7 @@ def _snapshot_state(snapshot: Mapping[str, Any], entity_id: str) -> Any | None:
 
 
 def _source_parts(entity: str, snapshot: Mapping[str, Any], weather: Any | None) -> list[dict[str, str]]:
-    parts = [_part(entity, entity)]
+    parts = [_part(("🌤️ " if entity.startswith("weather.") else "🌡️ " if entity.startswith("sensor.") else "🔗 ") + entity, entity)]
     state = _snapshot_state(snapshot, entity)
     if state is None:
         parts.append(_part(" · UNKNOWN"))
@@ -82,7 +82,7 @@ def _source_nodes(config: Any, snapshot: Mapping[str, Any], weather: Any | None)
     temperature_sources = config.outdoor.temperature_sources
     humidity_sources = config.outdoor.humidity_sources
     if temperature_sources == humidity_sources:
-        return [_node(_part("🔗 SOURCES"), children=_source_chain(temperature_sources, snapshot, weather, kind="both"))] if temperature_sources else []
+        return [_node(_part("📡 SOURCES"), children=_source_chain(temperature_sources, snapshot, weather, kind="both"))] if temperature_sources else []
     children = []
     if temperature_sources:
         children.append(_node(_part("🌡️ TEMPERATURE SOURCES"), children=_source_chain(temperature_sources, snapshot, weather, kind="temperature")))
@@ -106,9 +106,10 @@ def _room_targets(room_id: str, values: Mapping[str, float | None], season: str)
         if season == "heat" else
         (("cool_day", "☀️"), ("cool_night", "🌙"), ("cool_away", "🧳"))
     )
-    parts = [_part("🎯 " + season.upper() + ": ")]
+    parts = [_part("🎯 ")]
     for key, icon in spec:
-        val = _measurement(values.get(key), "")
+        numeric = _number(values.get(key))
+        val = f"{numeric:g}" if numeric is not None else None
         if val is not None:
             if len(parts) > 1:
                 parts.append(_part(" · "))
@@ -143,7 +144,8 @@ def _device_node(device: Any, snapshot: Mapping[str, Any]) -> dict:
             children.append(_node(_part("🔥 " + state.state.upper() + action_text, entity)))
         elif domain == "switch":
             children.append(_node(_part("🔌 " + state.state.upper(), entity)))
-    return _node(_part(f"🔥 {name} · {online}", entity), children=[_node(_part(entity, entity), children=children)])
+    device_icon = "❄️" if device.function == "cool" else "🔥"
+    return _node(_part(f"{device_icon} {name} · {online}", entity), children=[_node(_part(entity, entity), children=children)])
 
 
 def _humidity_node(room: Any, state: Any | None, snapshot: Mapping[str, Any]) -> dict | None:
@@ -188,16 +190,16 @@ def build_topology(
     uptime_minutes = (uptime_seconds // 600) * 10
     root = _node(_part("🏠 dh_climate_app · " + _health_text(health.climate_state), "sensor.dh_climate_app_climate_health"))
     root["children"].append(_node(_part(("🟢 ONLINE" if ha_connected else "⚪ OFFLINE") + f" · v{app_version} · Uptime: ~{uptime_minutes // 60}h {uptime_minutes % 60}m", "sensor.dh_climate_app_version")))
-    outdoor_children = [_node(_part("📅 SEASON: " + outdoor.season.value.upper(), "climate.dh_climate_app_season"))]
+    outdoor_children = [_node(_part("🔥 Season: " + outdoor.season.value.upper(), "climate.dh_climate_app_season"))]
     avg = _measurement(outdoor.avg_24h_temperature, "°C")
     if avg is not None:
-        outdoor_children.append(_node(_part("🌡️ AVG24: " + avg, "sensor.dh_climate_app_outdoor_temperature_avg24")))
+        outdoor_children.append(_node(_part("📊 Average 24h: " + avg, "sensor.dh_climate_app_outdoor_temperature_avg24")))
     outdoor_children.extend(_source_nodes(config, snapshot, weather))
     out_health = "unknown" if outdoor.current_temperature is None and outdoor.last_valid_at is None else "degraded" if outdoor.stale else "healthy"
     root["children"].append(_node(_part("🌤️ OUTDOOR · " + _health_text(out_health)), children=outdoor_children))
 
     home = []
-    for entity, title in ((config.global_config.night_mode, "🌙 NIGHT MODE"), (config.global_config.we_at_home, "🏡 PRESENCE")):
+    for entity, title in ((config.global_config.night_mode, "🌙 Night mode"), (config.global_config.we_at_home, "🏠 Presence")):
         if entity:
             state = _snapshot_state(snapshot, entity)
             home.append(_node(_part(f"{title}: " + (state.state.upper() if state is not None else "UNKNOWN"), entity)))
@@ -218,7 +220,10 @@ def build_topology(
             thermostat_children = []
             if current is not None or target is not None:
                 thermostat_children.append(_node(_part("🌡️ " + (current or "?") + " / " + (target or "?"), climate)))
-            thermostat_children.append(_node(_part("🔥 " + state.hvac_mode.upper() + " · " + state.hvac_action.value.upper() + " · " + state.effective_profile.value.upper(), climate)))
+            mode_icon = "🔥" if state.hvac_mode == "heat" else "❄️" if state.hvac_mode == "cool" else "⚪"
+            action_icon = {"heating": "🔥", "cooling": "❄️", "idle": "💤", "off": "⚪"}.get(state.hvac_action.value, "⚪")
+            profile_icon = {"day": "☀️", "night": "🌙", "away": "🧳"}.get(state.effective_profile.value, "🎯")
+            thermostat_children.append(_node(_part(f"{mode_icon} {state.hvac_mode.upper()} · {action_icon} {state.hvac_action.value.upper()} · {profile_icon} {state.effective_profile.value.upper()}", climate)))
         else:
             thermostat_children = [_node(_part("⚪ UNKNOWN", climate))]
         thermostat_children.extend(_device_node(device, snapshot) for device in room.devices)
