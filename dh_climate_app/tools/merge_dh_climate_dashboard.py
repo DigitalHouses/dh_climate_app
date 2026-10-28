@@ -9,11 +9,11 @@ from __future__ import annotations
 import argparse
 from copy import deepcopy
 from pathlib import Path
-from ruamel.yaml import YAML
+import yaml
 
 ALLOWED={'climate','outdoor','admin'}
 
-def merge(existing:dict, addon:dict)->dict:
+def merge(existing:dict, addon:dict)->tuple[dict,list[str],list[str]]:
     if not isinstance(existing,dict) or not isinstance(existing.get('views'),list):
         raise ValueError('В экспортированном dashboard отсутствует список views')
     if not isinstance(addon,dict) or not isinstance(addon.get('views'),list):
@@ -50,14 +50,12 @@ def main()->None:
     args=p.parse_args()
     if args.out.exists(): p.error('Файл результата уже существует; перезапись запрещена')
     if args.out.resolve()==args.existing.resolve():p.error('Нельзя перезаписывать текущий dashboard')
-    yaml=YAML()
-    yaml.width=2000
-    with args.existing.open(encoding='utf-8') as f: current=yaml.load(f)
-    with args.overlay.open(encoding='utf-8') as f:overlay=yaml.load(f)
+    with args.existing.open(encoding='utf-8') as f: current=yaml.safe_load(f)
+    with args.overlay.open(encoding='utf-8') as f:overlay=yaml.safe_load(f)
     output,replaced,added=merge(current,overlay)
     with args.out.open('x',encoding='utf-8') as f:
         f.write('# DH Climate · объединённый Lovelace. Текущий dashboard не изменён.\n')
-        yaml.dump(output,f)
+        yaml.safe_dump(output,f,allow_unicode=True,sort_keys=False,width=2000)
     print('REPLACED:',', '.join(replaced) or '-')
     print('ADDED:',', '.join(added) or '-')
     print('OUTPUT:',args.out)
