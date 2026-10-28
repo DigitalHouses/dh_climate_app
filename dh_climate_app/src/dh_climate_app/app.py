@@ -26,6 +26,7 @@ from .persistence import StateStore
 from .problems import Problem, collect_problems
 from .rooms import ProfileEditOverlay, RoomEngine, RoomState
 from .telemetry import TelemetryClient, TelemetryRunner
+from .topology import build_topology
 from .weather import WeatherState, build_weather_state, select_weather_source
 
 
@@ -426,6 +427,7 @@ class ClimateRuntime:
             if weather_state is not None:
                 self.facade.publish_weather(weather_state)
 
+            published_room_targets: dict[str, dict[str, float | None]] = {}
             for room_id, room_state in room_states.items():
                 published_profile = self.profile_overlay.selected(
                     room_id,
@@ -445,6 +447,7 @@ class ClimateRuntime:
                     key: self.store.get_room_target(room_id, season, profile)
                     for key, (season, profile) in ROOM_TARGET_COMMANDS.items()
                 }
+                published_room_targets[room_id] = profile_targets
                 self.facade.publish_room(
                     room_state,
                     published_profile=published_profile.value,
@@ -565,6 +568,20 @@ class ClimateRuntime:
                 problems=self._last_problems,
             )
             self.facade.publish_health(health)
+            self.facade.publish_topology(build_topology(
+                config=self.config,
+                outdoor=outdoor_state,
+                weather=weather_state,
+                room_states=room_states,
+                humidity_states=humidity_states,
+                health=health,
+                snapshot=snapshot,
+                app_version=APP_VERSION,
+                started_at=self.started_at,
+                observed_at=datetime.now(timezone.utc),
+                ha_connected=self._ha_connected,
+                room_targets=published_room_targets,
+            ))
 
             for event in self.events.observe(
                 outdoor=outdoor_state,
