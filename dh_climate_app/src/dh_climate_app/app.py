@@ -13,7 +13,7 @@ import signal
 from .climate_log import ClimateLog
 from .config import AppConfig, SEASON_MIN_TEMP, SEASON_MAX_TEMP, configured_entity_ids, parse_options
 from .core import Profile, Season
-from .demand import actual_demand, device_demand, room_demand
+from .demand import device_demand, room_demand, resource_request
 from .devices import StartupActuatorGate, SlowValveIntervalGuard, compile_room_devices
 from .auto_fast import AutoFastClimateTargets
 from .events import ClimateEventEngine
@@ -123,7 +123,8 @@ class ClimateRuntime:
             rooms=config.rooms,
             command_queue=self.command_queue,
             weather_enabled=self.weather_source is not None,
-            actual_demand_sources=dict(config.actual_demand),
+            heating_source=config.heating_source,
+            vrf_enabled=config.vrf_enabled,
         )
         self.ha = HomeAssistantClient(
             token=os.environ["SUPERVISOR_TOKEN"],
@@ -519,22 +520,30 @@ class ClimateRuntime:
                     profile_targets=profile_targets,
                 )
 
-            # Demand is a read-only projection of the same event snapshot.
-            # No actuator commands, no independent hysteresis, no polling.
+            # All demand layers are read-only observations of this one snapshot.
+            # Room demand never creates a third independent resource input.
+            demands = {}
             for direction in ("heat", "cool"):
-                self.facade.publish_demand(
-                    "room", direction,
-                    room_demand(self.config, room_states, direction),
+                demands[("room", direction)] = room_demand(
+                    self.config, room_states, direction,
                 )
-                self.facade.publish_demand(
-                    "device", direction,
-                    device_demand(self.config, snapshot, direction),
-                )
-                if self.config.actual_demand.get(direction):
-                    self.facade.publish_demand(
-                        "actual", direction,
-                        actual_demand(self.config.actual_demand[direction], snapshot),
+                for device_type in ("hardware", "virtual"):
+                    demands[(device_type, direction)] = device_demand(
+                        self.config, snapshot, direction,
+                        device_type=device_type, room_states=room_states,
                     )
+            if self.config.heating_source:
+                demands[(self.config.heating_source, "heat")] = resource_request(
+                    self.config, snapshot, "heat",
+                    resource="home_heating", room_states=room_states,
+                )
+            if self.config.vrf_enabled is True:
+                demands[("vrf", "cool")] = resource_request(
+                    self.config, snapshot, "cool",
+                    resource="vrf", room_states=room_states,
+                )
+            for (layer, direction), demand in demands.items():
+                self.facade.publish_demand(layer, direction, demand)
 
             for humidity_state in humidity_states.values():
                 self.facade.publish_humidity(humidity_state)
@@ -645,6 +654,7 @@ class ClimateRuntime:
                 observed_at=datetime.now(timezone.utc),
                 ha_connected=self._ha_connected,
                 room_targets=published_room_targets,
+                demands=demands,
             ))
 
             for event in self.events.observe(
