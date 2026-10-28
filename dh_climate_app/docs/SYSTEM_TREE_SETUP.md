@@ -1,82 +1,89 @@
-# System Tree — экспериментальная поставка, только чтение
+# System Tree — штатная Markdown-карточка Home Assistant
 
-**Baseline:** 0.1.33. **Статус:** код в feature-ветке, HAOS live acceptance ещё не пройден.
-Действующая конфигурация Supervisor и SQLite не меняются. Реле, котёл и насосы не управляются.
+**Baseline:** DH Climate App 0.1.33. **Статус:** экспериментальная реализация в PR, HAOS live acceptance ещё не проведён.
+Основная система отопления, SQLite, исполнительная логика и Supervisor YAML не меняются.
 
-## Контракт
+## Решение по интерфейсу
 
-- Единственный источник дерева: `sensor.dh_climate_app_topology`.
-- MQTT: `DigitalHouses/Global/dh_climate_app/topology/state` — `ready | offline | too_large`;
-  `.../topology/attributes` — объект `{schema_version: 1, lines: [...]}`.
-- `lines[]` содержит `prefix` с уже рассчитанными линиями `├─ │ └─` и
-  `parts[]` вида `{text, entity_id?}`. `entity_id` — настоящий HA entity_id.
-- UI не строит логику источников, климата и Demand. Это презентационный слой;
-  клик по конкретному span вызывает стандартный `hass-more-info`.
-- Обновление через штатные HA push-state события, без JS polling.
-- MQTT retained публикация только при изменении payload, статус `offline` при потере HA-соединения
-  исключает показ устаревшего дерева как актуального.
-- Полное дерево ограничено 32 000 байт UTF-8. При превышении `too_large`,
-  сообщение в логе и явная ошибка в карточке вместо обрезанного или ложного дерева.
-- Диагностический sensor не предназначен для Recorder. Добавить локально
-  `sensor.dh_climate_app_topology` в `recorder.exclude.entities`,
-  если он не исключён действующей Recorder include-политикой.
+Используем **одну штатную карточку `type: markdown`**, как в проекте
+DigitalHouses PVE Agent. Собственного `custom:dh-climate-tree-card`, JS-ресурса
+и регистрации в Lovelace **нет**. Пользователь вручную вставляет YAML
+из [examples/lovelace/dh_climate_system_tree.yaml](../examples/lovelace/dh_climate_system_tree.yaml).
+Никаких автоматических изменений Dashboard App не выполняет.
 
-## Установка карточки (после review / release)
+В отличие от более объёмного шаблона DH PVE, Jinja здесь не просматривает все
+`states.sensor` и не реализует бизнес-правила. Он читает готовую топологию
+из `sensor.dh_climate_app_topology` и соединяет подписи элементов в дерево,
+сохраняя `├─`, `│`, `└─`, статусы и эмодзи.
+Вся структура комнат, HOME/OUTDOOR, источников, устройств, сезонной логики
+и последующих ресурсов определяется Python App по достоверным данным.
 
-Лёгкая карточка хранится отдельно в `frontend/dh-climate-tree-card.js`.
-Нативный HAOS App не гарантирует автоматического помещения ресурсов в `/config/www`
-и регистрации Lovelace. **Не считать автоматическую поставку подтверждённой.**
+## Контракт read-model
 
-На HAOS Terminal/SSH, после публикации утверждённой версии:
+- MQTT state: `DigitalHouses/Global/dh_climate_app/topology/state`:
+  `ready | offline | too_large`.
+- MQTT attributes: `DigitalHouses/Global/dh_climate_app/topology/attributes`:
+  `{schema_version: 1, lines: [{prefix, parts: [{text, entity_id?}]}]}`.
+- Единый HA-сенсор `sensor.dh_climate_app_topology` через MQTT Discovery.
+- `prefix` уже содержит соответствующую ветвь и отступ; `parts[].text` —
+  готовые фрагменты строки. Jinja только соединяет их.
+- `parts[].entity_id` сохраняется как metadata для последующей диагностической
+  совместимости, но штатная Markdown-карточка **не умеет открыть More Info
+  по клику на отдельный фрагмент текста**. Это отдельный непройденный критерий
+  исходного TARGET, не маскировать его фиктивной ссылкой.
+- Изменения доходят через обычные HA state updates, без polling в Lovelace.
+- Ретейнимые MQTT публикации дедуплицируются; при потере HA статус `offline`.
+- Ограничение на JSON-атрибуты: 32 000 байт UTF-8; при превышении явный
+  `too_large`, а не обрезанное дерево.
+- Сенсор диагностический, **не предназначен для Recorder**. Исключить
+  `sensor.dh_climate_app_topology` из Recorder, если действующая
+  include-политика этого ещё не делает.
 
-```bash
-mkdir -p /config/www
-curl -fsSL https://raw.githubusercontent.com/DigitalHouses/dh_climate_app/main/dh_climate_app/frontend/dh-climate-tree-card.js \
-  -o /config/www/dh-climate-tree-card.js
-```
+## Markdown YAML
 
-Если каталог `/config/www` создан впервые после запуска Home Assistant,
-для включения `/local/` требуется один перезапуск Home Assistant.
-Файлы в `/config/www` доступны по URL без авторизации: никаких секретов там не хранить.
+Скопировать **целиком** файл
+[dh_climate_system_tree.yaml](../examples/lovelace/dh_climate_system_tree.yaml)
+в редактор одной Markdown-карточки Home Assistant. `grid_options.columns: 12`
+соответствует примеру DH PVE; при необходимости размещение меняется вручную.
+Дополнительных JS-зависимостей, `/config/www` или Dashboard Resources нет.
 
-В Home Assistant: **Настройки → Панели управления → Ресурсы**.
-Добавить URL `/local/dh-climate-tree-card.js?v=1`, тип **JavaScript module**.
-После установки обновить браузер с очисткой кэша при необходимости.
+До установки новой версии Climate App существующая 0.1.33 не публикует
+`sensor.dh_climate_app_topology`: карточка корректно сообщит
+`данные недоступны`.
 
-В Lovelace YAML ровно одна карточка:
+## Строгое соответствие архитектурной модели
 
-```yaml
-type: custom:dh-climate-tree-card
-entity: sensor.dh_climate_app_topology
-```
+Макет и порядок ветвей заданы
+[утверждённым TARGET-документом](SYSTEM_TREE_AND_HEAT_RESOURCE_VISION_2026-10-28.md).
+В экспериментальном read-model уже существуют: ONLINE/health, OUTDOOR,
+независимые приоритеты T/RH, HOME, ROOMS по порядку YAML, room climate,
+вложенные FAST/SLOW, влажность, фактические поля устройств и профили.
 
-Здесь нет конфигурации комнат, устройств, источников и иных физических ресурсов.
+BOILER/CENTRAL HEATING/VRF, ROOM/HARDWARE/VIRTUAL Demand под ресурсом,
+SALUS, насосы и гидроконтуры добавляются **только после появления достоверного
+ресурсного контракта и источников фактов**. Они не синтезируются
+по названию комнаты, role, домену entity или HA weather.
 
-## Границы первой поставки
+До несовместимого обновления YAML старое `control: app|device` только
+отображается под именем `VIRTUAL|HARDWARE`. Реальное `device_type` —
+отдельный утверждённый этап.
 
-- Текущий `control: app|device` переводится в пользовательскую подпись
-  `VIRTUAL|HARDWARE` только для отображения. Настоящий переход схемы YAML
-  `device_type` будет отдельным этапом.
-- Только действующие комнаты, устройства, влажность и внешние источники.
-  BOILER/CENTRAL HEATING/VRF, насосы, агрегаторы, контуры и новые Demand
-  не синтезируются и не показываются до появления их действительного resource-контракта.
-- ONLINE/AVAILABLE в дереве — наблюдаемая доступность HA-сущности, а не
-  гарантия механической исправности и не подтверждение сухого контакта.
-- OUTDOOR SOURCES: одинаковый порядок T/H — общая цепочка; иначе два дерева,
-  каждое со своей реальной приоритетностью.
-- Время работы округлено вниз до 10 минут для защиты от частых обновлений.
-- Актуальная версия установленного App не меняется этим PR.
+`AVAILABLE` означает доступную HA-сущность, **не** подтверждение исправности
+физического термостата или сухого контакта. Измеряемые факты не заменяются
+договорными значениями.
 
-## Приёмка
+## Границы приёмки
 
-До релиза обязательно проверить на живом HAOS: регистрацию JS, More Info
-каждой сущности, динамическое добавление/удаление комнат в конфиге,
-изменение температуры/профиля/режима/health, unavailable/reconnect,
-корректный статус SENSOR и отсутствие записи JSON дерева в Recorder.
-Unit-тесты не заменяют HAOS acceptance. Не включать реальные реле SALUS/Dingtian.
+- Unit-тесты и CI; валидный YAML; полный read-model на 7 комнатах из
+  фактических Supervisor options.
+- На HAOS отдельно проверить: публикацию MQTT Discovery, масштаб и
+  рисование всех ветвей, подстановку real HA states, изменение температуры,
+  уставок, профиля и health без ручного обновления страницы, unknown/unavailable,
+  MQTT HA reconnect, Recorder exclusion.
+- Проверка отдельных More Info кликов **не считается пройденной** в штатном
+  Markdown; это известное ограничение выбранного UI.
+- До отдельной приёмки не обновлять установленную 0.1.33, не трогать
+  SALUS/Dingtian/котёл/насосы и не выполнять физическое управление.
 
-Предполагаемый minimum PASS: тесты pytest/unittest/CI, нормальная сборка HAOS
-без изменения существующих entity unique_id и SQLite, живое дерево без
-периодической перезагрузки страницы, корректные More Info клики.
-
-**Согласованный TARGET-контракт:** [SYSTEM_TREE_AND_HEAT_RESOURCE_VISION_2026-10-28.md](SYSTEM_TREE_AND_HEAT_RESOURCE_VISION_2026-10-28.md).
+Для безопасной диагностики до обновления можно использовать
+`tools/haos_system_tree_preflight.sh` — только чтение, ничего не устанавливает.
