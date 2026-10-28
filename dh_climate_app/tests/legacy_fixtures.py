@@ -31,7 +31,6 @@ def parse_legacy_fixture(raw):
         fast_heat = _entities(room.get("fast_heat"))
         fast_cool = _entities(room.get("fast_cool"))
         slow_heat = _entities(room.get("slow_heat"))
-        window_off = set(_entities(room.get("window_off_devices")))
         devices = []
         for entity in fast_heat + [e for e in fast_cool if e not in fast_heat]:
             heat = entity in fast_heat
@@ -41,14 +40,12 @@ def parse_legacy_fixture(raw):
                 "role": "fast_heat" if heat else "fast_cool",
                 "control": "app",
                 "reversible": heat and cool,
-                "window_off": entity in window_off,
             })
         for entity in slow_heat:
             devices.append({
                 "entity": entity, "role": "slow_heat",
                 "control": "device" if entity.startswith("climate.") else "app",
                 **({"actuator": "normal_closed"} if entity.startswith("switch.") else {}),
-                "window_off": entity in window_off,
             })
         new_rooms.append({
             "id": room["id"],
