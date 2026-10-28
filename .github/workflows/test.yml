@@ -31,6 +31,7 @@ jobs:
               yaml.safe_load(path.read_text(encoding="utf-8"))
               print(f"YAML OK: {path}")
           PY
+      - run: node --check dh_climate_app/frontend/dh-climate-tree-card.js
       - run: bash -n dh_climate_app/rootfs/run.sh
       - run: bash -n dh_climate_app/tools/haos_live_acceptance.sh
       - name: Build HAOS image
