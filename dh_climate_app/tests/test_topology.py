@@ -102,15 +102,36 @@ class SystemTreeTests(unittest.TestCase):
 
     def test_cool_no_antifreeze_and_off_no_targets(self):
         r = room("lab")
-        self.assertIn("COOL:", plain(scenario((r,), season="cool")))
+        self.assertIn("🎯 ☀️", plain(scenario((r,), season="cool")))
         self.assertNotIn("🛡️", plain(scenario((r,), season="cool")))
-        self.assertNotIn("🎯 HEAT:", plain(scenario((r,), season="off")))
+        self.assertNotIn("🎯 ☀️", plain(scenario((r,), season="off")))
 
     def test_humidity_child(self):
         r = room("lab", humidity=True)
         output = plain(scenario((r,), snapshot={"switch.lab_humidity": state("off")}))
         self.assertIn("Humidifier", output)
         self.assertIn("VIRTUAL · OFF", output)
+
+    def test_approved_tree_emoji_and_compact_targets(self):
+        r = room("bedroom", [device("climate.bedroom_ac", control="app", function="heat_cool")])
+        output = plain(scenario((r,), season="heat"))
+        self.assertIn("🔥 Season: HEAT", output)
+        self.assertIn("📊 Average 24h: 11.7°C", output)
+        self.assertIn("🎯 ☀️23 · 🌙20 · 🧳18 · 🛡️10°C", output)
+        self.assertIn("💤 IDLE · 🌙 NIGHT", output)
+
+    def test_native_markdown_card_uses_only_precomputed_lines(self):
+        from pathlib import Path
+        import yaml
+        card_path = Path(__file__).resolve().parents[1] / "examples/lovelace/dh_climate_system_tree.yaml"
+        card = yaml.safe_load(card_path.read_text(encoding="utf-8"))
+        self.assertEqual("markdown", card["type"])
+        self.assertEqual(["sensor.dh_climate_app_topology"], card["entity_id"])
+        self.assertEqual(12, card["grid_options"]["columns"])
+        self.assertIn("map(attribute='text')", card["content"])
+        self.assertIn("ns.lines | join", card["content"])
+        self.assertIn("<pre style=", card["content"])
+        self.assertNotIn("states.sensor", card["content"])
 
     def test_discovery_stable_unique_id(self):
         topic, payload = topology_discovery_payload("0.1.33")
