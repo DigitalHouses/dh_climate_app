@@ -1,5 +1,20 @@
 # История изменений
 
+## 0.2.1 — 2026-10-29
+
+- Первый read-only **Ingress Operations Workbench**: System, Weather,
+  Home, Resources, Season, Rooms и устройства комнат. UI не управляет
+  климатом и не зависит от HA Area.
+- Небольшой HTTP/SSE backend на port 8099: данные из текущего Runtime,
+  только GET, доступ исключительно через Supervisor Ingress. Состояния
+  HA offline не отображаются как действующие.
+- Перевод интерфейса ru/en через словари с возможностью расширения,
+  Inspector, копирование entity_id и адаптация под разные размеры экрана.
+- Новый конфигуратор, запись в /data, оборудование без HA entities,
+  Channels/Ports, паспорта и физические связи перенесены в roadmap.
+- Supervisor options, SQLite targets, MQTT IDs и алгоритмы FAST/SLOW
+  не изменены. Live HAOS Ingress smoke — отдельная обязательная приёмка.
+
 ## 0.2.0 — 2026-10-28
 
 - Несовместимый **новый Supervisor YAML**: `device_type: virtual|hardware`

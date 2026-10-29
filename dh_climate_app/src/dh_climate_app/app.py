@@ -29,6 +29,8 @@ from .problems import Problem, collect_problems
 from .rooms import ProfileEditOverlay, RoomEngine, RoomState
 from .telemetry import TelemetryClient, TelemetryRunner
 from .topology import build_topology
+from .operations import build_operations_snapshot
+from .ingress import OperationsWebServer
 from .weather import WeatherState, build_weather_state, select_weather_source
 from .window_cooling import WindowCoolingGuard
 
@@ -107,6 +109,11 @@ class ClimateRuntime:
         self._last_problems: tuple[Problem, ...] = ()
         self._last_room_log_signatures: dict[str, tuple[object, ...]] = {}
         self._device_recheck_tasks: dict[str, asyncio.Task[None]] = {}
+        self.operations = OperationsWebServer(build_operations_snapshot(
+            config=config, outdoor=None, weather=None, room_states={},
+            health=None, problems=(), demands={}, states={},
+            version=APP_VERSION, ha_connected=False,
+        ))
 
         loop = asyncio.get_running_loop()
         self.mqtt = MqttBridge(
@@ -143,6 +150,11 @@ class ClimateRuntime:
         self.telemetry_runner = TelemetryRunner(self.telemetry)
 
     async def run(self) -> None:
+        try:
+            await self.operations.start()
+        except OSError:
+            # Climate control must continue even when the read-only UI fails.
+            LOGGER.exception("Operations Ingress unavailable; climate engine continues")
         self.facade.start()
         self.telemetry_runner.start()
         self.facade.set_season_available(False)
@@ -174,6 +186,7 @@ class ClimateRuntime:
             self.telemetry_runner.stop()
             await self.climate_log.close()
             self.facade.stop()
+            await self.operations.stop()
 
     async def _on_snapshot(self, states: list[HaState]) -> None:
         observed_at = datetime.now(timezone.utc)
@@ -291,6 +304,11 @@ class ClimateRuntime:
             self.facade.set_rooms_available(False)
             self.facade.set_demand_available(False)
             self.facade.set_topology_available(False)
+            await self.operations.publish(build_operations_snapshot(
+                config=self.config, outdoor=None, weather=None, room_states={},
+                health=None, problems=(), demands={}, states={},
+                version=APP_VERSION, ha_connected=False,
+            ))
             return
 
         await self._recalculate(
@@ -666,6 +684,17 @@ class ClimateRuntime:
                 demands=demands,
                 resource_slices=resource_slices,
             ))
+
+            try:
+                await self.operations.publish(build_operations_snapshot(
+                    config=self.config, outdoor=outdoor_state, weather=weather_state,
+                    room_states=room_states, health=health, problems=self._last_problems,
+                    demands=demands, states=snapshot, version=APP_VERSION,
+                    ha_connected=self._ha_connected,
+                ))
+            except Exception:
+                # A diagnostic projection must never interfere with device control.
+                LOGGER.exception("Operations read model update failed")
 
             for event in self.events.observe(
                 outdoor=outdoor_state,

@@ -1,5 +1,5 @@
 name: DigitalHouses Climate App
-version: 0.2.0
+version: 0.2.1
 breaking_versions:
   - "0.2.0"
 slug: dh_climate_app
@@ -15,6 +15,11 @@ stage: experimental
 backup: cold
 homeassistant_api: true
 hassio_api: true
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:thermostat
+panel_title: DH Climate
+panel_admin: true
 services:
   - mqtt:need
 options:
