@@ -60,12 +60,13 @@ SQLite в `/data/dh_climate.db` хранит только долговремен
 - поддержка DigitalHouses Telemetry Protocol v1;
 - канонический multi-architecture workflow публикации GHCR; доставка Supervisor из registry пока остаётся отдельным gate выравнивания со стандартами Experimental-канала.
 
-## Operations Ingress (начиная с 0.2.1)
+## DH Climate Explorer (начиная с 0.2.2; Ingress с 0.2.1)
 
 В App включён штатный Home Assistant Ingress. В меню приложения появляется
 «Open Web UI» и, при желании администратора, панель DH Climate.
-Это read-only инженерная среда: System / Weather / Home / Resources /
-Season / Rooms / Devices, Inspector, состояния HA и Problems.
+Это единый read-only инженерный Explorer: дерево System → Weather / Home
+→ Resources / Season / Rooms → Devices, выбор объекта одним нажатием,
+breadcrumbs, Inspector по запросу, состояния HA и Problems.
 Интерфейс переключается между русским и английским; словари расширяемы.
 [Контракт и E2E-план Operations](docs/INGRESS_OPERATIONS_V1.md).
 

@@ -35,6 +35,10 @@ jobs:
       - run: bash -n dh_climate_app/tools/haos_system_tree_preflight.sh
       - run: bash -n dh_climate_app/rootfs/run.sh
       - run: bash -n dh_climate_app/tools/haos_live_acceptance.sh
+      - name: Validate Explorer client
+        run: |
+          node --check dh_climate_app/src/dh_climate_app/web/app.js
+          node --test dh_climate_app/tests/test_explorer_tree.cjs
       - name: Build HAOS image
         run: |
           VERSION="$(awk '$1 == "version:" {print $2; exit}' dh_climate_app/config.yaml)"

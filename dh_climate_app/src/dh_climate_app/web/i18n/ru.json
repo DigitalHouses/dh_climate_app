@@ -102,5 +102,19 @@
   "problem.outdoor_temperature_unavailable": "Наружная температура недоступна",
   "problem.room_temperature_unavailable": "Температура комнаты недоступна",
   "problem.room_window_state_unknown": "Состояние окна неизвестно",
-  "not_home": "Никого нет"
+  "not_home": "Никого нет",
+  "explorer": "Проводник",
+  "read_only": "Только просмотр",
+  "collapse": "Свернуть",
+  "expand": "Развернуть",
+  "sensors": "Датчики",
+  "room_thermostat": "Термостат комнаты",
+  "pumps": "Насосы",
+  "circuits": "Контуры",
+  "last_updated": "Последнее обновление",
+  "not_reported": "Не сообщается",
+  "partlycloudy": "Переменная облачность",
+  "boiler": "Котёл",
+  "central_heating": "Центральное отопление",
+  "vrf": "VRF"
 }

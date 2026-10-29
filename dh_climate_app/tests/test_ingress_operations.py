@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import unittest
 
 from dh_climate_app.ingress import OperationsWebServer
-from dh_climate_app.operations import build_operations_snapshot
+from dh_climate_app.operations import build_operations_snapshot, _entity
 
 
 def make_snapshot(online: bool):
@@ -68,6 +68,20 @@ class OperationsProjectionTests(unittest.TestCase):
         self.assertEqual(snap["weather"]["temperature"], 8.2)
         self.assertEqual(snap["rooms"][0]["name"], "Bedroom")
         json.dumps(snap, allow_nan=False)
+
+    def test_weather_source_attributes_are_limited_to_measurements(self):
+        sample = SimpleNamespace(
+            state="partlycloudy",
+            attributes={
+                "temperature": 8.25, "humidity": 63,
+                "api_token": "never-expose", "forecast": [1, 2],
+            },
+            last_updated=datetime.now(timezone.utc),
+        )
+        result = _entity("weather.home", {"weather.home": sample})
+        self.assertEqual(result["attributes"], {"temperature": 8.25, "humidity": 63.0})
+        self.assertNotIn("api_token", json.dumps(result))
+        self.assertEqual(_entity("sensor.outdoor", {"sensor.outdoor": sample})["attributes"], {})
 
     def test_offline_does_not_expose_stale_live_facts(self):
         snap = make_snapshot(False)
