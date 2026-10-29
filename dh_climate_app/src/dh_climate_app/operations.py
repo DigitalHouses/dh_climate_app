@@ -29,6 +29,14 @@ def _entity(entity_id: str | None, states: Mapping[str, Any]) -> dict[str, Any] 
         "last_updated": (
             observed.last_updated.isoformat() if observed is not None else None
         ),
+        "attributes": (
+            {
+                "temperature": _number(observed.attributes.get("temperature")),
+                "humidity": _number(observed.attributes.get("humidity")),
+            }
+            if observed is not None and entity_id.startswith("weather.")
+            else {}
+        ),
     }
 
 

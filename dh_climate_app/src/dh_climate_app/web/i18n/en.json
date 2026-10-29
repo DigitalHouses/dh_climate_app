@@ -102,5 +102,15 @@
   "problem.outdoor_temperature_unavailable": "Outdoor temperature unavailable",
   "problem.room_temperature_unavailable": "Room temperature unavailable",
   "problem.room_window_state_unknown": "Window state unknown",
-  "not_home": "Away"
+  "not_home": "Away",
+  "explorer": "Explorer",
+  "read_only": "Read only",
+  "collapse": "Collapse",
+  "expand": "Expand",
+  "sensors": "Sensors",
+  "room_thermostat": "Room Thermostat",
+  "pumps": "Pumps",
+  "circuits": "Circuits",
+  "last_updated": "Last update",
+  "not_reported": "Not reported"
 }

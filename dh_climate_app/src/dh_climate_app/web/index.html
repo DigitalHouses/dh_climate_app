@@ -4,28 +4,41 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <title>DH Climate · Operations</title>
+  <title>DH Climate · Explorer</title>
   <link rel="stylesheet" href="style.css">
   <script src="app.js" defer></script>
 </head>
 <body>
   <header class="topbar">
+    <button id="toggle-explorer" class="chrome-button" type="button" aria-label="Toggle explorer" title="Explorer">☰</button>
     <span class="brand">DH <strong>CLIMATE</strong></span>
-    <span class="section-title" id="top-title">Operations</span>
+    <span class="section-title" id="top-title">Explorer</span>
     <span class="grow"></span>
     <span class="connection" id="connection" role="status"></span>
+    <button id="toggle-inspector" class="chrome-button" type="button" aria-pressed="false" title="Inspector">ⓘ</button>
     <label for="language" class="sr-only">Language</label>
     <select id="language" aria-label="Interface language">
       <option value="en">English</option>
       <option value="ru">Русский</option>
     </select>
   </header>
-  <div class="workbench">
-    <nav id="rail" class="rail" aria-label="Main sections"></nav>
-    <aside id="context" class="context"></aside>
-    <main class="workspace" id="workspace"></main>
-    <aside class="inspector" id="inspector"></aside>
+  <div class="workbench" id="workbench">
+    <aside id="explorer" class="explorer" aria-label="Climate Explorer">
+      <div class="explorer-header">
+        <strong id="explorer-heading">EXPLORER</strong>
+        <button id="collapse-all" class="chrome-button" type="button" aria-label="Collapse all" title="Collapse all">⊟</button>
+      </div>
+      <nav id="tree" aria-label="Climate objects"></nav>
+    </aside>
+    <main class="workspace" id="workspace">
+      <nav id="breadcrumbs" class="breadcrumbs" aria-label="Object path"></nav>
+      <div id="content"></div>
+    </main>
+    <aside class="inspector" id="inspector" aria-label="Inspector" hidden></aside>
   </div>
-  <footer class="statusbar"><span id="foot-status">DH Climate · Operations</span><span>Read only</span></footer>
+  <footer class="statusbar">
+    <span id="foot-status">DH Climate · Explorer</span>
+    <span id="foot-mode">Read only</span>
+  </footer>
 </body>
 </html>
