@@ -114,3 +114,20 @@ button:disabled { cursor:default; opacity:.5; }
     --accent:#175ca6; --success:#147d4d; --warning:#9f6b0e; --danger:#b23030; }
   .tree-item.selected { background:#dbe9f9; }
 }
+
+/* Explorer editor - shown only after server-side system-admin authorization. */
+.tree-add {border:0;background:none;color:var(--muted);font-size:18px;
+  border-radius:4px;padding:0 6px;min-width:26px;}
+.tree-add:hover {color:var(--accent);background:var(--surface-2);}
+.editor-field {display:flex;flex-direction:column;gap:5px;margin:0 0 13px;
+  color:var(--muted);font-size:12px;}
+.editor-field input,.editor-field textarea,.editor-field select{
+  width:100%;min-width:0;padding:9px 10px;border:1px solid var(--border);
+  border-radius:6px;color:var(--text);background:var(--bg);font-size:14px;
+  font-family:inherit;}
+.editor-field textarea{resize:vertical;font-family:ui-monospace,Consolas,monospace;font-size:12px;}
+.editor-field input[readonly]{opacity:.65;}
+.editor-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:12px 0;}
+.editor-notice{border-left:3px solid var(--accent);padding:10px 12px;background:var(--surface);}
+.editor-review{border-left:3px solid var(--accent);}
+.editor-review p{margin:0 0 10px;}
