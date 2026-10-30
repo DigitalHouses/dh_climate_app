@@ -55,6 +55,9 @@ test("context menu and real separator replace permanent plus buttons",()=>{
   assert.match(html,/id="context-menu"/);
   assert.doesNotMatch(app,/tree-add|\.plusFor\(/);
   assert.match(app,/line\.oncontextmenu\s*=/);
+  assert.doesNotMatch(app,/label:t\("editor\.open"\)/);
+  assert.doesNotMatch(app,/label:t\(open \? "collapse" : "expand"\)/);
+  assert.match(app,/if \(!actions\.length\) return;/);
   assert.match(app,/event\.key === "ContextMenu"/);
   assert.match(css,/--explorer-width/);
   assert.match(css,/\.context-menu\[hidden\]/);
@@ -62,7 +65,6 @@ test("context menu and real separator replace permanent plus buttons",()=>{
 test("translated context actions exist in both locales",()=>{
   for(const lang of ["en","ru"]){
     const dictionary=JSON.parse(fs.readFileSync(path.join(root,"i18n",lang+".json"),"utf8"));
-    assert.ok(dictionary["editor.open"]);
     assert.ok(dictionary["editor.new_room"]);
     assert.ok(dictionary["editor.delete_device"]);
   }

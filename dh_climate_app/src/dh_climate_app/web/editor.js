@@ -36,9 +36,21 @@
   function localize(key) { return tr("editor." + key); }
   function discardLocal() {
     edit = null; candidate = null;
+    // A blocked navigation warning belongs to the unsaved form only.
+    // It must not persist on ROOMS after pressing Cancel.
+    if (message === localize("save_or_cancel")) {
+      message = "";
+      failure = false;
+    }
   }
   function navigateAway() {
-    if (!edit) return true;
+    if (!edit) {
+      if (message === localize("save_or_cancel")) {
+        message = "";
+        failure = false;
+      }
+      return true;
+    }
     show(localize("save_or_cancel"),true);
     return false;
   }
