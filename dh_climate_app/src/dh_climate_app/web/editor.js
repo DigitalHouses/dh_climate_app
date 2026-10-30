@@ -6,6 +6,8 @@
   let edit = null;
   let candidate = null;
   let validated = false;
+  let approvalPhrase = "";
+  let confirmation = null;
   let message = "";
   let failure = false;
   let repaint = () => {};
@@ -37,8 +39,12 @@
   }
   function navigateAway() {
     if (!edit) return true;
-    if (!window.confirm(localize("leave_warning"))) return false;
-    discardLocal(); return true;
+    show(localize("save_or_cancel"),true);
+    return false;
+  }
+  function confirmAction(description, action) {
+    confirmation = {description:localize(description), action};
+    repaint();
   }
   async function api(path, payload) {
     const response = await fetch("api/config/" + path, {
@@ -67,33 +73,34 @@
     if (!mutable() || !candidate) return;
     try {
       info = await api("draft",{...requestMeta(),options:candidate});
-      validated = false; discardLocal(); show(localize("draft_saved"));
+      validated = false; approvalPhrase = "";
+      discardLocal(); show(localize("draft_saved"));
     } catch (e) { show(e.message,true); await refresh(); }
   }
   async function validate() {
     try {
       const report = await api("validate",requestMeta());
-      validated = true;
+      validated = true; approvalPhrase = "";
       show(localize("valid")+": "+report.rooms+" "+tr("rooms")+", "+report.devices+" "+tr("devices"));
     } catch(e) { validated = false; show(e.message,true); }
   }
   async function apply() {
-    if (!validated || !mutable()) return;
-    const keyword = window.prompt(localize("apply_warning")+" "+localize("type_apply"));
-    if (keyword !== "APPLY") return;
+    if (!validated || !mutable() || approvalPhrase !== "APPLY") return;
     try {
-      await api("apply",requestMeta());
-      validated = false;
+      await api("apply",{...requestMeta(),confirm:"APPLY"});
+      validated = false; approvalPhrase = "";
       await refresh();
       show(localize("pending_restart"));
     } catch(e) { show(e.message,true); }
   }
-  async function discard() {
-    if (!window.confirm(localize("discard_warning"))) return;
-    try {
-      info = await api("discard",requestMeta());
-      validated=false; discardLocal(); show(localize("draft_discarded"));
-    } catch(e) { show(e.message,true); }
+  function discard() {
+    confirmAction("discard_warning", async () => {
+      try {
+        info = await api("discard",requestMeta());
+        validated=false; approvalPhrase = "";
+        discardLocal(); show(localize("draft_discarded"));
+      } catch(e) { show(e.message,true); }
+    });
   }
   function startRoom(id=null) {
     if (!mutable() || !navigateAway()) return;
@@ -122,18 +129,22 @@
     repaint();
   }
   function deleteRoom(id) {
-    if (!mutable() || !navigateAway() || !window.confirm(localize("delete_room_warning"))) return;
-    candidate = clone(info.options);
-    candidate.rooms = (candidate.rooms || []).filter(r=>r.id!==id);
-    persist();
+    if (!mutable() || !navigateAway()) return;
+    confirmAction("delete_room_warning", async () => {
+      candidate = clone(info.options);
+      candidate.rooms = (candidate.rooms || []).filter(r=>r.id!==id);
+      await persist();
+    });
   }
   function deleteDevice(roomId, id) {
-    if (!mutable() || !navigateAway() || !window.confirm(localize("delete_device_warning"))) return;
-    candidate = clone(info.options);
-    const room = roomById(roomId);
-    if (!room) return;
-    room.devices = (room.devices || []).filter(d=>d.entity!==id);
-    persist();
+    if (!mutable() || !navigateAway()) return;
+    confirmAction("delete_device_warning", async () => {
+      candidate = clone(info.options);
+      const room = roomById(roomId);
+      if (!room) return;
+      room.devices = (room.devices || []).filter(d=>d.entity!==id);
+      await persist();
+    });
   }
   function field(parent, label, value, update, multiline=false, readonly=false) {
     const wrap = text("label", label, "editor-field");
@@ -226,6 +237,17 @@
   function controls(main) {
     if (!info) return;
     if (message) main.append(text("p",message,"editor-notice "+(failure?"bad":"good")));
+    if (confirmation) {
+      const panel=text("section","","card editor-review");
+      panel.append(text("p",confirmation.description,"warn"));
+      const actions=text("div","","editor-actions");
+      actions.append(button(localize("confirm"),async()=>{
+        const action=confirmation.action; confirmation=null;
+        await action();
+      }),button(localize("cancel"),()=>{confirmation=null;repaint();}));
+      panel.append(actions);
+      main.prepend(panel);
+    }
     if (info.pending_restart) {
       main.append(text("p",localize("pending_restart"),"notice warn"));
       return;
@@ -235,10 +257,22 @@
     toolbar.append(text("h3",localize("draft"),"section-heading"),
       text("p",localize("draft_info"),"subtle"));
     const buttons=text("div","","editor-actions");
-    buttons.append(button(localize("validate"),validate),
-      button(localize("apply"),apply),
-      button(localize("discard"),discard));
-    buttons.children[1].disabled=!validated;
+    buttons.append(button(localize("validate"),validate));
+    if (validated) {
+      const confirmField=text("label",localize("apply_warning"),"editor-field");
+      const input=document.createElement("input");
+      input.type="text"; input.placeholder="APPLY"; input.value=approvalPhrase;
+      const applyButton=button(localize("apply"),apply);
+      applyButton.disabled=approvalPhrase!=="APPLY";
+      input.oninput=()=>{
+        approvalPhrase=input.value;
+        applyButton.disabled=approvalPhrase!=="APPLY";
+      };
+      confirmField.append(input);
+      toolbar.append(confirmField);
+      buttons.append(applyButton);
+    }
+    buttons.append(button(localize("discard"),discard));
     toolbar.append(buttons);
     main.prepend(toolbar);
   }

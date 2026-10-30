@@ -198,6 +198,8 @@ class OperationsWebServer:
                                  parse_constant=lambda _: (_ for _ in ()).throw(ValueError("Nonfinite JSON")))
             if not isinstance(payload, dict):
                 raise ValueError("Expected object")
+            if path == "/api/config/apply" and payload.get("confirm") != "APPLY":
+                raise EditValidation("Explicit APPLY confirmation required")
             args = {"base_hash": payload.get("base_hash"),
                     "revision": payload.get("revision")}
             if actions[path] == "save":

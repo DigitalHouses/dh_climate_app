@@ -148,10 +148,12 @@
   "editor.discard": "Discard draft",
   "editor.valid": "Configuration valid",
   "editor.pending_restart": "Configuration applied to /data manifest. Restart DH Climate App in Home Assistant to activate it. The current Engine is unchanged until restart.",
-  "editor.apply_warning": "Applying changes topology on the NEXT APP RESTART. Back up first. This can add/remove actuators. No automatic restart. To confirm enter:",
+  "editor.apply_warning": "To publish the validated manifest, type APPLY below. A separate app restart is required.",
   "editor.type_apply": "APPLY",
   "editor.discard_warning": "Discard the saved configuration draft?",
   "editor.draft_discarded": "Draft discarded.",
   "editor.draft_marker": "DRAFT",
-  "editor.pending_delete": "DELETE PENDING"
+  "editor.pending_delete": "DELETE PENDING",
+  "editor.confirm": "Confirm",
+  "editor.save_or_cancel": "Save this form or click Cancel before navigating."
 }

@@ -153,7 +153,9 @@ class IngressPermissionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.request("POST","/api/config/draft",draft,headers=self.admin()))[0],403)
         self.assertEqual((await self.request("POST","/api/config/draft",draft,headers=self.post_headers()))[0],200)
         self.assertEqual((await self.request("POST","/api/config/apply",
-            {"base_hash":state["base_hash"],"revision":1},headers=self.post_headers()))[0],200)
+            {"base_hash":state["base_hash"],"revision":1},headers=self.post_headers()))[0],422)
+        self.assertEqual((await self.request("POST","/api/config/apply",
+            {"base_hash":state["base_hash"],"revision":1,"confirm":"APPLY"},headers=self.post_headers()))[0],200)
         self.assertEqual(self.editor.effective_on_startup()["rooms"][0]["name"],"Спальня")
 
     async def test_arbitrary_methods_and_duplicate_headers_rejected(self):
