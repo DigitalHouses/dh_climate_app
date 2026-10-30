@@ -253,12 +253,14 @@
   function lines(text_) { return text_.split(/[\n,]/).map(v=>v.trim()).filter(Boolean); }
   function usages() {
     const result={};
+    const language=document.getElementById("language")?.value==="en"?"en":"ru";
     for(const room of (candidate?.rooms || info?.options?.rooms || [])){
+      const roomTitle=displayName("room",room.id,language,room.name || room.id);
       for(const key of ["temperature_sensors","humidity_sensors","window_sensors"]) {
-        for(const id of room[key] || []) (result[id] ||= []).push(room.name || room.id);
+        for(const id of room[key] || []) (result[id] ||= []).push(roomTitle);
       }
       for(const device of room.devices || []) {
-        if(device.entity)(result[device.entity] ||= []).push(room.name || room.id);
+        if(device.entity)(result[device.entity] ||= []).push(roomTitle);
       }
     }
     return result;
@@ -285,7 +287,11 @@
     const choose=button(ids.length?localize("change_binding"):localize("add_binding"),
       ()=>window.DHClimateEntityPicker.open({
         kind,multiple,values:ids,title:label,
-        areaHint:roomName,usage:usages(),tr,
+        areaHint:roomName,
+        areaHints:[roomName, ...((candidate?.rooms || []).filter(room=>room.name===roomName)
+          .map(room=>displayName("room",room.id,
+            document.getElementById("language")?.value==="en"?"en":"ru",roomName)))],
+        usage:usages(),tr,
         onConfirm:next=>{
           onChange(next);
           validated=false;

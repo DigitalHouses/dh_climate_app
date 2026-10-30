@@ -14,8 +14,30 @@ test("sensor temperature context excludes humidity and inappropriate domains",()
   assert.equal(match(base,filters()),true);
   assert.equal(match({...base,device_class:"humidity"},filters()),false);
   assert.equal(match({...base,domain:"climate"},filters()),false);
-  assert.equal(match({...base,device_class:null},filters()),true);
+  assert.equal(match({...base,device_class:null},filters()),false);
+  assert.equal(match({...base,device_class:null,unit:"°C"},filters()),true);
+  assert.equal(match({...base,device_class:null},filters({includeOther:true})),true);
   assert.equal(match({...base,device_class:"humidity"},filters({includeOther:true})),true);
+});
+test("window context only offers binary_sensor, never sensor counting metrics",()=>{
+  const windowFilters=filters({kind:"window"});
+  assert.deepEqual(Array.from(domainsFor("window")),["binary_sensor"]);
+  assert.equal(match({...base,entity_id:"sensor.count_binary_sensor",domain:"sensor",
+    name:"Binary sensors count",device_class:null},windowFilters),false);
+  assert.equal(match({...base,entity_id:"binary_sensor.window",domain:"binary_sensor",
+    name:"Окно",device_class:"window"},windowFilters),true);
+  assert.equal(match({...base,entity_id:"binary_sensor.window",domain:"binary_sensor",
+    name:"Окно",device_class:null},windowFilters),false);
+  assert.equal(match({...base,entity_id:"binary_sensor.window",domain:"binary_sensor",
+    name:"Окно",device_class:null},filters({kind:"window",includeOther:true})),true);
+});
+test("unclassified phone/system sensors are hidden by temperature filter",()=>{
+  assert.equal(match({...base,device_class:null,unit:null,
+    entity_id:"sensor.phone_activity",state:"Stationary"},filters()),false);
+  assert.equal(match({...base,device_class:null,unit:null,
+    entity_id:"sensor.phone_app_version",state:"2026.10"},filters()),false);
+  assert.equal(match({...base,device_class:null,unit:"%"},
+    filters({kind:"humidity"})),false);
 });
 test("area and availability filters act independently",()=>{
   assert.equal(match(base,filters({area:"living"})),true);

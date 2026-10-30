@@ -1,5 +1,5 @@
 name: DigitalHouses Climate App
-version: 0.2.8
+version: 0.2.9
 breaking_versions:
   - "0.2.0"
 slug: dh_climate_app
