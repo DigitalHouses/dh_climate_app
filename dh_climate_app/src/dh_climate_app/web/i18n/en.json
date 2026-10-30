@@ -155,5 +155,6 @@
   "editor.draft_marker": "DRAFT",
   "editor.pending_delete": "DELETE PENDING",
   "editor.confirm": "Confirm",
-  "editor.save_or_cancel": "Save this form or click Cancel before navigating."
+  "editor.save_or_cancel": "Save this form or click Cancel before navigating.",
+  "editor.open": "Open"
 }

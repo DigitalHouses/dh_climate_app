@@ -7,7 +7,7 @@ const path = require("node:path");
 
 const web = path.resolve(__dirname, "../src/dh_climate_app/web");
 const source = fs.readFileSync(path.join(web, "app.js"), "utf8");
-const boot = source.indexOf('$("toggle-inspector").onclick =');
+const boot = source.indexOf('document.addEventListener("pointerdown"');
 assert.ok(boot > 0, "separate model from browser bootstrap");
 const context = vm.createContext({
   navigator: {language:"ru"},
