@@ -163,11 +163,11 @@ class OperationsWebServer:
 
     async def _labels(self, reader: asyncio.StreamReader,
                       writer: asyncio.StreamWriter, method: str,
-                      headers: dict[str, str]) -> None:
+                      headers: dict[str, str], path: str = "/api/labels") -> None:
         if self.labels is None:
             await self._reply(writer, "404 Not Found", b"No UI labels")
             return
-        if method == "GET":
+        if method == "GET" and path == "/api/labels":
             await self._reply(writer, "200 OK",
                               self._json(await self.labels.state()),
                               "application/json; charset=utf-8")
@@ -198,10 +198,16 @@ class OperationsWebServer:
             data = json.loads(await asyncio.wait_for(reader.readexactly(length), timeout=5))
             if not isinstance(data, dict):
                 raise EditValidation("Invalid body")
-            result = await self.labels.save(
-                key=data.get("key"), names=data.get("names"),
-                revision=data.get("revision"),
-            )
+            if path == "/api/room-area":
+                result = await self.labels.save_area(
+                    room_id=data.get("room_id"), area_id=data.get("area_id"),
+                    revision=data.get("revision"),
+                )
+            else:
+                result = await self.labels.save(
+                    key=data.get("key"), names=data.get("names"),
+                    revision=data.get("revision"),
+                )
         except EditConflict as exc:
             await self._reply(writer, "409 Conflict",
                               self._json({"error": str(exc)}),
@@ -324,8 +330,8 @@ class OperationsWebServer:
             if path == "/api/entities":
                 await self._entities(writer, method, headers)
                 return
-            if path == "/api/labels":
-                await self._labels(reader, writer, method, headers)
+            if path in ("/api/labels", "/api/room-area"):
+                await self._labels(reader, writer, method, headers, path)
                 return
             if path == "/api/config" or path.startswith("/api/config/"):
                 await self._config(reader, writer, method, path, headers)

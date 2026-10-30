@@ -202,5 +202,16 @@
   "picker.none": "Нет подходящих сущностей",
   "picker.invalid_type": "Неверный тип сущности, нужен",
   "picker.fix_invalid": "Удалите несовместимые привязки",
-  "picker.outside_filter": "Ранее привязано · вне текущего фильтра"
+  "picker.outside_filter": "Ранее привязано · вне текущего фильтра",
+  "ha_area": "Зона Home Assistant",
+  "editor.ha_area": "HA Area — связь только для навигации",
+  "editor.no_ha_area": "Без связи с HA Area",
+  "editor.area_hint": "Необязательная связь. Сохраняется отдельно от конфигурации климата.",
+  "editor.save_area": "Сохранить HA Area",
+  "editor.area_saved": "Сопоставление сохранено. Перезапуск и Apply не требуются.",
+  "editor.area_missing": "Сохранённая зона не найдена в Home Assistant. Выбери другую или убери связь.",
+  "editor.area_unavailable": "Зона отсутствует в HA",
+  "editor.area_requires_saved_room": "Сначала сохрани комнату в черновике, затем назначь HA Area.",
+  "editor.area_catalog_error": "Каталог HA Area недоступен. Старое сопоставление сохранено; снять связь можно.",
+  "picker.area_missing": "Выбранная для комнаты HA Area отсутствует; показаны все зоны"
 }

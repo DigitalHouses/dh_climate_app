@@ -15,6 +15,9 @@ from typing import Any
 
 from .manifest import _atomic_json, EditConflict, EditValidation
 
+_ROOM_ID = re.compile(r"^[a-z][a-z0-9_]{0,79}$")
+_AREA_ID = re.compile(r"^[a-z0-9][a-z0-9_-]{0,127}$")
+
 _KEY = re.compile(
     r"^(?:room:[a-z][a-z0-9_]*|"
     r"entity:(?:sensor|binary_sensor|climate|switch|weather|number|humidifier)\.[a-z0-9_]+|"
@@ -31,7 +34,8 @@ class UILabels:
 
     def _load(self) -> dict[str, Any]:
         if not self.path.exists():
-            return {"schema_version": 1, "revision": 0, "labels": {}}
+            return {"schema_version": 1, "revision": 0, "labels": {},
+                    "room_areas": {}}
         raw = json.loads(self.path.read_text(encoding="utf-8"))
         if not isinstance(raw, dict) or raw.get("schema_version") != 1:
             raise EditValidation("Invalid UI labels schema")
@@ -40,6 +44,12 @@ class UILabels:
             raise EditValidation("Invalid UI labels data")
         for key, values in labels.items():
             self._check(key, values)
+        room_areas = raw.get("room_areas", {})
+        if not isinstance(room_areas, dict):
+            raise EditValidation("Invalid room area bindings")
+        for room_id, area_id in room_areas.items():
+            self._check_area(room_id, area_id)
+        raw["room_areas"] = room_areas
         return raw
 
     @staticmethod
@@ -53,6 +63,34 @@ class UILabels:
                 ord(ch) < 32 for ch in value
             ):
                 raise EditValidation("UI names must be printable text up to 120 characters")
+
+    @staticmethod
+    def _check_area(room_id: Any, area_id: Any) -> None:
+        if not isinstance(room_id, str) or _ROOM_ID.fullmatch(room_id) is None:
+            raise EditValidation("Invalid DH Room ID")
+        if not isinstance(area_id, str) or _AREA_ID.fullmatch(area_id) is None:
+            raise EditValidation("Invalid Home Assistant Area ID")
+
+    async def save_area(self, *, room_id: Any, area_id: Any,
+                        revision: Any) -> dict[str, Any]:
+        if not isinstance(room_id, str) or _ROOM_ID.fullmatch(room_id) is None:
+            raise EditValidation("Invalid DH Room ID")
+        if area_id is not None:
+            self._check_area(room_id, area_id)
+        if type(revision) is not int:
+            raise EditValidation("Invalid UI metadata revision")
+        async with self._lock:
+            if revision != self._state["revision"]:
+                raise EditConflict("UI metadata changed; refresh before saving")
+            next_state = deepcopy(self._state)
+            if area_id is None:
+                next_state["room_areas"].pop(room_id, None)
+            else:
+                next_state["room_areas"][room_id] = area_id
+            next_state["revision"] += 1
+            _atomic_json(self.path, next_state)
+            self._state = next_state
+            return deepcopy(next_state)
 
     async def state(self) -> dict[str, Any]:
         async with self._lock:

@@ -61,6 +61,16 @@ test("domain constraints follow hardware and virtual actuator requirements",()=>
   assert.equal(match({...base,domain:"switch",device_class:null},
     filters({kind:"actuator-virtual"})),true);
 });
+test("explicit DH Room area ID overrides name heuristic",()=>{
+  const areas=[{id:"living",name:"Гостиная"},{id:"bed",name:"Спальня"}];
+  const resolve=ctx.window.DHClimateEntityPicker.resolveArea;
+  assert.equal(resolve(areas,"living","Living Room"),"living");
+  assert.equal(resolve(areas,null,"Living Room",["Гостиная"]),"living");
+  assert.equal(resolve(areas,null,"Not matched"),"all");
+  assert.equal(resolve(areas,"deleted","Гостиная"),"all",
+    "deleted Area must not silently remap by name");
+  assert.equal(resolve(areas,"bed","Гостиная"),"bed");
+});
 test("picker contains only expected read-only HA API and draft callback",()=>{
   assert.match(src,/fetch\("api\/entities"/);
   assert.doesNotMatch(src,/api\/config\/apply|call_service|api\/services/);

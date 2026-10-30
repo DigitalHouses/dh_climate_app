@@ -36,6 +36,14 @@
        ["°C","°F","K"].includes(item.unit)) return true;
     return false;
   }
+  function resolveArea(areas, areaId, areaHint="", areaHints=[]) {
+    // A persisted relationship always wins over name-matching heuristics.
+    // If the Area was deleted, do not silently select another Area by name.
+    if (areaId) return areas.some(area=>area.id===areaId) ? areaId : "all";
+    const hints=[areaHint,...areaHints].filter(Boolean)
+      .map(value=>value.trim().toLocaleLowerCase());
+    return areas.find(area=>hints.includes(area.name?.toLocaleLowerCase()))?.id || "all";
+  }
   function match(item,filters) {
     const {kind,query,area,domain,availability,includeOther}=filters;
     if (!domainsFor(kind).includes(item.domain)) return false;
@@ -58,7 +66,7 @@
     const opt=el("option","",name);opt.value=value;select.append(opt);
   }
   async function open({kind="temperature",multiple=false,values=[],title="",
-                       areaHint="",areaHints=[],usage={},tr=x=>x,onConfirm}) {
+                       areaId=null,areaHint="",areaHints=[],usage={},tr=x=>x,onConfirm}) {
     close();
     const initial=[...new Set(values.filter(Boolean))];
     const chosen=new Set(initial);
@@ -94,12 +102,10 @@
     }
     if(dialog!==backdrop)return;
     status.remove();
-    const filters={kind,query:"",area:"all",domain:"all",availability:"all",includeOther:false};
-    const hints=[areaHint,...areaHints].filter(Boolean)
-      .map(value=>value.trim().toLocaleLowerCase());
-    const matchedArea=catalog.areas.find(a=>
-      hints.includes(a.name?.toLocaleLowerCase()));
-    if(matchedArea)filters.area=matchedArea.id;
+    const filters={kind,query:"",
+      area:resolveArea(catalog.areas,areaId,areaHint,areaHints),
+      domain:"all",availability:"all",includeOther:false};
+    const linked=areaId && catalog.areas.find(area=>area.id===areaId);
     const row=el("div","picker-filters");
     const search=el("input","picker-search");
     search.type="search"; search.placeholder=tr("picker.search");
@@ -119,6 +125,8 @@
                            ["unavailable","picker.unavailable"]])
       option(availability,v,tr(key));
     row.append(search,area,domain,availability);sheet.append(row);
+    if(areaId && !linked)sheet.append(el("p","picker-area-warning",
+      tr("picker.area_missing")+": "+areaId));
     const advanced=el("label","picker-advanced");
     const toggle=el("input");toggle.type="checkbox";
     advanced.append(toggle,document.createTextNode(" "+tr("picker.all_classes")));
@@ -211,5 +219,6 @@
     refresh();
     search.focus();
   }
-  window.DHClimateEntityPicker={open,close,match,domainsFor,classesFor,appropriateClass};
+  window.DHClimateEntityPicker={open,close,match,domainsFor,classesFor,
+    appropriateClass,resolveArea};
 })();
