@@ -31,6 +31,7 @@ from .telemetry import TelemetryClient, TelemetryRunner
 from .topology import build_topology
 from .operations import build_operations_snapshot
 from .ingress import OperationsWebServer
+from .entity_catalog import EntityCatalog
 from .manifest import ManifestEditor
 from .ui_labels import UILabels
 from .weather import WeatherState, build_weather_state, select_weather_source
@@ -116,7 +117,8 @@ class ClimateRuntime:
             config=config, outdoor=None, weather=None, room_states={},
             health=None, problems=(), demands={}, states={},
             version=APP_VERSION, ha_connected=False,
-        ), editor=editor, labels=labels)
+        ), editor=editor, labels=labels,
+            catalog=EntityCatalog(token=os.environ["SUPERVISOR_TOKEN"]))
 
         loop = asyncio.get_running_loop()
         self.mqtt = MqttBridge(

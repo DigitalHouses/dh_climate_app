@@ -251,6 +251,49 @@
     wrap.append(select); parent.append(wrap);
   }
   function lines(text_) { return text_.split(/[\n,]/).map(v=>v.trim()).filter(Boolean); }
+  function usages() {
+    const result={};
+    for(const room of (candidate?.rooms || info?.options?.rooms || [])){
+      for(const key of ["temperature_sensors","humidity_sensors","window_sensors"]) {
+        for(const id of room[key] || []) (result[id] ||= []).push(room.name || room.id);
+      }
+      for(const device of room.devices || []) {
+        if(device.entity)(result[device.entity] ||= []).push(room.name || room.id);
+      }
+    }
+    return result;
+  }
+  function entityField(parent,label,value,kind,onChange,{multiple=false,roomName=""}={}){
+    const section=text("div","","editor-entity-field");
+    section.append(text("p",label,"editor-entity-title"));
+    const list=text("div","","editor-bound-list");
+    const ids=(multiple ? (value || []) : [value]).filter(Boolean);
+    if(!ids.length)list.append(text("p",localize("none"),"subtle small"));
+    for(const id of ids){
+      const line=text("div","","editor-bound-entity");
+      const name=text("span",id,"mono");
+      name.title=id;
+      const remove=button("×",()=>{
+        const next=multiple ? ids.filter(x=>x!==id) : null;
+        onChange(next);
+        validated=false;
+        repaint();
+      });
+      remove.setAttribute("aria-label",localize("remove_entity")+" "+id);
+      line.append(name,remove);list.append(line);
+    }
+    const choose=button(ids.length?localize("change_binding"):localize("add_binding"),
+      ()=>window.DHClimateEntityPicker.open({
+        kind,multiple,values:ids,title:label,
+        areaHint:roomName,usage:usages(),tr,
+        onConfirm:next=>{
+          onChange(next);
+          validated=false;
+          repaint();
+        },
+      }));
+    section.append(list,choose);parent.append(section);
+  }
   function optional(obj,key,value) {
     const v=value.trim();
     if (v) obj[key]=v; else delete obj[key];
@@ -262,11 +305,12 @@
     const box=text("section","","card");
     field(box,localize("room_id"),room.id,v=>room.id=v.trim().toLowerCase(),false,!!edit.id);
     field(box,localize("room_name"),room.name,v=>room.name=v);
-    for (const [key,label] of [
-      ["temperature_sensors","temperature_sensors"],
-      ["humidity_sensors","humidity_sensors"],
-      ["window_sensors","window_sensors"]]) {
-      field(box,localize(label),(room[key]||[]).join("\n"),v=>room[key]=lines(v),true);
+    for (const [key,label,kind] of [
+      ["temperature_sensors","temperature_sensors","temperature"],
+      ["humidity_sensors","humidity_sensors","humidity"],
+      ["window_sensors","window_sensors","window"]]) {
+      entityField(box,localize(label),room[key]||[],kind,
+        value=>{room[key]=value;},{multiple:true,roomName:room.name});
     }
     const controls=text("div","","editor-actions");
     controls.append(button(localize("save_draft"),persist),
@@ -280,7 +324,9 @@
     if (!device) return;
     main.append(text("h2",localize("edit_device"),"page-title"));
     const box=text("section","","card");
-    field(box,localize("entity"),device.entity||"",v=>device.entity=v.trim());
+    entityField(box,localize("entity"),device.entity,
+      device.device_type==="hardware"?"actuator-hardware":"actuator-virtual",
+      value=>{device.entity=value||"";},{roomName:room.name});
     selectField(box,localize("role"),device.role,
       [["fast_heat","FAST_HEAT"],["fast_cool","FAST_COOL"],["slow_heat","SLOW_HEAT"]],
       v=>device.role=v);
@@ -296,8 +342,11 @@
     selectField(box,localize("actuator"),device.actuator||"",
       [["",localize("none")],["normal_open","NORMAL_OPEN"],["normal_closed","NORMAL_CLOSED"]],
       v=>{if(v)device.actuator=v;else delete device.actuator;});
-    field(box,localize("external_sensor"),device.temperature_sensor||"",
-      v=>optional(device,"temperature_sensor",v));
+    entityField(box,localize("external_sensor"),device.temperature_sensor,
+      "temperature",value=>{
+        if(value)device.temperature_sensor=value;
+        else delete device.temperature_sensor;
+      },{roomName:room.name});
     selectField(box,localize("screed_missing"),device.screed_sensor_unavailable||"",
       [["",localize("none")],["open","OPEN"],["closed","CLOSED"]],
       v=>{if(v)device.screed_sensor_unavailable=v;else delete device.screed_sensor_unavailable;});

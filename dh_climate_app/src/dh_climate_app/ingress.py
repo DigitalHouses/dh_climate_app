@@ -13,6 +13,7 @@ from typing import Any
 
 from .manifest import ManifestEditor, EditConflict, EditValidation
 from .ui_labels import UILabels
+from .entity_catalog import EntityCatalog
 
 
 WEB_ROOT = Path(__file__).with_name("web")
@@ -20,6 +21,7 @@ ASSETS = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
     "/editor.js": ("editor.js", "text/javascript; charset=utf-8"),
+    "/entity_picker.js": ("entity_picker.js", "text/javascript; charset=utf-8"),
     "/style.css": ("style.css", "text/css; charset=utf-8"),
     "/i18n/en.json": ("i18n/en.json", "application/json; charset=utf-8"),
     "/i18n/ru.json": ("i18n/ru.json", "application/json; charset=utf-8"),
@@ -41,6 +43,7 @@ class OperationsWebServer:
         port: int = 8099, allowed_peers: tuple[str, ...] = ("172.30.32.2",),
         editor: ManifestEditor | None = None,
         labels: UILabels | None = None,
+        catalog: EntityCatalog | None = None,
     ) -> None:
         self.host = host
         self.port = port
@@ -48,6 +51,7 @@ class OperationsWebServer:
         self.snapshot = initial
         self.editor = editor
         self.labels = labels
+        self.catalog = catalog
         self.revision = 0
         self._server: asyncio.AbstractServer | None = None
         self._condition = asyncio.Condition()
@@ -278,6 +282,29 @@ class OperationsWebServer:
         await self._reply(writer, "200 OK", self._json(result),
                           "application/json; charset=utf-8")
 
+    async def _entities(self, writer: asyncio.StreamWriter, method: str,
+                        headers: dict[str, str]) -> None:
+        if method != "GET":
+            await self._reply(writer, "405 Method Not Allowed", b"GET required",
+                              extra="Allow: GET\r\n")
+            return
+        if not self._is_admin(headers):
+            await self._reply(writer, "403 Forbidden", b"Administrator required")
+            return
+        if self.catalog is None:
+            await self._reply(writer, "503 Service Unavailable", b"Catalog unavailable")
+            return
+        try:
+            payload = await self.catalog.get()
+        except Exception:
+            # Catalog is a nonessential admin UI feature. Never let an HA
+            # registry/WebSocket failure affect climate execution.
+            await self._reply(writer, "503 Service Unavailable",
+                              b"Home Assistant entity catalog temporarily unavailable")
+            return
+        await self._reply(writer, "200 OK", self._json(payload),
+                          "application/json; charset=utf-8")
+
     async def _handle(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
     ) -> None:
@@ -293,6 +320,9 @@ class OperationsWebServer:
                 return
             if peer is None or peer[0] not in self.allowed_peers:
                 await self._reply(writer, "403 Forbidden", b"Forbidden")
+                return
+            if path == "/api/entities":
+                await self._entities(writer, method, headers)
                 return
             if path == "/api/labels":
                 await self._labels(reader, writer, method, headers)

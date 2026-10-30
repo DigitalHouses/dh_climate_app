@@ -43,6 +43,8 @@ jobs:
           node --test dh_climate_app/tests/test_explorer_context_menu.cjs
           node --test dh_climate_app/tests/test_explorer_friendly_names.cjs
           node --test dh_climate_app/tests/test_explorer_labels.cjs
+          node --check dh_climate_app/src/dh_climate_app/web/entity_picker.js
+          node --test dh_climate_app/tests/test_entity_picker.cjs
       - name: Build HAOS image
         run: |
           VERSION="$(awk '$1 == "version:" {print $2; exit}' dh_climate_app/config.yaml)"

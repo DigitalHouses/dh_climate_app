@@ -151,3 +151,44 @@ body.resizing-explorer { cursor:col-resize; user-select:none; }
 .editor-notice{border-left:3px solid var(--accent);padding:10px 12px;background:var(--surface);}
 .editor-review{border-left:3px solid var(--accent);}
 .editor-review p{margin:0 0 10px;}
+
+/* Reusable Home Assistant entity picker. Only read-only catalogue browsing. */
+.editor-entity-field{margin:0 0 14px;padding:11px;border:1px solid var(--border);
+ border-radius:7px;background:var(--surface-2);}
+.editor-entity-title{color:var(--muted);font-size:12px;margin:0 0 8px;}
+.editor-bound-list{display:flex;flex-direction:column;gap:5px;margin:0 0 8px;}
+.editor-bound-entity{display:flex;justify-content:space-between;align-items:center;
+ gap:10px;padding:6px 9px;border:1px solid var(--border);border-radius:5px;background:var(--surface);}
+.editor-bound-entity>button{border:0;background:transparent;font-size:18px;color:var(--muted);}
+.editor-bound-entity>button:hover{color:var(--danger);}
+.picker-backdrop{position:fixed;inset:0;z-index:150;background:#000a;
+ display:flex;align-items:center;justify-content:center;padding:15px;}
+.picker-dialog{width:min(850px,98vw);max-height:min(780px,calc(100vh - 30px));
+ display:flex;flex-direction:column;gap:12px;background:var(--surface);
+ border:1px solid var(--border);border-radius:10px;box-shadow:0 20px 70px #0009;
+ padding:16px;min-height:270px;}
+.picker-header{display:flex;justify-content:space-between;align-items:center;gap:15px;}
+.picker-header h2{font-size:18px;margin:0;}
+.picker-filters{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:7px;}
+.picker-filters input,.picker-filters select{border:1px solid var(--border);
+ background:var(--bg);color:var(--text);border-radius:5px;padding:9px;min-width:0;}
+.picker-advanced{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);}
+.picker-results{overflow-y:auto;flex:1;min-height:100px;border:1px solid var(--border);
+ border-radius:6px;}
+.picker-result{display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+ background:transparent;border:0;border-bottom:1px solid var(--border);padding:9px;}
+.picker-result:last-child{border-bottom:0;}
+.picker-result:hover,.picker-result:focus-visible{background:var(--surface-2);}
+.picker-result.is-selected{background:color-mix(in srgb,var(--accent) 12%,var(--surface));}
+.picker-tick{font-size:17px;color:var(--accent);}
+.picker-info{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0;}
+.picker-info strong,.picker-info span{overflow-wrap:anywhere;}
+.picker-in-use{font-size:11px;color:var(--warning);}
+.picker-state{max-width:135px;font-size:12px;color:var(--muted);text-align:right;overflow-wrap:anywhere;}
+.picker-footer{display:flex;align-items:center;justify-content:flex-end;gap:8px;}
+.picker-footer>span{margin-right:auto;}
+@media(max-width:650px){
+ .picker-filters{grid-template-columns:1fr 1fr;}
+ .picker-filters .picker-search{grid-column:1/-1;}
+ .picker-dialog{padding:11px;}
+}
