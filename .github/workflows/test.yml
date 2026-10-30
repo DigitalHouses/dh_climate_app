@@ -41,6 +41,7 @@ jobs:
           node --check dh_climate_app/src/dh_climate_app/web/editor.js
           node --test dh_climate_app/tests/test_explorer_tree.cjs
           node --test dh_climate_app/tests/test_explorer_context_menu.cjs
+          node --test dh_climate_app/tests/test_explorer_friendly_names.cjs
       - name: Build HAOS image
         run: |
           VERSION="$(awk '$1 == "version:" {print $2; exit}' dh_climate_app/config.yaml)"
