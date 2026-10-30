@@ -198,5 +198,16 @@
   "picker.none": "No matching entities",
   "picker.invalid_type": "Incompatible entity domain, expected",
   "picker.fix_invalid": "Remove incompatible bindings",
-  "picker.outside_filter": "Already bound · outside current filter"
+  "picker.outside_filter": "Already bound · outside current filter",
+  "ha_area": "Home Assistant Area",
+  "editor.ha_area": "HA Area — navigation-only association",
+  "editor.no_ha_area": "No HA Area association",
+  "editor.area_hint": "Optional association stored separately from climate configuration.",
+  "editor.save_area": "Save HA Area",
+  "editor.area_saved": "Area association saved. No Apply or restart required.",
+  "editor.area_missing": "Saved HA Area not found. Select another or remove the association.",
+  "editor.area_unavailable": "HA Area no longer exists",
+  "editor.area_requires_saved_room": "Save the room draft first, then assign its HA Area.",
+  "editor.area_catalog_error": "HA Area catalog unavailable. Existing association is preserved; you can clear it.",
+  "picker.area_missing": "Room-linked HA Area is missing; showing all areas"
 }

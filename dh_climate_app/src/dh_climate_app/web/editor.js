@@ -3,7 +3,9 @@
    No draft operation drives equipment; Apply changes next-start manifest. */
 (() => {
   let info = null;
-  let labelsState = {schema_version:1,revision:0,labels:{}};
+  let labelsState = {schema_version:1,revision:0,labels:{},room_areas:{}};
+  let haAreaCache = null;
+  let haAreaLoading = null;
   let edit = null;
   let candidate = null;
   let validated = false;
@@ -35,6 +37,31 @@
       return "part:" + item.resource + ":" + item.partType + ":" + item.id;
     return null;
   };
+  const roomAreaId = id => labelsState.room_areas?.[id] || null;
+  const roomAreaLabel = id => {
+    const linked=roomAreaId(id);
+    if (!linked) return null;
+    return haAreaCache?.areas?.find(area=>area.id===linked)?.name || linked;
+  };
+  async function loadHAAreas() {
+    if (haAreaCache && Date.now() - haAreaCache.at < 30000)
+      return haAreaCache.areas;
+    if (haAreaLoading) return haAreaLoading;
+    haAreaLoading=(async()=>{
+      const response=await fetch("api/entities",{
+        cache:"no-store",credentials:"same-origin",
+      });
+      if (!response.ok) throw Error("HTTP "+response.status);
+      const data=await response.json();
+      if (!Array.isArray(data.areas)) throw Error("Invalid HA Area catalog");
+      const areas=data.areas.filter(item=>item && typeof item.id==="string")
+        .map(item=>({id:item.id,name:String(item.name||item.id)}));
+      haAreaCache={at:Date.now(),areas};
+      return areas;
+    })();
+    try {return await haAreaLoading;}
+    finally {haAreaLoading=null;}
+  }
   function displayName(kind, id, language, fallback) {
     const text=labelsState.labels?.[kind + ":" + id]?.[language];
     return text || fallback;
@@ -265,7 +292,8 @@
     }
     return result;
   }
-  function entityField(parent,label,value,kind,onChange,{multiple=false,roomName=""}={}){
+  function entityField(parent,label,value,kind,onChange,
+                       {multiple=false,roomName="",roomId=""}={}){
     const section=text("div","","editor-entity-field");
     section.append(text("p",label,"editor-entity-title"));
     const list=text("div","","editor-bound-list");
@@ -287,6 +315,7 @@
     const choose=button(ids.length?localize("change_binding"):localize("add_binding"),
       ()=>window.DHClimateEntityPicker.open({
         kind,multiple,values:ids,title:label,
+        areaId:roomId ? roomAreaId(roomId) : null,
         areaHint:roomName,
         areaHints:[roomName, ...((candidate?.rooms || []).filter(room=>room.name===roomName)
           .map(room=>displayName("room",room.id,
@@ -300,6 +329,78 @@
       }));
     section.append(list,choose);parent.append(section);
   }
+  function roomAreaField(parent,room) {
+    const wrap=text("section","","editor-entity-field");
+    wrap.append(text("p",localize("ha_area"),"editor-entity-title"));
+    const selection=document.createElement("select");
+    selection.setAttribute("aria-label",localize("ha_area"));
+    selection.className="editor-ha-area-select";
+    const option=(value,label)=>{
+      const el=document.createElement("option");
+      el.value=value;el.textContent=label;selection.append(el);
+    };
+    option("",localize("no_ha_area"));
+    const assigned=roomAreaId(room.id);
+    if (assigned) option(assigned,assigned);
+    selection.value=assigned || "";
+    const feedback=text("p",localize("area_hint"),"subtle small");
+    const save=button(localize("save_area"),async()=>{
+      const area_id=selection.value || null;
+      if (area_id && !haAreaCache?.areas?.some(area=>area.id===area_id)) {
+        feedback.textContent=localize("area_missing");
+        feedback.className="editor-notice bad";
+        return;
+      }
+      save.disabled=true;
+      try {
+        const response=await fetch("api/room-area",{
+          method:"POST",credentials:"same-origin",
+          headers:{"Content-Type":"application/json","X-Requested-With":"DHClimateExplorer"},
+          body:JSON.stringify({room_id:room.id,area_id,revision:labelsState.revision}),
+        });
+        const result=await response.json();
+        if(!response.ok)throw Error(result.error||"HTTP "+response.status);
+        labelsState=result;
+        feedback.textContent=localize("area_saved");
+        feedback.className="editor-notice good";
+      }catch(e){
+        feedback.textContent=e.message;
+        feedback.className="editor-notice bad";
+        // On conflicting revisions, refresh state without repainting the
+        // configuration form (which might contain unsaved sensor changes).
+        try {
+          const response=await fetch("api/labels",{cache:"no-store",credentials:"same-origin"});
+          if(response.ok)labelsState=await response.json();
+        }catch(_){}
+      }finally{save.disabled=false;}
+    });
+    const exists=(info?.options?.rooms || []).some(item=>item.id===room.id);
+    if (!exists || !room.id) {
+      selection.disabled=true;
+      save.disabled=true;
+      feedback.textContent=localize("area_requires_saved_room");
+    }
+    wrap.append(selection,save,feedback);parent.append(wrap);
+    if (!exists) return;
+    loadHAAreas().then(areas=>{
+      if(!wrap.isConnected)return;
+      const old=selection.value;
+      selection.replaceChildren();
+      option("",localize("no_ha_area"));
+      for(const area of areas)option(area.id,area.name);
+      if (old && !areas.some(area=>area.id===old)) {
+        option(old,localize("area_unavailable")+" ("+old+")");
+        feedback.textContent=localize("area_missing");
+        feedback.className="editor-notice bad";
+      }
+      selection.value=old;
+    }).catch(_=>{
+      if(wrap.isConnected) {
+        feedback.textContent=localize("area_catalog_error");
+        feedback.className="editor-notice bad";
+      }
+    });
+  }
   function optional(obj,key,value) {
     const v=value.trim();
     if (v) obj[key]=v; else delete obj[key];
@@ -311,12 +412,14 @@
     const box=text("section","","card");
     field(box,localize("room_id"),room.id,v=>room.id=v.trim().toLowerCase(),false,!!edit.id);
     field(box,localize("room_name"),room.name,v=>room.name=v);
+    roomAreaField(box,room);
     for (const [key,label,kind] of [
       ["temperature_sensors","temperature_sensors","temperature"],
       ["humidity_sensors","humidity_sensors","humidity"],
       ["window_sensors","window_sensors","window"]]) {
       entityField(box,localize(label),room[key]||[],kind,
-        value=>{room[key]=value;},{multiple:true,roomName:room.name});
+        value=>{room[key]=value;},
+        {multiple:true,roomName:room.name,roomId:room.id});
     }
     const controls=text("div","","editor-actions");
     controls.append(button(localize("save_draft"),persist),
@@ -332,7 +435,7 @@
     const box=text("section","","card");
     entityField(box,localize("entity"),device.entity,
       device.device_type==="hardware"?"actuator-hardware":"actuator-virtual",
-      value=>{device.entity=value||"";},{roomName:room.name});
+      value=>{device.entity=value||"";},{roomName:room.name,roomId:room.id});
     selectField(box,localize("role"),device.role,
       [["fast_heat","FAST_HEAT"],["fast_cool","FAST_COOL"],["slow_heat","SLOW_HEAT"]],
       v=>device.role=v);
@@ -352,7 +455,7 @@
       "temperature",value=>{
         if(value)device.temperature_sensor=value;
         else delete device.temperature_sensor;
-      },{roomName:room.name});
+      },{roomName:room.name,roomId:room.id});
     selectField(box,localize("screed_missing"),device.screed_sensor_unavailable||"",
       [["",localize("none")],["open","OPEN"],["closed","CLOSED"]],
       v=>{if(v)device.screed_sensor_unavailable=v;else delete device.screed_sensor_unavailable;});
@@ -488,6 +591,6 @@
     init, canEdit:online, canChange:mutable, menuActions,
     startRoom,startDevice, renderEditor, controls, onNavigate,
     isEditing:()=>!!edit, viewMode, previewRooms, previewRoom,
-    displayName, loadLabels,
+    displayName, loadLabels, roomAreaId, roomAreaLabel,
   };
 })();
