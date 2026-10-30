@@ -39,6 +39,21 @@ test("unclassified phone/system sensors are hidden by temperature filter",()=>{
   assert.equal(match({...base,device_class:null,unit:"%"},
     filters({kind:"humidity"})),false);
 });
+test("outdoor weather sources allow weather entities and correctly classified sensors",()=>{
+  assert.deepEqual(Array.from(domainsFor("outdoor-temperature")),["weather","sensor"]);
+  assert.deepEqual(Array.from(domainsFor("outdoor-humidity")),["weather","sensor"]);
+  const google={...base,entity_id:"weather.asyl_mura",name:"Google Weather",
+    domain:"weather",device_class:null,unit:null,state:"partlycloudy",
+    temperature:10.6,humidity:48};
+  assert.equal(match(google,filters({kind:"outdoor-temperature"})),true);
+  assert.equal(match(google,filters({kind:"outdoor-humidity"})),true);
+  assert.equal(match({...base,device_class:"temperature"},
+    filters({kind:"outdoor-humidity"})),false);
+  assert.equal(match({...base,device_class:"humidity"},
+    filters({kind:"outdoor-humidity"})),true);
+  assert.equal(match({...base,device_class:null,unit:null},
+    filters({kind:"outdoor-temperature"})),false);
+});
 test("area and availability filters act independently",()=>{
   assert.equal(match(base,filters({area:"living"})),true);
   assert.equal(match(base,filters({area:"bedroom"})),false);

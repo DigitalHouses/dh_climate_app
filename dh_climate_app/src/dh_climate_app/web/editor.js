@@ -209,6 +209,71 @@
       } catch(e) { show(e.message,true); }
     });
   }
+  function startWeather() {
+    if (!mutable() || !navigateAway()) return;
+    openObject({kind:"weather"});
+    candidate = clone(info.options);
+    if (!candidate.outdoor) candidate.outdoor={
+      temperature_sources:[],humidity_sources:[],
+    };
+    for(const key of ["temperature_sources","humidity_sources"])
+      if(!Array.isArray(candidate.outdoor[key]))candidate.outdoor[key]=[];
+    edit={kind:"weather"};
+    message="";
+    repaint();
+  }
+  function orderedWeatherField(parent,key,title_,pickerKind) {
+    const box=text("section","","editor-entity-field");
+    box.append(text("h3",title_,"section-heading"),
+      text("p",localize("weather_priority_help"),"subtle small"));
+    const sources=candidate.outdoor[key];
+    const list=text("div","","editor-bound-list");
+    if(!sources.length)list.append(text("p",localize("none"),"subtle small"));
+    sources.forEach((id,index)=>{
+      const line=text("div","","editor-bound-entity");
+      line.append(text("span",String(index+1)+". "+id,"mono"));
+      const actions=text("span","","editor-source-actions");
+      const move=(offset)=>{
+        const target=index+offset;
+        if(target<0||target>=sources.length)return;
+        [sources[index],sources[target]]=[sources[target],sources[index]];
+        validated=false;repaint();
+      };
+      const up=button("↑",()=>move(-1));
+      up.disabled=index===0;up.title=localize("weather_move_up");
+      const down=button("↓",()=>move(1));
+      down.disabled=index===sources.length-1;down.title=localize("weather_move_down");
+      const remove=button("×",()=>{
+        sources.splice(index,1);validated=false;repaint();
+      });
+      remove.title=localize("remove_entity")+" "+id;
+      actions.append(up,down,remove);line.append(actions);list.append(line);
+    });
+    const choose=button(localize("weather_choose_sources"),()=>
+      window.DHClimateEntityPicker.open({
+        kind:pickerKind,multiple:true,values:sources,title:title_,
+        tr,usage:usages(),
+        onConfirm:next=>{
+          // Existing precedence preserved; newly chosen sources go last.
+          candidate.outdoor[key]=next;validated=false;repaint();
+        },
+      }));
+    box.append(list,choose);parent.append(box);
+  }
+  function weatherForm(main) {
+    main.append(text("h2",localize("weather_editor_title"),"page-title"));
+    const box=text("section","","card");
+    box.append(text("p",localize("weather_engine_note"),"subtle"));
+    orderedWeatherField(box,"temperature_sources",
+      localize("weather_temperature_sources"),"outdoor-temperature");
+    orderedWeatherField(box,"humidity_sources",
+      localize("weather_humidity_sources"),"outdoor-humidity");
+    box.append(text("p",localize("weather_forecast_source"),"subtle small"));
+    const controls=text("div","","editor-actions");
+    controls.append(button(localize("save_draft"),persist),
+      button(localize("cancel"),()=>{discardLocal();repaint();}));
+    box.append(controls);main.append(box);
+  }
   function startRoom(id=null) {
     if (!mutable() || !navigateAway()) return;
     candidate = clone(info.options);
@@ -469,6 +534,7 @@
     if (!edit) return false;
     main.replaceChildren();
     if (edit.kind==="label") labelForm(main);
+    if (edit.kind==="weather") weatherForm(main);
     if (edit.kind==="room") roomForm(main);
     if (edit.kind==="device") deviceForm(main);
     return true;
@@ -560,6 +626,8 @@
          (info.options.rooms || []).some(room=>room.id===item.id)))
       actions.push({label:localize("rename"),run:()=>startLabel(item)});
     if (!mutable()) return actions;
+    if (item.kind === "weather")
+      actions.push({label:localize("weather_edit"),run:startWeather});
     if (item.kind === "rooms") {
       actions.push({label:localize("new_room"), run:()=>startRoom()});
     } else if (item.kind === "room") {
@@ -589,7 +657,7 @@
   function viewMode(){ return !info?tr("read_only"):localize("administrator"); }
   window.DHClimateEditor = {
     init, canEdit:online, canChange:mutable, menuActions,
-    startRoom,startDevice, renderEditor, controls, onNavigate,
+    startRoom,startDevice,startWeather, renderEditor, controls, onNavigate,
     isEditing:()=>!!edit, viewMode, previewRooms, previewRoom,
     displayName, loadLabels, roomAreaId, roomAreaLabel,
   };

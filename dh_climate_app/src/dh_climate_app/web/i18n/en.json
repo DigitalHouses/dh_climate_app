@@ -209,5 +209,18 @@
   "editor.area_unavailable": "HA Area no longer exists",
   "editor.area_requires_saved_room": "Save the room draft first, then assign its HA Area.",
   "editor.area_catalog_error": "HA Area catalog unavailable. Existing association is preserved; you can clear it.",
-  "picker.area_missing": "Room-linked HA Area is missing; showing all areas"
+  "picker.area_missing": "Room-linked HA Area is missing; showing all areas",
+  "editor.weather_edit": "Configure weather sources",
+  "editor.weather_editor_title": "Weather sources",
+  "editor.weather_temperature_sources": "Outdoor temperature — source priority",
+  "editor.weather_humidity_sources": "Outdoor humidity — source priority",
+  "editor.weather_priority_help": "The first source has highest priority; if it has no numeric reading, the next source is used.",
+  "editor.weather_move_up": "Increase priority",
+  "editor.weather_move_down": "Decrease priority",
+  "editor.weather_choose_sources": "Choose sources from Home Assistant",
+  "editor.weather_engine_note": "These are real Climate Engine inputs. Changes require Draft, Validate and Apply, followed by an app restart. Until then climate control is unchanged.",
+  "editor.weather_forecast_source": "Weather conditions and precipitation use the first weather.* entity across both lists. Google Weather contributes current temperature/humidity attributes, not forecast values.",
+  "weather_forecast_source": "Weather condition source",
+  "weather_priority_note": "Source precedence is top-to-bottom. Missing values fall back to the next source. Changes require Apply and an app restart.",
+  "picker.weather_no_value": "No current reading"
 }

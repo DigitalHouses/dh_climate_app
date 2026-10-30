@@ -13,26 +13,35 @@
     if (kind==="actuator-hardware") return ["climate"];
     if (kind==="actuator-virtual") return ["climate","switch"];
     if (kind==="humidity-actuator") return ["humidifier","switch"];
-    if (kind==="weather") return ["weather","sensor"];
+    if (kind==="weather" || kind==="outdoor-temperature" ||
+        kind==="outdoor-humidity") return ["weather","sensor"];
     if (kind==="binary" || kind==="window") return ["binary_sensor"];
     return ["sensor"];
   };
   const classesFor = kind => ({
     temperature:["temperature"],
+    "outdoor-temperature":["temperature"],
     humidity:["humidity"],
+    "outdoor-humidity":["humidity"],
     window:["window","door","opening","garage_door"],
     power:["power"],
     pressure:["pressure"],
     rpm:["frequency","speed"],
   })[kind] || [];
   function appropriateClass(item,kind) {
+    // HA weather entities expose current readings as attributes;
+    // their primary state is a condition, not a sensor reading.
+    if (item.domain==="weather" &&
+        ["outdoor-temperature","outdoor-humidity","weather"].includes(kind))
+      return true;
     const classes=classesFor(kind);
     if(!classes.length) return true;
     if(classes.includes(item.device_class)) return true;
     // An unclassified temperature sensor with an explicit degree unit
     // is a useful fallback. A percentage alone cannot identify humidity
     // (it could be a battery level), so other types require device_class.
-    if(kind==="temperature" && !item.device_class &&
+    if(["temperature","outdoor-temperature"].includes(kind) &&
+       !item.device_class &&
        ["°C","°F","K"].includes(item.unit)) return true;
     return false;
   }
@@ -193,9 +202,18 @@
           tr("picker.invalid_type")+": "+domainsFor(kind).join(", ")));
         else if(!item.missing && !foundIds.has(item.entity_id))
           information.append(el("span","subtle small",tr("picker.outside_filter")));
+        let label=item.state??"—";
+        if(item.domain==="weather"){
+          const metric=kind==="outdoor-humidity"?"humidity":"temperature";
+          const value=item[metric];
+          const unit=metric==="humidity"?" %":(item.temperature_unit
+            ? " "+item.temperature_unit:"");
+          label=value===null || value===undefined
+            ? tr("picker.weather_no_value") : String(value)+unit;
+        }
         const state=el("span","picker-state",
           item.missing?tr("picker.not_in_ha"):
-          item.available?(item.state??"—"):tr("picker.unavailable"));
+          item.available?label:tr("picker.unavailable"));
         itemLine.append(tick,information,state);
         itemLine.onclick=()=>{
           if(chosen.has(item.entity_id))chosen.delete(item.entity_id);

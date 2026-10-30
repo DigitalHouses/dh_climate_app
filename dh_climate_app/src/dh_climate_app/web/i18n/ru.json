@@ -213,5 +213,18 @@
   "editor.area_unavailable": "Зона отсутствует в HA",
   "editor.area_requires_saved_room": "Сначала сохрани комнату в черновике, затем назначь HA Area.",
   "editor.area_catalog_error": "Каталог HA Area недоступен. Старое сопоставление сохранено; снять связь можно.",
-  "picker.area_missing": "Выбранная для комнаты HA Area отсутствует; показаны все зоны"
+  "picker.area_missing": "Выбранная для комнаты HA Area отсутствует; показаны все зоны",
+  "editor.weather_edit": "Настроить источники погоды",
+  "editor.weather_editor_title": "Источники погоды",
+  "editor.weather_temperature_sources": "Наружная температура — приоритет источников",
+  "editor.weather_humidity_sources": "Наружная влажность — приоритет источников",
+  "editor.weather_priority_help": "Первый источник в списке имеет высший приоритет. При отсутствии числового значения используется следующий.",
+  "editor.weather_move_up": "Повысить приоритет",
+  "editor.weather_move_down": "Понизить приоритет",
+  "editor.weather_choose_sources": "Выбрать источники в Home Assistant",
+  "editor.weather_engine_note": "Здесь настраиваются реальные источники для Climate Engine. Изменения проходят через черновик, проверку и Apply; до перезапуска работающий климат не меняется.",
+  "editor.weather_forecast_source": "Погодные условия и осадки берутся из первой weather.* сущности среди обоих списков. Для Google Weather используются текущие атрибуты температуры и влажности, а не прогноз.",
+  "weather_forecast_source": "Источник погодных условий",
+  "weather_priority_note": "Приоритет источников определяется порядком сверху вниз. При отсутствии данных используется следующий источник. Изменения начнут действовать только после Apply и перезапуска.",
+  "picker.weather_no_value": "Нет текущего значения"
 }

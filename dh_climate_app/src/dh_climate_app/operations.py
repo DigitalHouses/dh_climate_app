@@ -153,6 +153,8 @@ def build_operations_snapshot(
             "avg24": _number(outdoor.avg_24h_temperature) if online and outdoor is not None else None,
             "humidity": _number(outdoor.current_humidity) if online and outdoor is not None else None,
             "source": outdoor.temperature_source if online and outdoor is not None else None,
+            "humidity_source": getattr(outdoor, "humidity_source", None) if online and outdoor is not None else None,
+            "condition_source": weather.source_entity if online and weather is not None else None,
             "stale": outdoor.stale if online and outdoor is not None else None,
             "condition": weather.condition if online and weather is not None else None,
             "precipitation_mm": _number(weather.precipitation_mm) if online and weather is not None else None,
