@@ -83,6 +83,33 @@ class OperationsProjectionTests(unittest.TestCase):
         self.assertNotIn("api_token", json.dumps(result))
         self.assertEqual(_entity("sensor.outdoor", {"sensor.outdoor": sample})["attributes"], {})
 
+    def test_friendly_names_are_projection_only_and_never_replace_ids(self):
+        snap = make_snapshot(True)
+        self.assertIsNone(snap["rooms"][0]["friendly_name"])
+        self.assertIsNone(snap["rooms"][0]["sensors"]["temperature"][0]["friendly_name"])
+
+        now = datetime.now(timezone.utc)
+        info = lambda value, friendly: SimpleNamespace(
+            state=value,
+            attributes={"friendly_name": friendly, "secret": "must-not-leak"},
+            last_updated=now,
+        )
+        canonical = "climate.dh_climate_app_bedroom"
+        entity = _entity("sensor.bedroom", {"sensor.bedroom": info("21", "Температура спальни")})
+        self.assertEqual(entity["entity_id"], "sensor.bedroom")
+        self.assertEqual(entity["friendly_name"], "Температура спальни")
+        self.assertNotIn("secret", json.dumps(entity, ensure_ascii=False))
+
+        empty = _entity("switch.relay", {"switch.relay": info("on", "  ")})
+        self.assertIsNone(empty["friendly_name"])
+        self.assertIsNone(_entity("sensor.missing", {})["friendly_name"])
+        malformed = _entity("sensor.bad", {"sensor.bad": info("22", {"ru": "No"})})
+        self.assertIsNone(malformed["friendly_name"])
+
+        base = make_snapshot(True)
+        self.assertEqual(base["rooms"][0]["id"], "bedroom")
+        self.assertEqual(base["rooms"][0]["name"], "Bedroom")
+
     def test_offline_does_not_expose_stale_live_facts(self):
         snap = make_snapshot(False)
         self.assertFalse(snap["app"]["ha_connected"])

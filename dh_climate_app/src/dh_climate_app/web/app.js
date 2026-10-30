@@ -29,7 +29,11 @@ const resourceById = (id) => (snapshot?.home.resources || []).find(r => r.id ===
 const deviceById = (roomId, id) => roomById(roomId)?.devices.find(d => d.entity_id === id);
 const observedText = (entity) => (!snapshot?.app.ha_connected || !entity?.available) ? unknown() : display(entity.state);
 const demandValue = (item) => item?.active === true ? t("on") : item?.active === false ? t("off") : unknown();
-const namedRoom = (room) => room?.name || room?.id || "—";
+const namedRoom = (room) => room?.friendly_name || room?.name || room?.id || "—";
+const namedEntity = (entity, fallback = null) =>
+  entity?.friendly_name || entity?.entity_id || fallback || "—";
+const namedResource = (resource) => t(resource?.id || "") === (resource?.id || "")
+  ? technical(resource?.id) : t(resource.id);
 
 function dom(tag, cls, text) {
   const el = document.createElement(tag);
@@ -75,11 +79,11 @@ function buildTree(data) {
   const roomNodes = rooms.map(room => {
     const sensors = ["temperature", "humidity", "window"].flatMap(role =>
       (room.sensors?.[role] || []).map(sensor =>
-        node("sensor", sensor.entity_id, "◉", [], {room:room.id, id:sensor.entity_id, role})
+        node("sensor", namedEntity(sensor), "◉", [], {room:room.id, id:sensor.entity_id, role})
       )
     );
     const devices = (room.devices || []).map(device =>
-      node("device", device.entity_id, "⚙", [], {room:room.id, id:device.entity_id})
+      node("device", namedEntity(device.observed, device.entity_id), "⚙", [], {room:room.id, id:device.entity_id})
     );
     const children = [
       node("thermostat", t("room_thermostat"), "◉", [], {room:room.id, id:room.id}),
@@ -98,14 +102,14 @@ function buildTree(data) {
     const children = [];
     if (pumps.length) children.push(node("parts", t("pumps"), "▤", pumps, {resource:resource.id, partType:"pumps", id:resource.id}));
     if (circuits.length) children.push(node("parts", t("circuits"), "▤", circuits, {resource:resource.id, partType:"circuits", id:resource.id}));
-    return node("resource", technical(resource.id), "▱", children, {id:resource.id});
+    return node("resource", namedResource(resource), "▱", children, {id:resource.id});
   });
-  return [node("system", "SYSTEM", "◈", [
-    node("weather", "WEATHER", "☁"),
-    node("home", "HOME", "⌂", [
-      node("resources", "RESOURCES", "▤", resourceNodes),
-      node("season", "SEASON", "◷"),
-      node("rooms", "ROOMS", "▤", roomNodes),
+  return [node("system", t("system"), "◈", [
+    node("weather", t("weather"), "☁"),
+    node("home", t("home"), "⌂", [
+      node("resources", t("resources"), "▤", resourceNodes),
+      node("season", t("season"), "◷"),
+      node("rooms", t("rooms"), "▤", roomNodes),
     ]),
   ])];
 }
@@ -150,7 +154,8 @@ function renderTree() {
     };
     const select = dom("button", "tree-label");
     select.type = "button";
-    select.title = item.label;
+    select.title = item.id && item.id !== item.label
+      ? item.label + "\n" + item.id : item.label;
     if (k === selectedKey()) select.setAttribute("aria-current", "page");
     add(select, dom("span", "tree-icon", item.icon), dom("span", "tree-text", item.label));
     select.onclick = () => navigate(item);
@@ -339,13 +344,14 @@ function signalRows(signals) {
     if (signal.attributes?.humidity !== null && signal.attributes?.humidity !== undefined)
       extra.push(number(signal.attributes.humidity, " %"));
     line.append(row(t(signal.role), observedText(signal) + (extra.length ? " · " + extra.join(" · ") : "")));
+    if (signal.friendly_name) line.append(paragraph(signal.friendly_name, "small"));
     line.append(paragraph(signal.entity_id, "mono subtle small"));
     return line;
   }));
 }
 function deviceLinks(room) {
   return listOrEmpty((room.devices || []).map(dev =>
-    clickable(dev.entity_id,
+    clickable(namedEntity(dev.observed),
       technical(dev.role) + " · " + technical(dev.device_type) + " · " + observedText(dev.observed),
       () => navigate({kind:"device", id:dev.entity_id, room:room.id}))), "no_devices");
 }
@@ -360,7 +366,7 @@ function resourceLinks() {
   if (source && !configured.some(r => r.id === source)) configured.push({id:source});
   if (snapshot?.home.vrf_enabled === true && !configured.some(r => r.id === "vrf")) configured.push({id:"vrf"});
   return listOrEmpty(configured.map(resource =>
-    clickable(technical(resource.id), t("resource"), () => navigate({kind:"resource", id:resource.id}))),
+    clickable(namedResource(resource), t("resource"), () => navigate({kind:"resource", id:resource.id}))),
     "no_resource_signals");
 }
 function demandRows(items) {
@@ -414,13 +420,16 @@ function showResource(main) {
     const configured = selection.id === snapshot.home.heating_source ||
       (selection.id === "vrf" && snapshot.home.vrf_enabled === true);
     if (!configured) return showResources(main);
-    add(main, title(technical(selection.id)),
+    add(main, title(namedResource({id:selection.id})),
+      paragraph(technical(selection.id), "mono subtle"),
       card(t("resource"), paragraph(t("no_resource_signals"), "subtle")));
     const matches = (snapshot.demands || []).filter(d => d.layer === selection.id);
     if (matches.length) main.append(card(t("resource_requests"), demandRows(matches)));
     return;
   }
-  add(main, title(technical(resource.id)), card(t("resource"), signalRows(resource.signals)));
+  add(main, title(namedResource(resource)),
+    paragraph(technical(resource.id), "mono subtle"),
+    card(t("resource"), signalRows(resource.signals)));
   if (resource.pumps.length) main.append(card(t("pumps"), listOrEmpty(resource.pumps.map(p =>
     clickable(p.name, t("pump"), () => navigate({kind:"part",resource:resource.id,partType:"pumps",id:p.id}))))));
   if (resource.circuits.length) main.append(card(t("circuits"), listOrEmpty(resource.circuits.map(p =>
@@ -489,7 +498,8 @@ function findSensor(room, id) {
 function showSensor(main) {
   const result = findSensor(roomById(selection.room), selection.id);
   if (!result) return showRooms(main);
-  add(main, title(result.sensor.entity_id),
+  add(main, title(namedEntity(result.sensor)),
+    paragraph(result.sensor.entity_id, "mono subtle"),
     card(t("sensor"), row(t("role"), t(result.role)),
       row(t("observed_state"), observedText(result.sensor)),
       row(t("availability"), result.sensor.available ? t("available") : t("unavailable")),
@@ -500,7 +510,7 @@ function showDevice(main) {
   if (!dev) return showRooms(main);
   const action = dev.hvac_action == null ?
     (dev.observed?.available ? t("not_reported") : unknown()) : statusText(dev.hvac_action);
-  add(main, title(t("device")), paragraph(dev.entity_id, "mono subtle"),
+  add(main, title(namedEntity(dev.observed)), paragraph(dev.entity_id, "mono subtle"),
     stats(stat(t("observed_state"), observedText(dev.observed)), stat(t("hvac_action"), action)),
     card(t("device"), row(t("role"), technical(dev.role)),
       row(t("device_type"), technical(dev.device_type)),

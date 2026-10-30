@@ -18,12 +18,28 @@ def _number(value: Any) -> float | None:
     return round(number, 2) if math.isfinite(number) else None
 
 
+def _friendly_name(entity_id: str | None, states: Mapping[str, Any]) -> str | None:
+    """Only the HA friendly_name; never extrapolate it from room or entity IDs."""
+    if not entity_id:
+        return None
+    observed = states.get(entity_id)
+    if observed is None:
+        return None
+    attributes = observed.attributes
+    raw = attributes.get("friendly_name") if isinstance(attributes, Mapping) else None
+    if not isinstance(raw, str):
+        return None
+    name = raw.strip()
+    return name[:160] if name and name != entity_id else None
+
+
 def _entity(entity_id: str | None, states: Mapping[str, Any]) -> dict[str, Any] | None:
     if not entity_id:
         return None
     observed = states.get(entity_id)
     return {
         "entity_id": entity_id,
+        "friendly_name": _friendly_name(entity_id, states),
         "state": observed.state if observed is not None else None,
         "available": observed is not None and observed.state not in ("unknown", "unavailable", ""),
         "last_updated": (
@@ -62,6 +78,9 @@ def build_operations_snapshot(
         rooms.append({
             "id": room.room_id,
             "name": room.name,
+            "friendly_name": _friendly_name(
+                f"climate.dh_climate_app_{room.room_id}", states
+            ),
             "climate_entity": f"climate.dh_climate_app_{room.room_id}",
             "health": (
                 health.rooms.get(room.room_id, "unknown")
