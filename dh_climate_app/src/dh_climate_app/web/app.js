@@ -1,5 +1,5 @@
 "use strict";
-// DH Climate Explorer: one object tree, one detail pane, zero write endpoints.
+// DH Climate Explorer: one object tree; configuration writes are isolated in editor.js.
 const $ = (id) => document.getElementById(id);
 let snapshot = null;
 let locale = (navigator.language || "en").toLowerCase().startsWith("ru") ? "ru" : "en";
@@ -21,7 +21,8 @@ const number = (v, unit = "") => v === null || v === undefined || !Number.isFini
   ? "—" : new Intl.NumberFormat(locale, {minimumFractionDigits:1, maximumFractionDigits:1}).format(Number(v)) + unit;
 const keyOf = (item) => [item.kind, item.room || "", item.resource || "", item.id || ""].join("|");
 const selectedKey = () => keyOf(selection);
-const roomById = (id) => (snapshot?.rooms || []).find(r => r.id === id);
+const roomById = (id) => (snapshot?.rooms || []).find(r => r.id === id) ||
+  window.DHClimateEditor?.previewRoom(id);
 const resourceById = (id) => (snapshot?.home.resources || []).find(r => r.id === id);
 const deviceById = (roomId, id) => roomById(roomId)?.devices.find(d => d.entity_id === id);
 const observedText = (entity) => (!snapshot?.app.ha_connected || !entity?.available) ? unknown() : display(entity.state);
@@ -62,7 +63,7 @@ function node(kind, label, icon, children = [], fields = {}) {
   return {kind, label, icon, children, ...fields};
 }
 function buildTree(data) {
-  const rooms = data?.rooms || [];
+  const rooms = window.DHClimateEditor?.previewRooms(data?.rooms || []) || data?.rooms || [];
   const resources = [...(data?.home.resources || [])];
   // Heating source / VRF are configured resources even without telemetry.
   if (data?.home.heating_source && !resources.some(r => r.id === data.home.heating_source))
@@ -116,6 +117,7 @@ function findPath(target, collection = nodes, ancestors = []) {
   return null;
 }
 function navigate(item) {
+  if (window.DHClimateEditor && !window.DHClimateEditor.onNavigate()) return;
   selection = {kind:item.kind, id:item.id || null, room:item.room || null,
     resource:item.resource || null, partType:item.partType || null};
   const path = findPath(selection);
@@ -150,6 +152,15 @@ function renderTree() {
     add(select, dom("span", "tree-icon", item.icon), dom("span", "tree-text", item.label));
     select.onclick = () => navigate(item);
     line.append(toggle, select);
+    const make = window.DHClimateEditor?.plusFor(item);
+    if (make) {
+      const plus = dom("button", "tree-add", "+");
+      plus.type = "button";
+      plus.title = t("editor.create");
+      plus.setAttribute("aria-label", t("editor.create") + " " + item.label);
+      plus.onclick = make;
+      line.append(plus);
+    }
     if (item.health && item.health !== "healthy") line.append(dom("span", "tree-node-health " + severity(item.health), "●"));
     wrap.append(line);
     if (expandable && open) {
@@ -412,23 +423,28 @@ function renderInspector() {
 function render() {
   $("top-title").textContent = t("explorer");
   $("explorer-heading").textContent = t("explorer").toUpperCase();
-  $("foot-mode").textContent = t("read_only");
+  $("foot-mode").textContent = window.DHClimateEditor?.viewMode() || t("read_only");
   $("connection").textContent = !streamConnected && snapshot ? t("connection_lost") : !snapshot ? t("loading") :
     snapshot.app.ha_connected ? t("online") : t("offline");
   $("connection").className = "connection " + (!streamConnected && snapshot ? "warn" : snapshot?.app.ha_connected ? "good" : "bad");
   $("foot-status").textContent = "DH Climate · " + t("explorer") +
     (snapshot ? " · v" + snapshot.app.version : "");
   renderTree(); renderBreadcrumbs();
-  const main = $("content"); main.replaceChildren();
-  if (!snapshot) main.append(paragraph(t("loading"), "subtle"));
-  else {
-    const views = {system:showSystem, weather:showWeather, home:showHome,
-      resources:showResources, resource:showResource, parts:showParts,
-      part:showPart, season:showSeason, rooms:showRooms, room:showRoom,
-      thermostat:showThermostat, sensors:showSensors, sensor:showSensor,
-      devices:showDevices, device:showDevice};
-    (views[selection.kind] || showSystem)(main);
+  const main = $("content");
+  if (!window.DHClimateEditor?.renderEditor(main)) {
+    main.replaceChildren();
+    if (!snapshot) main.append(paragraph(t("loading"), "subtle"));
+    else {
+      const views = {system:showSystem, weather:showWeather, home:showHome,
+        resources:showResources, resource:showResource, parts:showParts,
+        part:showPart, season:showSeason, rooms:showRooms, room:showRoom,
+        thermostat:showThermostat, sensors:showSensors, sensor:showSensor,
+        devices:showDevices, device:showDevice};
+      (views[selection.kind] || showSystem)(main);
+      window.DHClimateEditor?.toolbar(main,selection.kind,selection.id,selection.room);
+    }
   }
+  window.DHClimateEditor?.controls(main);
   renderInspector();
   renderPanels();
 }
@@ -472,4 +488,5 @@ $("language").onchange = e => language(e.target.value);
   try { preferred = localStorage.getItem("dh-climate-language") || preferred; } catch (_) {}
   await language(preferred);
   await connect();
+  if (window.DHClimateEditor) await window.DHClimateEditor.init(t,navigate,render);
 })();

@@ -31,6 +31,7 @@ from .telemetry import TelemetryClient, TelemetryRunner
 from .topology import build_topology
 from .operations import build_operations_snapshot
 from .ingress import OperationsWebServer
+from .manifest import ManifestEditor
 from .weather import WeatherState, build_weather_state, select_weather_source
 from .window_cooling import WindowCoolingGuard
 
@@ -67,7 +68,7 @@ def load_options(path: Path = OPTIONS_FILE) -> AppConfig:
 
 
 class ClimateRuntime:
-    def __init__(self, config: AppConfig) -> None:
+    def __init__(self, config: AppConfig, editor: ManifestEditor | None = None) -> None:
         self.config = config
         self.started_at = datetime.now(timezone.utc)
         self.stop_event = asyncio.Event()
@@ -113,7 +114,7 @@ class ClimateRuntime:
             config=config, outdoor=None, weather=None, room_states={},
             health=None, problems=(), demands={}, states={},
             version=APP_VERSION, ha_connected=False,
-        ))
+        ), editor=editor)
 
         loop = asyncio.get_running_loop()
         self.mqtt = MqttBridge(
@@ -1010,12 +1011,16 @@ class ClimateRuntime:
 
 
 async def async_main() -> int:
-    config = load_options()
+    # A published manifest is canonical after a deliberate restart.
+    # Supervisor options are only the seed until the first Apply.
+    supervisor_options = json.loads(OPTIONS_FILE.read_text(encoding="utf-8"))
+    editor = ManifestEditor(OPTIONS_FILE.parent, supervisor_options)
+    config = parse_options(editor.effective_on_startup())
     logging.basicConfig(
         level=getattr(logging, config.log_level.upper()),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    runtime = ClimateRuntime(config)
+    runtime = ClimateRuntime(config, editor=editor)
 
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):

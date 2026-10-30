@@ -1,5 +1,5 @@
 name: DigitalHouses Climate App
-version: 0.2.2
+version: 0.2.3
 breaking_versions:
   - "0.2.0"
 slug: dh_climate_app
@@ -19,7 +19,7 @@ ingress: true
 ingress_port: 8099
 panel_icon: mdi:thermostat
 panel_title: DH Climate
-panel_admin: true
+panel_admin: false
 services:
   - mqtt:need
 options:

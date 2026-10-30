@@ -1,8 +1,8 @@
-"""Small dependency-free, read-only Ingress HTTP/SSE server.
+"""Small dependency-free HAOS Ingress HTTP/SSE server.
 
 Ingress is the only trust boundary: reject traffic not originating from
-Home Assistant Supervisor (172.30.32.2). No HA or Supervisor credentials
-are ever sent to the browser.
+Home Assistant Supervisor (172.30.32.2). Writes require an authenticated
+HA system-admin group, CSRF-resistant JSON requests, and optimistic locking.
 """
 from __future__ import annotations
 
@@ -11,11 +11,14 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .manifest import ManifestEditor, EditConflict, EditValidation
+
 
 WEB_ROOT = Path(__file__).with_name("web")
 ASSETS = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+    "/editor.js": ("editor.js", "text/javascript; charset=utf-8"),
     "/style.css": ("style.css", "text/css; charset=utf-8"),
     "/i18n/en.json": ("i18n/en.json", "application/json; charset=utf-8"),
     "/i18n/ru.json": ("i18n/ru.json", "application/json; charset=utf-8"),
@@ -35,11 +38,13 @@ class OperationsWebServer:
     def __init__(
         self, initial: dict[str, Any], *, host: str = "0.0.0.0",
         port: int = 8099, allowed_peers: tuple[str, ...] = ("172.30.32.2",),
+        editor: ManifestEditor | None = None,
     ) -> None:
         self.host = host
         self.port = port
         self.allowed_peers = frozenset(allowed_peers)
         self.snapshot = initial
+        self.editor = editor
         self.revision = 0
         self._server: asyncio.AbstractServer | None = None
         self._condition = asyncio.Condition()
@@ -121,6 +126,100 @@ class OperationsWebServer:
                 writer.write(b": heartbeat\n\n")
                 await writer.drain()
 
+    @staticmethod
+    def _parse_headers(raw: bytes) -> tuple[str, str, dict[str, str]]:
+        lines = raw.split(b"\r\n")
+        method, path, version = lines[0].decode("ascii").split(" ", 2)
+        if version != "HTTP/1.1":
+            raise ValueError("Invalid HTTP version")
+        headers: dict[str, str] = {}
+        for line in lines[1:]:
+            if not line:
+                continue
+            key, value = line.decode("ascii").split(":", 1)
+            key = key.strip().lower()
+            if key in headers:
+                raise ValueError("Duplicate HTTP header")
+            headers[key] = value.strip()
+        return method, path, headers
+
+    @staticmethod
+    def _is_admin(headers: dict[str, str]) -> bool:
+        # Header injection from the browser is removed by Supervisor.
+        # Never trust username or a blank/unrecognised group as admin.
+        return bool(headers.get("x-remote-user-id", "").strip()) and (
+            "system-admin" in {
+                value.strip() for value in
+                headers.get("x-remote-user-groups", "").split(",")
+            }
+        )
+
+    async def _config(self, reader: asyncio.StreamReader,
+                      writer: asyncio.StreamWriter, method: str,
+                      path: str, headers: dict[str, str]) -> None:
+        if self.editor is None:
+            await self._reply(writer, "404 Not Found", b"No editor")
+            return
+        if not self._is_admin(headers):
+            await self._reply(writer, "403 Forbidden", b"Administrator required")
+            return
+        if method == "GET" and path == "/api/config":
+            result = await self.editor.state()
+            await self._reply(writer, "200 OK", self._json(result),
+                              "application/json; charset=utf-8")
+            return
+        actions = {"/api/config/draft": "save", "/api/config/validate": "validate",
+                   "/api/config/apply": "apply", "/api/config/discard": "discard"}
+        if path not in actions:
+            await self._reply(writer, "404 Not Found", b"Not found")
+            return
+        if method != "POST":
+            await self._reply(writer, "405 Method Not Allowed", b"POST required",
+                              extra="Allow: POST\r\n")
+            return
+        if headers.get("x-requested-with") != "DHClimateExplorer":
+            await self._reply(writer, "403 Forbidden", b"Invalid request marker")
+            return
+        if headers.get("content-type", "").split(";", 1)[0].lower() != "application/json":
+            await self._reply(writer, "415 Unsupported Media Type", b"JSON required")
+            return
+        if "transfer-encoding" in headers:
+            await self._reply(writer, "400 Bad Request", b"Chunked not supported")
+            return
+        try:
+            length = int(headers.get("content-length", ""))
+        except ValueError:
+            length = -1
+        if not 0 < length <= 262144:
+            await self._reply(writer, "413 Content Too Large", b"Invalid body size")
+            return
+        try:
+            payload = json.loads(await asyncio.wait_for(reader.readexactly(length), timeout=5),
+                                 parse_constant=lambda _: (_ for _ in ()).throw(ValueError("Nonfinite JSON")))
+            if not isinstance(payload, dict):
+                raise ValueError("Expected object")
+            if path == "/api/config/apply" and payload.get("confirm") != "APPLY":
+                raise EditValidation("Explicit APPLY confirmation required")
+            args = {"base_hash": payload.get("base_hash"),
+                    "revision": payload.get("revision")}
+            if actions[path] == "save":
+                args["options"] = payload.get("options")
+                args["author_id"] = headers["x-remote-user-id"]
+            result = await getattr(self.editor, actions[path])(**args)
+        except EditConflict as exc:
+            await self._reply(writer, "409 Conflict",
+                              self._json({"error": str(exc)}),
+                              "application/json; charset=utf-8")
+            return
+        except (EditValidation, ValueError, TypeError, json.JSONDecodeError,
+                asyncio.IncompleteReadError, TimeoutError) as exc:
+            await self._reply(writer, "422 Unprocessable Content",
+                              self._json({"error": str(exc)}),
+                              "application/json; charset=utf-8")
+            return
+        await self._reply(writer, "200 OK", self._json(result),
+                          "application/json; charset=utf-8")
+
     async def _handle(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
     ) -> None:
@@ -128,17 +227,17 @@ class OperationsWebServer:
         try:
             peer = writer.get_extra_info("peername")
             try:
-                request = await asyncio.wait_for(
-                    reader.readuntil(b"\r\n\r\n"), timeout=5,
-                )
-                line = request.split(b"\r\n", 1)[0].decode("ascii")
-                method, path, _version = line.split(" ", 2)
+                raw = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=5)
+                method, path, headers = self._parse_headers(raw)
             except (UnicodeError, ValueError, asyncio.IncompleteReadError,
                     asyncio.LimitOverrunError, TimeoutError):
                 await self._reply(writer, "400 Bad Request", b"Bad request")
                 return
             if peer is None or peer[0] not in self.allowed_peers:
                 await self._reply(writer, "403 Forbidden", b"Forbidden")
+                return
+            if path == "/api/config" or path.startswith("/api/config/"):
+                await self._config(reader, writer, method, path, headers)
                 return
             if method not in ("GET", "HEAD"):
                 await self._reply(

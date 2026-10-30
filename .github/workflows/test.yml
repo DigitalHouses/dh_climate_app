@@ -38,6 +38,7 @@ jobs:
       - name: Validate Explorer client
         run: |
           node --check dh_climate_app/src/dh_climate_app/web/app.js
+          node --check dh_climate_app/src/dh_climate_app/web/editor.js
           node --test dh_climate_app/tests/test_explorer_tree.cjs
       - name: Build HAOS image
         run: |
