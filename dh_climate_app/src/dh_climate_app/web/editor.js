@@ -3,6 +3,7 @@
    No draft operation drives equipment; Apply changes next-start manifest. */
 (() => {
   let info = null;
+  let labelsState = {schema_version:1,revision:0,labels:{}};
   let edit = null;
   let candidate = null;
   let validated = false;
@@ -26,6 +27,73 @@
     el.onclick = action;
     return el;
   };
+  const labelKey = item => {
+    if (item.kind==="room") return "room:" + item.id;
+    if (item.kind==="sensor" || item.kind==="device") return "entity:" + item.id;
+    if (item.kind==="resource") return "resource:" + item.id;
+    if (item.kind==="part")
+      return "part:" + item.resource + ":" + item.partType + ":" + item.id;
+    return null;
+  };
+  function displayName(kind, id, language, fallback) {
+    const text=labelsState.labels?.[kind + ":" + id]?.[language];
+    return text || fallback;
+  }
+  async function loadLabels() {
+    try {
+      const response=await fetch("api/labels",{cache:"no-store",credentials:"same-origin"});
+      if (response.ok) {
+        const next=await response.json();
+        if (next && typeof next.labels==="object" && Number.isInteger(next.revision))
+          labelsState=next;
+      }
+    } catch (_) { /* HA read-only Explorer still works without label service */ }
+    repaint();
+  }
+  function startLabel(item) {
+    if (!online() || !navigateAway()) return;
+    const key=labelKey(item);
+    if (!key) return;
+    // Right-click action edits the object itself, not the formerly selected page.
+    openObject(item);
+    const original=labelsState.labels?.[key] || {};
+    edit={kind:"label",key,technicalId:item.technicalId || item.id,
+      haName:item.haName || null, sourceName:item.sourceName || null,
+      names:{ru:original.ru || "",en:original.en || ""}};
+    message="";
+    repaint();
+  }
+  function labelForm(main) {
+    main.append(text("h2",localize("rename"),"page-title"));
+    const section=text("section","","card");
+    const values=edit.names;
+    field(section,localize("name_ru"),values.ru,v=>values.ru=v);
+    field(section,localize("name_en"),values.en,v=>values.en=v);
+    section.append(text("h3",localize("reference"),"section-heading"));
+    if (edit.sourceName) section.append(text("p",
+      localize("configuration_name")+": "+edit.sourceName,"subtle"));
+    section.append(text("p",localize("ha_name")+": "+(edit.haName || "—"),"subtle"));
+    section.append(text("p",localize("technical_id")+": "+edit.technicalId,"mono subtle"));
+    section.append(text("p",localize("empty_default"),"subtle small"));
+    const actions=text("div","","editor-actions");
+    actions.append(button(localize("save_name"),async()=>{
+      try {
+        const response=await fetch("api/labels",{
+          method:"POST",credentials:"same-origin",
+          headers:{"Content-Type":"application/json","X-Requested-With":"DHClimateExplorer"},
+          body:JSON.stringify({key:edit.key,names:values,revision:labelsState.revision}),
+        });
+        const result=await response.json();
+        if(!response.ok)throw Error(result.error || "HTTP "+response.status);
+        labelsState=result;discardLocal();show(localize("name_saved"));
+      } catch(e) {
+        show(e.message,true);
+        await loadLabels();
+      }
+    }),button(localize("cancel"),()=>{discardLocal();repaint();}));
+    section.append(actions);
+    main.append(section);
+  }
   const online = () => !!info;
   const mutable = () => !!info && !info.pending_restart;
   const rooms = () => candidate?.rooms || [];
@@ -242,6 +310,7 @@
   function renderEditor(main) {
     if (!edit) return false;
     main.replaceChildren();
+    if (edit.kind==="label") labelForm(main);
     if (edit.kind==="room") roomForm(main);
     if (edit.kind==="device") deviceForm(main);
     return true;
@@ -326,8 +395,13 @@
     };
   }
   function menuActions(item) {
-    if (!mutable()) return [];
+    if (!online()) return [];
     const actions=[];
+    if (labelKey(item) &&
+        (item.kind !== "room" ||
+         (info.options.rooms || []).some(room=>room.id===item.id)))
+      actions.push({label:localize("rename"),run:()=>startLabel(item)});
+    if (!mutable()) return actions;
     if (item.kind === "rooms") {
       actions.push({label:localize("new_room"), run:()=>startRoom()});
     } else if (item.kind === "room") {
@@ -351,7 +425,7 @@
   }
   async function init(t,navigate,render) {
     tr=t; openObject=navigate; repaint=render;
-    await refresh();
+    await Promise.all([refresh(),loadLabels()]);
   }
   function onNavigate(){ return navigateAway(); }
   function viewMode(){ return !info?tr("read_only"):localize("administrator"); }
@@ -359,5 +433,6 @@
     init, canEdit:online, canChange:mutable, menuActions,
     startRoom,startDevice, renderEditor, controls, onNavigate,
     isEditing:()=>!!edit, viewMode, previewRooms, previewRoom,
+    displayName, loadLabels,
   };
 })();

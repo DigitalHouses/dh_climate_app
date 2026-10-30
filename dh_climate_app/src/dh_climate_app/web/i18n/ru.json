@@ -20,7 +20,7 @@
   "no_problems": "Проблем не обнаружено",
   "about": "Информация",
   "version": "Версия",
-  "read_only_info": "Operations работает только на чтение. Управление и параметры остаются в Home Assistant.",
+  "read_only_info": "Оперативные данные поступают из Home Assistant. Редактирование конфигурации и отображаемых имён зависит от прав пользователя.",
   "temperature": "Температура",
   "raw_temperature": "Температура RAW",
   "avg24": "Средняя за 24 часа",
@@ -160,5 +160,18 @@
   "editor.pending_delete": "БУДЕТ УДАЛЕНО",
   "editor.confirm": "Подтвердить",
   "editor.save_or_cancel": "Перед переходом сохраните форму или нажмите Отмена.",
-  "editor.open": "Открыть"
+  "editor.open": "Открыть",
+  "identification": "Идентификация",
+  "configuration_name": "Имя в конфигурации",
+  "ha_friendly_name": "Имя в Home Assistant",
+  "editor.rename": "Изменить имя",
+  "editor.name_ru": "Имя в DH Climate · русский",
+  "editor.name_en": "Имя в DH Climate · английский",
+  "editor.ha_name": "Название в Home Assistant",
+  "editor.reference": "Для справки",
+  "editor.configuration_name": "Имя из конфигурации",
+  "editor.technical_id": "Технический ID",
+  "editor.empty_default": "Пустое поле означает: использовать имя по умолчанию. ID не изменяется.",
+  "editor.save_name": "Сохранить имя",
+  "editor.name_saved": "Название сохранено в DH Climate. Управление климатом не затронуто."
 }

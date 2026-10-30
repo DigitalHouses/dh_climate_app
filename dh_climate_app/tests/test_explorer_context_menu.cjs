@@ -34,12 +34,13 @@ test("ROOMS right click offers only create-room action to admin",async()=>{
 test("room menu contains add/edit/delete and device menu contains edit/delete",async()=>{
   const api=await runEditor();
   assert.deepEqual(Array.from(api.menuActions({kind:"room",id:"bedroom"}),a=>a.label),
-    ["editor.new_device","editor.edit_room","editor.delete_room"]);
+    ["editor.rename","editor.new_device","editor.edit_room","editor.delete_room"]);
   assert.deepEqual(Array.from(api.menuActions({kind:"device",room:"bedroom",id:"climate.bedroom_ac"}),a=>a.label),
-    ["editor.edit_device","editor.delete_device"]);
+    ["editor.rename","editor.edit_device","editor.delete_device"]);
   assert.deepEqual(Array.from(api.menuActions({kind:"devices",room:"bedroom"}),a=>a.label),
     ["editor.new_device"]);
-  assert.equal(api.menuActions({kind:"sensor",id:"sensor.bedroom"}).length,0);
+  assert.deepEqual(Array.from(api.menuActions({kind:"sensor",id:"sensor.bedroom"}),a=>a.label),
+    ["editor.rename"]);
   assert.equal(api.menuActions({kind:"room",id:"missing"}).length,0);
 });
 test("denied or pending-restart administrators never receive edit actions",async()=>{
@@ -47,7 +48,9 @@ test("denied or pending-restart administrators never receive edit actions",async
   const pending=await runEditor(true,true);
   for(const api of [viewer,pending]){
     assert.equal(api.menuActions({kind:"rooms"}).length,0);
-    assert.equal(api.menuActions({kind:"room",id:"bedroom"}).length,0);
+    const actions=api.menuActions({kind:"room",id:"bedroom"});
+    assert.deepEqual(Array.from(actions,a=>a.label),
+      api===viewer?[]:["editor.rename"]);
   }
 });
 test("context menu and real separator replace permanent plus buttons",()=>{

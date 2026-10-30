@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .manifest import ManifestEditor, EditConflict, EditValidation
+from .ui_labels import UILabels
 
 
 WEB_ROOT = Path(__file__).with_name("web")
@@ -39,12 +40,14 @@ class OperationsWebServer:
         self, initial: dict[str, Any], *, host: str = "0.0.0.0",
         port: int = 8099, allowed_peers: tuple[str, ...] = ("172.30.32.2",),
         editor: ManifestEditor | None = None,
+        labels: UILabels | None = None,
     ) -> None:
         self.host = host
         self.port = port
         self.allowed_peers = frozenset(allowed_peers)
         self.snapshot = initial
         self.editor = editor
+        self.labels = labels
         self.revision = 0
         self._server: asyncio.AbstractServer | None = None
         self._condition = asyncio.Condition()
@@ -154,6 +157,61 @@ class OperationsWebServer:
             }
         )
 
+    async def _labels(self, reader: asyncio.StreamReader,
+                      writer: asyncio.StreamWriter, method: str,
+                      headers: dict[str, str]) -> None:
+        if self.labels is None:
+            await self._reply(writer, "404 Not Found", b"No UI labels")
+            return
+        if method == "GET":
+            await self._reply(writer, "200 OK",
+                              self._json(await self.labels.state()),
+                              "application/json; charset=utf-8")
+            return
+        if method != "POST":
+            await self._reply(writer, "405 Method Not Allowed", b"GET or POST required")
+            return
+        if not self._is_admin(headers):
+            await self._reply(writer, "403 Forbidden", b"Administrator required")
+            return
+        if headers.get("x-requested-with") != "DHClimateExplorer":
+            await self._reply(writer, "403 Forbidden", b"Invalid request marker")
+            return
+        if headers.get("content-type", "").split(";", 1)[0].lower() != "application/json":
+            await self._reply(writer, "415 Unsupported Media Type", b"JSON required")
+            return
+        if "transfer-encoding" in headers:
+            await self._reply(writer, "400 Bad Request", b"Chunked not supported")
+            return
+        try:
+            length = int(headers.get("content-length", ""))
+        except ValueError:
+            length = -1
+        if not 0 < length <= 8192:
+            await self._reply(writer, "413 Content Too Large", b"Invalid body size")
+            return
+        try:
+            data = json.loads(await asyncio.wait_for(reader.readexactly(length), timeout=5))
+            if not isinstance(data, dict):
+                raise EditValidation("Invalid body")
+            result = await self.labels.save(
+                key=data.get("key"), names=data.get("names"),
+                revision=data.get("revision"),
+            )
+        except EditConflict as exc:
+            await self._reply(writer, "409 Conflict",
+                              self._json({"error": str(exc)}),
+                              "application/json; charset=utf-8")
+            return
+        except (EditValidation, ValueError, TypeError,
+                asyncio.IncompleteReadError, TimeoutError) as exc:
+            await self._reply(writer, "422 Unprocessable Content",
+                              self._json({"error": str(exc)}),
+                              "application/json; charset=utf-8")
+            return
+        await self._reply(writer, "200 OK", self._json(result),
+                          "application/json; charset=utf-8")
+
     async def _config(self, reader: asyncio.StreamReader,
                       writer: asyncio.StreamWriter, method: str,
                       path: str, headers: dict[str, str]) -> None:
@@ -235,6 +293,9 @@ class OperationsWebServer:
                 return
             if peer is None or peer[0] not in self.allowed_peers:
                 await self._reply(writer, "403 Forbidden", b"Forbidden")
+                return
+            if path == "/api/labels":
+                await self._labels(reader, writer, method, headers)
                 return
             if path == "/api/config" or path.startswith("/api/config/"):
                 await self._config(reader, writer, method, path, headers)

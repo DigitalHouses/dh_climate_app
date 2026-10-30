@@ -20,7 +20,7 @@
   "no_problems": "No reported problems",
   "about": "About",
   "version": "Version",
-  "read_only_info": "Operations is read-only. Commands and settings remain in Home Assistant.",
+  "read_only_info": "Live observations are from Home Assistant. Editing configuration and display names depends on permissions.",
   "temperature": "Temperature",
   "raw_temperature": "Raw temperature",
   "avg24": "24h average",
@@ -156,5 +156,18 @@
   "editor.pending_delete": "DELETE PENDING",
   "editor.confirm": "Confirm",
   "editor.save_or_cancel": "Save this form or click Cancel before navigating.",
-  "editor.open": "Open"
+  "editor.open": "Open",
+  "identification": "Identification",
+  "configuration_name": "Configuration name",
+  "ha_friendly_name": "Home Assistant name",
+  "editor.rename": "Change display name",
+  "editor.name_ru": "DH Climate name · Russian",
+  "editor.name_en": "DH Climate name · English",
+  "editor.ha_name": "Home Assistant name",
+  "editor.reference": "Reference",
+  "editor.configuration_name": "Configuration name",
+  "editor.technical_id": "Technical ID",
+  "editor.empty_default": "Leave blank to use the source name. The ID does not change.",
+  "editor.save_name": "Save name",
+  "editor.name_saved": "DH Climate label saved. Climate control unchanged."
 }
