@@ -192,3 +192,9 @@ body.resizing-explorer { cursor:col-resize; user-select:none; }
  .picker-filters .picker-search{grid-column:1/-1;}
  .picker-dialog{padding:11px;}
 }
+
+/* Existing bindings with a domain incompatible with the selected field. */
+.picker-incompatible{border-left:3px solid var(--danger);}
+.picker-type-warning{font-size:11px;color:var(--danger);font-weight:600;}
+.picker-footer>span{flex:1;min-width:0;overflow-wrap:anywhere;}
+.picker-filters select[hidden]{display:none;}

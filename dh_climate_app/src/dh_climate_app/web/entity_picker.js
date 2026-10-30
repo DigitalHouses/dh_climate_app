@@ -14,7 +14,7 @@
     if (kind==="actuator-virtual") return ["climate","switch"];
     if (kind==="humidity-actuator") return ["humidifier","switch"];
     if (kind==="weather") return ["weather","sensor"];
-    if (kind==="binary") return ["binary_sensor"];
+    if (kind==="binary" || kind==="window") return ["binary_sensor"];
     return ["sensor"];
   };
   const classesFor = kind => ({
@@ -25,6 +25,17 @@
     pressure:["pressure"],
     rpm:["frequency","speed"],
   })[kind] || [];
+  function appropriateClass(item,kind) {
+    const classes=classesFor(kind);
+    if(!classes.length) return true;
+    if(classes.includes(item.device_class)) return true;
+    // An unclassified temperature sensor with an explicit degree unit
+    // is a useful fallback. A percentage alone cannot identify humidity
+    // (it could be a battery level), so other types require device_class.
+    if(kind==="temperature" && !item.device_class &&
+       ["°C","°F","K"].includes(item.unit)) return true;
+    return false;
+  }
   function match(item,filters) {
     const {kind,query,area,domain,availability,includeOther}=filters;
     if (!domainsFor(kind).includes(item.domain)) return false;
@@ -33,9 +44,7 @@
     if (area!=="all" && area!=="none" && item.area_id!==area) return false;
     if (availability==="available" && !item.available) return false;
     if (availability==="unavailable" && item.available) return false;
-    const classes=classesFor(kind);
-    if (classes.length && !includeOther &&
-        item.device_class && !classes.includes(item.device_class)) return false;
+    if (!includeOther && !appropriateClass(item,kind)) return false;
     const phrase=(item.name+" "+item.entity_id+" "+(item.area_name||"")+
       " "+(item.device_name||"")).toLocaleLowerCase();
     return phrase.includes(query.toLocaleLowerCase().trim());
@@ -49,7 +58,7 @@
     const opt=el("option","",name);opt.value=value;select.append(opt);
   }
   async function open({kind="temperature",multiple=false,values=[],title="",
-                       areaHint="",usage={},tr=x=>x,onConfirm}) {
+                       areaHint="",areaHints=[],usage={},tr=x=>x,onConfirm}) {
     close();
     const initial=[...new Set(values.filter(Boolean))];
     const chosen=new Set(initial);
@@ -86,8 +95,10 @@
     if(dialog!==backdrop)return;
     status.remove();
     const filters={kind,query:"",area:"all",domain:"all",availability:"all",includeOther:false};
+    const hints=[areaHint,...areaHints].filter(Boolean)
+      .map(value=>value.trim().toLocaleLowerCase());
     const matchedArea=catalog.areas.find(a=>
-      a.name?.toLocaleLowerCase()===areaHint?.trim().toLocaleLowerCase());
+      hints.includes(a.name?.toLocaleLowerCase()));
     if(matchedArea)filters.area=matchedArea.id;
     const row=el("div","picker-filters");
     const search=el("input","picker-search");
@@ -101,6 +112,7 @@
     const domain=el("select");domain.setAttribute("aria-label",tr("picker.domain"));
     option(domain,"all",tr("picker.all_types"));
     for(const d of domainsFor(kind))option(domain,d,d);
+    if(domainsFor(kind).length===1)domain.hidden=true;
     const availability=el("select");
     availability.setAttribute("aria-label",tr("picker.availability"));
     for(const [v,key] of [["all","picker.all"],["available","picker.available"],
@@ -128,9 +140,11 @@
     const refresh=()=>{
       if(dialog!==backdrop)return;
       const found=catalog.entities.filter(item=>match(item,filters));
-      // Keep already assigned values visible even if HA registry/state lacks them.
+      // Always keep assigned IDs visible, even if a filter excludes them.
+      // Never silently delete an existing HA binding.
       const known=new Map(catalog.entities.map(item=>[item.entity_id,item]));
-      const missing=Array.from(chosen).filter(id=>!known.has(id));
+      const foundIds=new Set(found.map(item=>item.entity_id));
+      const outside=Array.from(chosen).filter(id=>!foundIds.has(id));
       const sorted=found.slice().sort((a,b)=>{
         const aSelected=chosen.has(a.entity_id)?-1:0;
         const bSelected=chosen.has(b.entity_id)?-1:0;
@@ -141,13 +155,20 @@
         (found.length>150?" · "+tr("picker.refine"):"")+
         (catalog.truncated?" · "+tr("picker.truncated"):"");
       list.replaceChildren();
-      const displayed=[...missing.map(id=>({
-        entity_id:id,name:id,domain:id.split(".")[0],available:false,
-        missing:true
-      })),...sorted.slice(0,150)];
+      const displayed=[
+        ...outside.map(id=>known.get(id) || {
+          entity_id:id,name:id,domain:id.split(".")[0],available:false,
+          missing:true
+        }),...sorted.slice(0,150)
+      ];
+      const invalid=Array.from(chosen).filter(id=>
+        !domainsFor(kind).includes(id.split(".",1)[0]));
       for(const item of displayed){
+        const incompatible=!domainsFor(kind).includes(item.domain);
         const used=usage[item.entity_id]||[];
-        const itemLine=el("button","picker-result"+(chosen.has(item.entity_id)?" is-selected":""));
+        const itemLine=el("button","picker-result"+
+          (chosen.has(item.entity_id)?" is-selected":"")+
+          (incompatible?" picker-incompatible":""));
         itemLine.type="button";
         itemLine.setAttribute("role","option");
         itemLine.setAttribute("aria-selected",String(chosen.has(item.entity_id)));
@@ -160,12 +181,17 @@
              item.device_class,item.unit].filter(Boolean).join(" · ")));
         if(used.length)information.append(el("span","picker-in-use",
           tr("picker.used")+": "+used.join(", ")));
+        if(incompatible)information.append(el("span","picker-type-warning",
+          tr("picker.invalid_type")+": "+domainsFor(kind).join(", ")));
+        else if(!item.missing && !foundIds.has(item.entity_id))
+          information.append(el("span","subtle small",tr("picker.outside_filter")));
         const state=el("span","picker-state",
           item.missing?tr("picker.not_in_ha"):
           item.available?(item.state??"—"):tr("picker.unavailable"));
         itemLine.append(tick,information,state);
         itemLine.onclick=()=>{
           if(chosen.has(item.entity_id))chosen.delete(item.entity_id);
+          else if(incompatible) return;
           else if(multiple)chosen.add(item.entity_id);
           else{chosen.clear();chosen.add(item.entity_id);}
           refresh();
@@ -173,8 +199,9 @@
         list.append(itemLine);
       }
       if(!displayed.length)list.append(el("p","subtle",tr("picker.none")));
-      selectedLabel.textContent=tr("picker.selected")+": "+chosen.size;
-      confirm.disabled=chosen.size===0;
+      selectedLabel.textContent=tr("picker.selected")+": "+chosen.size+
+        (invalid.length?" · "+tr("picker.fix_invalid"):"");
+      confirm.disabled=chosen.size===0 || invalid.length>0;
     };
     search.oninput=()=>{filters.query=search.value;refresh();};
     area.onchange=()=>{filters.area=area.value;refresh();};
@@ -184,5 +211,5 @@
     refresh();
     search.focus();
   }
-  window.DHClimateEntityPicker={open,close,match,domainsFor,classesFor};
+  window.DHClimateEntityPicker={open,close,match,domainsFor,classesFor,appropriateClass};
 })();
