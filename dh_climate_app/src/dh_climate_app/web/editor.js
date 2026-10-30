@@ -276,28 +276,6 @@
     toolbar.append(buttons);
     main.prepend(toolbar);
   }
-  function toolbar(main,kind, id=null,roomId=null) {
-    if (!mutable()) return;
-    if (kind==="room" && (info.options.rooms||[]).some(r=>r.id===id)) {
-      const b=text("div","","editor-actions");
-      b.append(button(localize("edit_room"),()=>startRoom(id)),
-        button(localize("delete_room"),()=>deleteRoom(id)));
-      main.prepend(b);
-    } else if (kind==="device" && id && roomId) {
-      const b=text("div","","editor-actions");
-      b.append(button(localize("edit_device"),()=>startDevice(roomId,id)),
-        button(localize("delete_device"),()=>deleteDevice(roomId,id)));
-      main.prepend(b);
-    } else if(kind==="rooms") {
-      const b=text("div","","editor-actions");
-      b.append(button(localize("new_room"),()=>startRoom()));
-      main.prepend(b);
-    } else if(kind==="devices" && roomId) {
-      const b=text("div","","editor-actions");
-      b.append(button(localize("new_device"),()=>startDevice(roomId)));
-      main.prepend(b);
-    }
-  }
   function previewRooms(liveRooms) {
     if (!info || (!info.dirty && !info.pending_restart)) return liveRooms;
     const configured = info.options.rooms || [];
@@ -335,15 +313,29 @@
       })),
     };
   }
-  function plusFor(node) {
-    if (!mutable()) return null;
-    if (node.kind==="rooms")
-      return () => startRoom();
-    if (node.kind==="devices")
-      return () => startDevice(node.room);
-    if (node.kind==="room")
-      return () => startDevice(node.id);
-    return null;
+  function menuActions(item) {
+    if (!mutable()) return [];
+    const actions=[];
+    if (item.kind === "rooms") {
+      actions.push({label:localize("new_room"), run:()=>startRoom()});
+    } else if (item.kind === "room") {
+      const exists=(info.options.rooms || []).some(room=>room.id===item.id);
+      if (exists) {
+        actions.push({label:localize("new_device"), run:()=>startDevice(item.id)});
+        actions.push({label:localize("edit_room"), run:()=>startRoom(item.id)});
+        actions.push({label:localize("delete_room"), run:()=>deleteRoom(item.id), destructive:true});
+      }
+    } else if (item.kind === "devices") {
+      if ((info.options.rooms || []).some(room=>room.id===item.room))
+        actions.push({label:localize("new_device"), run:()=>startDevice(item.room)});
+    } else if (item.kind === "device") {
+      const configured=(info.options.rooms || []).find(room=>room.id===item.room);
+      if (configured?.devices?.some(device=>device.entity===item.id)) {
+        actions.push({label:localize("edit_device"), run:()=>startDevice(item.room,item.id)});
+        actions.push({label:localize("delete_device"), run:()=>deleteDevice(item.room,item.id), destructive:true});
+      }
+    }
+    return actions;
   }
   async function init(t,navigate,render) {
     tr=t; openObject=navigate; repaint=render;
@@ -352,8 +344,8 @@
   function onNavigate(){ return navigateAway(); }
   function viewMode(){ return !info?tr("read_only"):localize("administrator"); }
   window.DHClimateEditor = {
-    init, canEdit:online, canChange:mutable, plusFor,
-    startRoom,startDevice, renderEditor, controls, toolbar, onNavigate,
+    init, canEdit:online, canChange:mutable, menuActions,
+    startRoom,startDevice, renderEditor, controls, onNavigate,
     isEditing:()=>!!edit, viewMode, previewRooms, previewRoom,
   };
 })();

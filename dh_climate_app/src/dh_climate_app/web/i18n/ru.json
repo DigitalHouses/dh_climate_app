@@ -159,5 +159,6 @@
   "editor.draft_marker": "ЧЕРНОВИК",
   "editor.pending_delete": "БУДЕТ УДАЛЕНО",
   "editor.confirm": "Подтвердить",
-  "editor.save_or_cancel": "Перед переходом сохраните форму или нажмите Отмена."
+  "editor.save_or_cancel": "Перед переходом сохраните форму или нажмите Отмена.",
+  "editor.open": "Открыть"
 }

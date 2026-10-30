@@ -10,6 +10,8 @@ let expanded = new Set(["system|||", "home|||", "rooms|||"]);
 let inspectorOpen = false;
 let explorerOpen = true;
 let streamConnected = false;
+let explorerWidth = 275;
+let menuReturnFocus = null;
 
 const t = (key) => dictionary[key] || key;
 const unknown = () => t("unknown");
@@ -117,6 +119,7 @@ function findPath(target, collection = nodes, ancestors = []) {
   return null;
 }
 function navigate(item) {
+  closeContextMenu();
   if (window.DHClimateEditor && !window.DHClimateEditor.onNavigate()) return;
   selection = {kind:item.kind, id:item.id || null, room:item.room || null,
     resource:item.resource || null, partType:item.partType || null};
@@ -151,16 +154,19 @@ function renderTree() {
     if (k === selectedKey()) select.setAttribute("aria-current", "page");
     add(select, dom("span", "tree-icon", item.icon), dom("span", "tree-text", item.label));
     select.onclick = () => navigate(item);
+    select.setAttribute("aria-haspopup", "menu");
     line.append(toggle, select);
-    const make = window.DHClimateEditor?.plusFor(item);
-    if (make) {
-      const plus = dom("button", "tree-add", "+");
-      plus.type = "button";
-      plus.title = t("editor.create");
-      plus.setAttribute("aria-label", t("editor.create") + " " + item.label);
-      plus.onclick = make;
-      line.append(plus);
-    }
+    line.oncontextmenu = event => {
+      event.preventDefault();
+      openContextMenu(item, event.clientX, event.clientY, select);
+    };
+    select.onkeydown = event => {
+      if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+        event.preventDefault();
+        const bounds = select.getBoundingClientRect();
+        openContextMenu(item, bounds.left + 18, bounds.bottom, select);
+      }
+    };
     if (item.health && item.health !== "healthy") line.append(dom("span", "tree-node-health " + severity(item.health), "●"));
     wrap.append(line);
     if (expandable && open) {
@@ -184,10 +190,128 @@ function renderBreadcrumbs() {
 }
 function renderPanels() {
   $("explorer").hidden = !explorerOpen;
+  $("explorer-resizer").hidden = !explorerOpen;
   $("inspector").hidden = !inspectorOpen;
+  if (!explorerOpen) closeContextMenu();
   $("toggle-explorer").setAttribute("aria-pressed", String(explorerOpen));
   $("toggle-inspector").setAttribute("aria-pressed", String(inspectorOpen));
 }
+function closeContextMenu(restoreFocus = false) {
+  const menu = $("context-menu");
+  if (!menu) return;
+  const previous = menuReturnFocus;
+  menuReturnFocus = null;
+  menu.hidden = true;
+  menu.replaceChildren();
+  if (restoreFocus && previous?.isConnected) previous.focus();
+}
+function openContextMenu(item, x, y, source) {
+  closeContextMenu();
+  const menu = $("context-menu");
+  const actions = [{label:t("editor.open"), run:()=>navigate(item)}];
+  if (item.children?.length) {
+    const open = expanded.has(keyOf(item));
+    actions.push({
+      label:t(open ? "collapse" : "expand"),
+      run:()=>{ if (open) expanded.delete(keyOf(item)); else expanded.add(keyOf(item)); renderTree(); }
+    });
+  }
+  const entity = ["device","sensor"].includes(item.kind) ? item.id : null;
+  if (entity) actions.push({label:t("copy_entity"), run:async()=> {
+    try { await navigator.clipboard.writeText(entity); } catch (_) { /* clipboard not available */ }
+  }});
+  const editorActions=window.DHClimateEditor?.menuActions(item) || [];
+  if (editorActions.length) actions.push({separator:true},...editorActions);
+  actions.forEach(action => {
+    if (action.separator) { menu.append(dom("div", "context-menu-separator")); return; }
+    const button = dom("button", "context-menu-action"+(action.destructive ? " destructive" : ""), action.label);
+    button.type="button";
+    button.setAttribute("role","menuitem");
+    button.onclick=()=>{
+      closeContextMenu();
+      action.run();
+    };
+    menu.append(button);
+  });
+  menuReturnFocus=source;
+  menu.hidden=false;
+  const box=menu.getBoundingClientRect();
+  const maxX=Math.max(4,window.innerWidth-box.width-8);
+  const maxY=Math.max(4,window.innerHeight-box.height-8);
+  menu.style.left=Math.max(4,Math.min(x,maxX))+"px";
+  menu.style.top=Math.max(4,Math.min(y,maxY))+"px";
+  menu.querySelector('[role="menuitem"]')?.focus();
+}
+function initExplorerWidth() {
+  const min=190, max=1100;
+  const pane=$("explorer"), divider=$("explorer-resizer");
+  const limit=()=>Math.max(min,Math.min(max,window.innerWidth-320));
+  const apply=width=>{
+    explorerWidth=Math.max(min,Math.min(limit(),Math.round(width)));
+    pane.style.setProperty("--explorer-width",explorerWidth+"px");
+    divider.setAttribute("aria-valuenow",String(explorerWidth));
+    divider.setAttribute("aria-valuemax",String(limit()));
+  };
+  try {
+    const stored=Number(localStorage.getItem("dh-climate-explorer-width"));
+    if (Number.isFinite(stored) && stored>=min) explorerWidth=stored;
+  } catch (_) { /* private browsing */ }
+  apply(explorerWidth);
+  const save=()=>{
+    try {localStorage.setItem("dh-climate-explorer-width",String(explorerWidth));} catch (_) {}
+  };
+  let dragging=false;
+  const move=event=>{
+    if (!dragging) return;
+    apply(event.clientX-pane.getBoundingClientRect().left);
+    event.preventDefault();
+  };
+  const stop=()=>{
+    if (!dragging) return;
+    dragging=false;
+    document.body.classList.remove("resizing-explorer");
+    window.removeEventListener("pointermove",move);
+    window.removeEventListener("pointerup",stop);
+    window.removeEventListener("pointercancel",stop);
+    save();
+  };
+  divider.addEventListener("pointerdown",event=>{
+    if (event.button !== 0) return;
+    event.preventDefault();
+    dragging=true;
+    document.body.classList.add("resizing-explorer");
+    window.addEventListener("pointermove",move);
+    window.addEventListener("pointerup",stop);
+    window.addEventListener("pointercancel",stop);
+  });
+  divider.onkeydown=event=>{
+    const delta=event.key==="ArrowRight" ? (event.shiftKey?50:20)
+      : event.key==="ArrowLeft" ? -(event.shiftKey?50:20) : 0;
+    if (delta) {event.preventDefault(); apply(explorerWidth+delta); save();}
+    if (event.key==="Home") {event.preventDefault();apply(min);save();}
+  };
+  divider.ondblclick=()=>{apply(275);save();};
+  window.addEventListener("resize",()=>apply(explorerWidth));
+}
+document.addEventListener("pointerdown",event=>{
+  const menu=$("context-menu");
+  if (!menu.hidden && !menu.contains(event.target)) closeContextMenu();
+});
+document.addEventListener("keydown",event=>{
+  const menu=$("context-menu");
+  if (menu.hidden) return;
+  if (event.key==="Escape") {
+    event.preventDefault();closeContextMenu(true);return;
+  }
+  if (event.key==="ArrowDown" || event.key==="ArrowUp") {
+    event.preventDefault();
+    const items=[...menu.querySelectorAll('[role="menuitem"]')];
+    const index=items.indexOf(document.activeElement);
+    items[(index+(event.key==="ArrowDown"?1:-1)+items.length)%items.length]?.focus();
+  }
+});
+window.addEventListener("blur",()=>closeContextMenu());
+
 function problemsForRoom(id) {
   return (snapshot?.app.problems || []).filter(p => p.room_id === id);
 }
@@ -441,7 +565,6 @@ function render() {
         thermostat:showThermostat, sensors:showSensors, sensor:showSensor,
         devices:showDevices, device:showDevice};
       (views[selection.kind] || showSystem)(main);
-      window.DHClimateEditor?.toolbar(main,selection.kind,selection.id,selection.room);
     }
   }
   window.DHClimateEditor?.controls(main);
@@ -479,6 +602,7 @@ async function connect() {
     $("connection").className = "connection warn";
   };
 }
+initExplorerWidth();
 $("toggle-inspector").onclick = () => { inspectorOpen = !inspectorOpen; renderInspector(); renderPanels(); };
 $("toggle-explorer").onclick = () => { explorerOpen = !explorerOpen; renderPanels(); };
 $("collapse-all").onclick = () => { expanded.clear(); expanded.add(keyOf(nodes[0] || {kind:"system"})); renderTree(); };

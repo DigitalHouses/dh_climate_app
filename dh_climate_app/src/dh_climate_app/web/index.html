@@ -31,12 +31,17 @@
       </div>
       <nav id="tree" aria-label="Climate objects"></nav>
     </aside>
+    <div id="explorer-resizer" class="explorer-resizer" role="separator"
+         aria-label="Resize Explorer" aria-orientation="vertical"
+         aria-valuemin="190" aria-valuemax="1100" aria-valuenow="275"
+         tabindex="0" title="Drag to resize Explorer"></div>
     <main class="workspace" id="workspace">
       <nav id="breadcrumbs" class="breadcrumbs" aria-label="Object path"></nav>
       <div id="content"></div>
     </main>
     <aside class="inspector" id="inspector" aria-label="Inspector" hidden></aside>
   </div>
+  <div id="context-menu" class="context-menu" role="menu" aria-label="Explorer actions" hidden></div>
   <footer class="statusbar">
     <span id="foot-status">DH Climate · Explorer</span>
     <span id="foot-mode">Read only</span>
