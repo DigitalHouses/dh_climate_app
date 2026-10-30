@@ -41,6 +41,20 @@ class CatalogProjectionTests(unittest.TestCase):
         self.assertNotIn("person.someone",json.dumps(out,ensure_ascii=False))
         self.assertIn("sensor.no_area",catalog)
 
+    def test_weather_asyl_mura_readings_are_distinct_from_condition(self):
+        states=[{"entity_id":"weather.asyl_mura","state":"partlycloudy",
+            "attributes":{"friendly_name":"Google Weather",
+                "temperature":9.4,"temperature_unit":"°C","humidity":52,
+                "precipitation_unit":"mm","secret":"not-in-catalog"}}]
+        result=build_catalog(states,{},[],[])
+        entity=result["entities"][0]
+        self.assertEqual(entity["entity_id"],"weather.asyl_mura")
+        self.assertEqual(entity["state"],"partlycloudy")
+        self.assertEqual(entity["temperature"],9.4)
+        self.assertEqual(entity["humidity"],52)
+        self.assertEqual(entity["temperature_unit"],"°C")
+        self.assertNotIn("not-in-catalog",json.dumps(entity))
+
     def test_unregistered_state_is_still_selectable(self):
         out=build_catalog([{"entity_id":"sensor.unregistered","state":"27",
                             "attributes":{"friendly_name":"Без реестра"}}],{},[],[])

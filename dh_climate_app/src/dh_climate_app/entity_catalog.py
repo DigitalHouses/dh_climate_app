@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import time
 from typing import Any, Mapping
 
@@ -19,6 +20,16 @@ PICKER_DOMAINS = frozenset({
     "weather", "number",
 })
 MAX_ENTITIES = 8000
+
+
+def _weather_number(attributes: Mapping[str, Any], key: str, domain: str) -> float | None:
+    if domain != "weather":
+        return None
+    value = attributes.get(key)
+    if type(value) not in (int, float):
+        return None
+    numeric = float(value)
+    return numeric if math.isfinite(numeric) else None
 
 
 def _string(value: Any, limit: int = 160) -> str | None:
@@ -84,6 +95,14 @@ def build_catalog(
             "area_id": area_id if isinstance(area_id, str) else None,
             "area_name": area_names.get(area_id),
             "device_name": _string(device.get("name_by_user") or device.get("name")),
+            # Explicit whitelist: weather state is a condition string.
+            # Temperature/humidity are attributes; no other HA attributes leak.
+            "temperature": _weather_number(attributes, "temperature", domain),
+            "temperature_unit": (
+                _string(attributes.get("temperature_unit"), 8)
+                if domain == "weather" else None
+            ),
+            "humidity": _weather_number(attributes, "humidity", domain),
         })
         if len(result) >= MAX_ENTITIES:
             break

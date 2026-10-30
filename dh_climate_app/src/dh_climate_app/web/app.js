@@ -405,11 +405,14 @@ function showWeather(main) {
       stat(t("raw_temperature"), number(w.raw_temperature, " °C")),
       stat(t("avg24"), number(w.avg24, " °C")), stat(t("humidity"), number(w.humidity, " %"))),
     card(t("source"), row(t("temperature"), display(w.source)),
+      row(t("humidity"), display(w.humidity_source)),
+      row(t("weather_forecast_source"), display(w.condition_source)),
       row(t("condition"), statusText(w.condition)),
       row(t("precipitation"), number(w.precipitation_mm, " mm")),
       row(t("data_quality"), w.stale === null ? unknown() : w.stale ? t("stale") : t("current"))),
     card(t("temperature_sources"), signalRows((w.temperature_sources || []).map(e => ({...e, role:"temperature"})))),
     card(t("humidity_sources"), signalRows((w.humidity_sources || []).map(e => ({...e, role:"humidity"})))));
+  main.append(paragraph(t("weather_priority_note"),"subtle small"));
 }
 function showSeason(main) {
   const w = snapshot.weather;

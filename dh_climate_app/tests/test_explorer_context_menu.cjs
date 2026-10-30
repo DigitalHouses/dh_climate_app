@@ -31,6 +31,15 @@ test("ROOMS right click offers only create-room action to admin",async()=>{
   const api=await runEditor();
   assert.deepEqual(Array.from(api.menuActions({kind:"rooms"}),a=>a.label),["editor.new_room"]);
 });
+test("WEATHER context has one admin configuration action only",async()=>{
+  const admin=await runEditor(true);
+  const viewer=await runEditor(false);
+  const pending=await runEditor(true,true);
+  assert.deepEqual(Array.from(admin.menuActions({kind:"weather"}),x=>x.label),
+    ["editor.weather_edit"]);
+  assert.equal(viewer.menuActions({kind:"weather"}).length,0);
+  assert.equal(pending.menuActions({kind:"weather"}).length,0);
+});
 test("room menu contains add/edit/delete and device menu contains edit/delete",async()=>{
   const api=await runEditor();
   assert.deepEqual(Array.from(api.menuActions({kind:"room",id:"bedroom"}),a=>a.label),

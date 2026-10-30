@@ -206,3 +206,8 @@ body.resizing-explorer { cursor:col-resize; user-select:none; }
 .editor-ha-area-select:disabled{opacity:.55;}
 .picker-area-warning{font-size:12px;color:var(--danger);
   margin:0;padding:7px 10px;border:1px solid var(--border);border-radius:5px;}
+
+.editor-source-actions{display:flex;align-items:center;gap:5px;flex-shrink:0;}
+.editor-source-actions button{min-width:30px;min-height:30px;border:1px solid var(--border);
+  background:var(--surface);color:var(--text);border-radius:5px;cursor:pointer;}
+.editor-source-actions button:disabled{opacity:.35;cursor:not-allowed;}
