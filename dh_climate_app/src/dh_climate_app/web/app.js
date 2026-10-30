@@ -29,11 +29,19 @@ const resourceById = (id) => (snapshot?.home.resources || []).find(r => r.id ===
 const deviceById = (roomId, id) => roomById(roomId)?.devices.find(d => d.entity_id === id);
 const observedText = (entity) => (!snapshot?.app.ha_connected || !entity?.available) ? unknown() : display(entity.state);
 const demandValue = (item) => item?.active === true ? t("on") : item?.active === false ? t("off") : unknown();
-const namedRoom = (room) => room?.friendly_name || room?.name || room?.id || "—";
-const namedEntity = (entity, fallback = null) =>
-  entity?.friendly_name || entity?.entity_id || fallback || "—";
-const namedResource = (resource) => t(resource?.id || "") === (resource?.id || "")
-  ? technical(resource?.id) : t(resource.id);
+const withOverride = (kind, id, fallback) =>
+  window.DHClimateEditor?.displayName(kind,id,locale,fallback) || fallback;
+const namedRoom = room => withOverride("room",room?.id,
+  room?.friendly_name || room?.name || room?.id || "—");
+const namedEntity = (entity, fallback = null) => {
+  const id = entity?.entity_id || fallback;
+  return withOverride("entity",id,entity?.friendly_name || id || "—");
+};
+const namedResource = resource => withOverride("resource",resource?.id,
+  t(resource?.id || "") === (resource?.id || "")
+    ? technical(resource?.id) : t(resource.id));
+const namedPart = (resource,type,part) =>
+  withOverride("part",resource+":"+type+":"+part.id,part.name);
 
 function dom(tag, cls, text) {
   const el = document.createElement(tag);
@@ -79,30 +87,38 @@ function buildTree(data) {
   const roomNodes = rooms.map(room => {
     const sensors = ["temperature", "humidity", "window"].flatMap(role =>
       (room.sensors?.[role] || []).map(sensor =>
-        node("sensor", namedEntity(sensor), "◉", [], {room:room.id, id:sensor.entity_id, role})
+        node("sensor", namedEntity(sensor), "◉", [], {room:room.id, id:sensor.entity_id,
+          role, haName:sensor.friendly_name, technicalId:sensor.entity_id})
       )
     );
     const devices = (room.devices || []).map(device =>
-      node("device", namedEntity(device.observed, device.entity_id), "⚙", [], {room:room.id, id:device.entity_id})
+      node("device", namedEntity(device.observed, device.entity_id), "⚙", [],
+        {room:room.id, id:device.entity_id,haName:device.observed?.friendly_name,
+          technicalId:device.entity_id})
     );
     const children = [
       node("thermostat", t("room_thermostat"), "◉", [], {room:room.id, id:room.id}),
     ];
     if (sensors.length) children.push(node("sensors", t("sensors"), "▤", sensors, {room:room.id, id:room.id}));
     if (devices.length) children.push(node("devices", t("devices"), "▤", devices, {room:room.id, id:room.id}));
-    return node("room", namedRoom(room), "▱", children, {id:room.id, health:room.health});
+    return node("room", namedRoom(room), "▱", children,
+      {id:room.id, health:room.health,haName:room.friendly_name,
+        sourceName:room.name,technicalId:room.id});
   });
   const resourceNodes = resources.map(resource => {
     const pumps = (resource.pumps || []).map(part =>
-      node("part", part.name, "◉", [], {resource:resource.id, partType:"pumps", id:part.id})
+      node("part", namedPart(resource.id,"pumps",part), "◉", [],
+        {resource:resource.id, partType:"pumps",id:part.id,sourceName:part.name,technicalId:part.id})
     );
     const circuits = (resource.circuits || []).map(part =>
-      node("part", part.name, "◉", [], {resource:resource.id, partType:"circuits", id:part.id})
+      node("part", namedPart(resource.id,"circuits",part), "◉", [],
+        {resource:resource.id, partType:"circuits",id:part.id,sourceName:part.name,technicalId:part.id})
     );
     const children = [];
     if (pumps.length) children.push(node("parts", t("pumps"), "▤", pumps, {resource:resource.id, partType:"pumps", id:resource.id}));
     if (circuits.length) children.push(node("parts", t("circuits"), "▤", circuits, {resource:resource.id, partType:"circuits", id:resource.id}));
-    return node("resource", namedResource(resource), "▱", children, {id:resource.id});
+    return node("resource", namedResource(resource), "▱", children,
+      {id:resource.id,technicalId:resource.id});
   });
   return [node("system", t("system"), "◈", [
     node("weather", t("weather"), "☁"),
@@ -458,6 +474,9 @@ function showRoom(main) {
   const room = roomById(selection.id);
   if (!room) return showRooms(main);
   add(main, title(namedRoom(room)), paragraph(room.id, "mono subtle"),
+    card(t("identification"),
+      row(t("configuration_name"),room.name || "—"),
+      row(t("ha_friendly_name"),room.friendly_name || "—")),
     stats(stat(t("temperature"), number(room.temperature, " °C")),
       stat(t("target"), number(room.target, " °C")),
       stat(t("humidity"), number(room.humidity, " %")),
@@ -500,6 +519,8 @@ function showSensor(main) {
   if (!result) return showRooms(main);
   add(main, title(namedEntity(result.sensor)),
     paragraph(result.sensor.entity_id, "mono subtle"),
+    card(t("identification"),
+      row(t("ha_friendly_name"),result.sensor.friendly_name || "—")),
     card(t("sensor"), row(t("role"), t(result.role)),
       row(t("observed_state"), observedText(result.sensor)),
       row(t("availability"), result.sensor.available ? t("available") : t("unavailable")),
@@ -510,7 +531,10 @@ function showDevice(main) {
   if (!dev) return showRooms(main);
   const action = dev.hvac_action == null ?
     (dev.observed?.available ? t("not_reported") : unknown()) : statusText(dev.hvac_action);
-  add(main, title(namedEntity(dev.observed)), paragraph(dev.entity_id, "mono subtle"),
+  add(main, title(namedEntity(dev.observed,dev.entity_id)),
+    paragraph(dev.entity_id, "mono subtle"),
+    card(t("identification"),
+      row(t("ha_friendly_name"),dev.observed?.friendly_name || "—")),
     stats(stat(t("observed_state"), observedText(dev.observed)), stat(t("hvac_action"), action)),
     card(t("device"), row(t("role"), technical(dev.role)),
       row(t("device_type"), technical(dev.device_type)),
