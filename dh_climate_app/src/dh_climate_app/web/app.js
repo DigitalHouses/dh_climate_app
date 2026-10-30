@@ -154,7 +154,9 @@ function renderTree() {
     if (k === selectedKey()) select.setAttribute("aria-current", "page");
     add(select, dom("span", "tree-icon", item.icon), dom("span", "tree-text", item.label));
     select.onclick = () => navigate(item);
-    select.setAttribute("aria-haspopup", "menu");
+    if (["device","sensor"].includes(item.kind) ||
+        window.DHClimateEditor?.menuActions(item)?.length)
+      select.setAttribute("aria-haspopup", "menu");
     line.append(toggle, select);
     line.oncontextmenu = event => {
       event.preventDefault();
@@ -208,20 +210,19 @@ function closeContextMenu(restoreFocus = false) {
 function openContextMenu(item, x, y, source) {
   closeContextMenu();
   const menu = $("context-menu");
-  const actions = [{label:t("editor.open"), run:()=>navigate(item)}];
-  if (item.children?.length) {
-    const open = expanded.has(keyOf(item));
-    actions.push({
-      label:t(open ? "collapse" : "expand"),
-      run:()=>{ if (open) expanded.delete(keyOf(item)); else expanded.add(keyOf(item)); renderTree(); }
-    });
-  }
+  // Navigation and expand/collapse are already direct tree interactions.
+  // A context menu exists only when the object has an actual action.
+  const actions = [];
   const entity = ["device","sensor"].includes(item.kind) ? item.id : null;
   if (entity) actions.push({label:t("copy_entity"), run:async()=> {
     try { await navigator.clipboard.writeText(entity); } catch (_) { /* clipboard not available */ }
   }});
   const editorActions=window.DHClimateEditor?.menuActions(item) || [];
-  if (editorActions.length) actions.push({separator:true},...editorActions);
+  if (editorActions.length) {
+    if (actions.length) actions.push({separator:true});
+    actions.push(...editorActions);
+  }
+  if (!actions.length) return;
   actions.forEach(action => {
     if (action.separator) { menu.append(dom("div", "context-menu-separator")); return; }
     const button = dom("button", "context-menu-action"+(action.destructive ? " destructive" : ""), action.label);
