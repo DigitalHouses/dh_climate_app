@@ -16,6 +16,13 @@
   let repaint = () => {};
   let openObject = () => {};
   let tr = key => key;
+  let weatherState = null;
+  let haWeatherCatalog = null;
+  // Presentation data: from live HA, never persisted as part of priorities.
+  function setWeatherContext(weather, catalog) {
+    weatherState = weather || null;
+    haWeatherCatalog = catalog || null;
+  }
   const clone = value => JSON.parse(JSON.stringify(value));
   const text = (tag, value, cls = "") => {
     const el = document.createElement(tag);
@@ -117,7 +124,7 @@
         if(!response.ok)throw Error(result.error || "HTTP "+response.status);
         labelsState=result;
         if (edit.fromWeather) {
-          edit={kind:"weather"};
+          edit={kind:edit.returnWeatherKind || "weather_sources"};
           show(localize("weather_name_saved"));
         } else {
           discardLocal();show(localize("name_saved"));
@@ -127,7 +134,7 @@
         await loadLabels();
       }
     }),button(localize("cancel"),()=>{
-      if(edit.fromWeather){edit={kind:"weather"};repaint();}
+      if(edit.fromWeather){edit={kind:edit.returnWeatherKind || "weather_sources"};repaint();}
       else{discardLocal();repaint();}
     }));
     section.append(actions);
@@ -230,13 +237,22 @@
       } catch(e) { show(e.message,true); }
     });
   }
+  function enterWeatherSection(kind) {
+    // Called after tree navigation. No second source of truth:
+    // both pages edit the same two priority arrays and registry.
+    if (!["weather_sources","weather_priorities"].includes(kind) ||
+        !mutable() || edit) return false;
+    candidate = clone(info.options);
+    edit = {kind};
+    message = "";
+    repaint();
+    return true;
+  }
   function startWeather() {
     if (!mutable() || !navigateAway()) return;
-    openObject({kind:"weather"});
-    candidate = clone(info.options);
-    edit={kind:"weather"};
-    message="";
-    repaint();
+    openObject({kind:"weather_sources"});
+    // Compatibility with standalone editor usage/tests which have no tree.
+    if (!edit) enterWeatherSection("weather_sources");
   }
   function modelConfigured() {
     return Array.isArray(candidate?.providers) &&
@@ -336,13 +352,14 @@
     panel.append(list,choose);parent.append(panel);
   }
   function editWeatherName(kind,id,sourceName) {
-    if(!online() || !candidate || edit?.kind!=="weather")return;
+    if(!online() || !candidate ||
+      !["weather","weather_sources"].includes(edit?.kind))return;
     const key=kind+":"+id;
     const original=labelsState.labels?.[key] || {};
     // Return to the same unsaved weather form after saving the label.
     // Labels are independent UI metadata and never change source IDs.
     edit={kind:"label",key,technicalId:id,sourceName,
-      haName:null,fromWeather:true,
+      haName:null,fromWeather:true,returnWeatherKind:edit.kind,
       names:{ru:original.ru||"",en:original.en||""}};
     message="";
     repaint();
@@ -433,44 +450,113 @@
         .map(s=>({id:s.id,label:weatherSensorTitle(s.id,quantity)})),
     ];
   }
+  function priorityMetadata(id,quantity) {
+    const physical=(candidate.physical_sensors || []).find(p=>p.id===id);
+    const realId=physical?.entity_id;
+    const live=(weatherState?.[quantity+"_sources"] || [])
+      .find(s=>s.entity_id===id);
+    // HA entity catalogue uniquely matches derived MQTT sensors by their
+    // unchanged MQTT unique_id, even when user renames entity_id in HA.
+    const ha=(haWeatherCatalog?.entities || []).find(item=>
+      item.climate_source_id===id ||
+      (realId && item.entity_id===realId));
+    const fallbackId=realId || "sensor.dh_climate_app_weather_"+
+      id.replace(".", "_");
+    const name=ha?.name || weatherSensorTitle(id,quantity);
+    const value=live ? live.state : ha?.state;
+    const invalid=(value===null || value===undefined ||
+      value==="" || value==="unknown" || value==="unavailable" ||
+      !Number.isFinite(Number(value)));
+    const unit=quantity==="temperature"?"°C":"%";
+    const numeric=invalid?localize("weather_unavailable"):
+      new Intl.NumberFormat(document.getElementById("language")?.value==="en"?"en":"ru",{
+        minimumFractionDigits:1,maximumFractionDigits:1,
+      }).format(Number(value))+" "+unit;
+    return {
+      label:name,entityId:ha?.entity_id || fallbackId,
+      numeric,invalid,
+    };
+  }
   function priorityField(parent,quantity) {
     const panel=text("section","","editor-entity-field");
     panel.append(text("h3",
       quantity==="temperature"?localize("weather_temperature_sources"):
         localize("weather_humidity_sources"),"section-heading"),
-      text("p",localize("weather_priority_help"),"subtle small"));
+      text("p",localize("weather_drag_help"),"subtle small"));
     const refs=candidate.priorities[quantity];
-    const valid=new Map(priorityCandidates(quantity).map(item=>[item.id,item.label]));
-    const list=text("div","","editor-bound-list");
+    const list=text("div","","editor-bound-list editor-priority-list");
+    let draggingIndex=-1;
+    function move(from,to){
+      if(from<0 || to<0 || from>=refs.length || to>=refs.length || from===to)return;
+      const [id]=refs.splice(from,1);
+      refs.splice(to,0,id);
+      validated=false;repaint();
+    }
     if(!refs.length)list.append(text("p",localize("none"),"subtle small"));
     refs.forEach((id,index)=>{
-      const line=text("div","","editor-bound-entity");
-      line.append(text("span",(index+1)+". "+
-        (valid.get(id)||id)+" ["+id+"]","mono"));
+      const detail=priorityMetadata(id,quantity);
+      const line=text("div","","editor-bound-entity editor-priority-row");
+      line.draggable=refs.length>1;
+      line.setAttribute("data-source-id",id);
+      const grip=text("span","⠿","editor-drag-handle");
+      grip.title=localize("weather_drag_handle");
+      grip.setAttribute("aria-hidden","true");
+      const rank=text("strong",String(index+1)+".","editor-priority-rank");
+      const info=text("div","","editor-priority-info");
+      info.append(
+        text("span",detail.label,"editor-priority-name"),
+        text("span",detail.entityId,"editor-priority-entity mono"),
+      );
+      const value=text("span",detail.numeric,
+        "editor-priority-value"+(detail.invalid?" unavailable":""));
       const actions=text("span","","editor-source-actions");
-      const move=delta=>{
-        const to=index+delta;
-        if(to<0||to>=refs.length)return;
-        [refs[index],refs[to]]=[refs[to],refs[index]];
-        validated=false;repaint();
-      };
-      const up=button("↑",()=>move(-1));
+      const up=button("↑",()=>move(index,index-1));
       up.disabled=index===0;
-      const down=button("↓",()=>move(1));
+      up.title=localize("weather_move_up");
+      up.setAttribute("aria-label",up.title+" "+detail.label);
+      const down=button("↓",()=>move(index,index+1));
       down.disabled=index===refs.length-1;
+      down.title=localize("weather_move_down");
+      down.setAttribute("aria-label",down.title+" "+detail.label);
       const remove=button("×",()=>{
         refs.splice(index,1);validated=false;repaint();
       });
-      actions.append(up,down,remove);line.append(actions);list.append(line);
+      remove.title=localize("weather_remove_priority");
+      remove.setAttribute("aria-label",remove.title+" "+detail.label);
+      actions.append(up,down,remove);
+      line.append(grip,rank,info,value,actions);
+      line.ondragstart=event=>{
+        draggingIndex=index;
+        event.dataTransfer.effectAllowed="move";
+        event.dataTransfer.setData("text/plain",id);
+      };
+      line.ondragover=event=>{
+        if(draggingIndex<0)return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect="move";
+      };
+      line.ondrop=event=>{
+        if(draggingIndex<0)return;
+        event.preventDefault();
+        const from=draggingIndex;
+        draggingIndex=-1;
+        move(from,index);
+      };
+      line.ondragend=()=>{draggingIndex=-1;};
+      list.append(line);
     });
     panel.append(list);
-    const available=[...valid].filter(([id])=>!refs.includes(id));
-    if(available.length){
+    const options=priorityCandidates(quantity)
+      .filter(entry=>!refs.includes(entry.id));
+    if(options.length){
+      const addition=text("div","","editor-priority-add");
       const select=document.createElement("select");
       select.className="editor-ha-area-select";
-      for(const [id,label] of available){
+      for(const entry of options){
+        const detail=priorityMetadata(entry.id,quantity);
         const opt=document.createElement("option");
-        opt.value=id;opt.textContent=label+" ["+id+"]";
+        opt.value=entry.id;
+        opt.textContent=detail.label+" · "+detail.numeric+" ["+detail.entityId+"]";
         select.append(opt);
       }
       const add=button(localize("weather_add_priority"),()=>{
@@ -478,7 +564,8 @@
           refs.push(select.value);validated=false;repaint();
         }
       });
-      panel.append(select,add);
+      addition.append(select,add);
+      panel.append(addition);
     }
     parent.append(panel);
   }
@@ -498,8 +585,6 @@
     weatherProviderEditor(box);
     weatherPhysicalEditor(box,"temperature");
     weatherPhysicalEditor(box,"humidity");
-    priorityField(box,"temperature");
-    priorityField(box,"humidity");
     const controls=text("div","","editor-actions");
     controls.append(button(localize("save_draft"),persist),
       button(localize("cancel"),()=>{discardLocal();repaint();}));
@@ -761,11 +846,29 @@
     box.append(controls);
     main.append(box);
   }
+  function weatherPriorityForm(main) {
+    main.append(text("h2",localize("weather_priorities_page"),"page-title"),
+      text("p",localize("weather_priority_help"),"subtle small"));
+    const box=text("section","","card");
+    if (!modelConfigured()){
+      box.append(text("p",localize("weather_legacy_notice"),"subtle"),
+        button(localize("weather_convert"),convertWeatherModel));
+    } else {
+      priorityField(box,"temperature");
+      priorityField(box,"humidity");
+      const actions=text("div","","editor-actions");
+      actions.append(button(localize("save_draft"),persist),
+        button(localize("cancel"),()=>{discardLocal();repaint();}));
+      box.append(actions);
+    }
+    main.append(box);
+  }
   function renderEditor(main) {
     if (!edit) return false;
     main.replaceChildren();
     if (edit.kind==="label") labelForm(main);
-    if (edit.kind==="weather") weatherForm(main);
+    if (edit.kind==="weather" || edit.kind==="weather_sources") weatherForm(main);
+    if (edit.kind==="weather_priorities") weatherPriorityForm(main);
     if (edit.kind==="room") roomForm(main);
     if (edit.kind==="device") deviceForm(main);
     return true;
@@ -889,7 +992,8 @@
   function viewMode(){ return !info?tr("read_only"):localize("administrator"); }
   window.DHClimateEditor = {
     init, canEdit:online, canChange:mutable, menuActions,
-    startRoom,startDevice,startWeather, refreshAfterReconnect,
+    startRoom,startDevice,startWeather,enterWeatherSection,setWeatherContext,
+    refreshAfterReconnect,
     renderEditor, controls, onNavigate,
     isEditing:()=>!!edit, needsRestart:()=>!!info?.pending_restart,
     viewMode, previewRooms, previewRoom,

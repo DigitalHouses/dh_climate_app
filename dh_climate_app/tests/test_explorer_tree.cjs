@@ -40,13 +40,17 @@ const walk = (ns, predicate) => {
   }
   return null;
 };
-test("Explorer preserves canonical system → weather / home → resources / season / rooms",()=>{
+test("weather has exactly three first-class branches; season is not duplicated under home",()=>{
   const tree=u.buildTree(fixture);
   assert.equal(tree.length,1);
   assert.equal(tree[0].kind,"system");
   assert.deepEqual(Array.from(tree[0].children).map(n=>n.kind),["weather","home"]);
+  assert.deepEqual(Array.from(tree[0].children[0].children).map(n=>n.kind),
+    ["weather_sources","weather_priorities","season"]);
   assert.deepEqual(Array.from(tree[0].children[1].children).map(n=>n.kind),
-    ["resources","season","rooms"]);
+    ["resources","rooms"]);
+  assert.deepEqual(Array.from(u.findPath(walk(tree,n=>n.kind==="season"),tree))
+    .map(n=>n.kind),["system","weather","season"]);
 });
 test("room is a first-class node; thermostat, sensors and devices are children",()=>{
   const tree=u.buildTree(fixture);
@@ -94,7 +98,7 @@ test("one provider expands into two sensor nodes with stable IDs",()=>{
   const priorities=walk(tree,n=>n.kind==="weather_priorities");
   assert.ok(priorities);
   assert.deepEqual(Array.from(u.findPath(provider.children[0],tree)).map(n=>n.kind),
-    ["system","weather","providers","provider","weather_sensor"]);
+    ["system","weather","weather_sources","provider","weather_sensor"]);
 });
 test("technical behaviour codes are not translated",()=>{
   assert.equal(u.technical("fast_heat"),"FAST_HEAT");

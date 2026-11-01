@@ -10,6 +10,31 @@ let expanded = new Set(["system|||", "home|||", "rooms|||"]);
 let inspectorOpen = false;
 let explorerOpen = true;
 let streamConnected = false;
+let weatherCatalog = null;
+let weatherCatalogAt = 0;
+let weatherCatalogLoading = null;
+
+async function loadWeatherCatalog() {
+  if (weatherCatalogLoading) return weatherCatalogLoading;
+  if (weatherCatalog && Date.now() - weatherCatalogAt < 30000)
+    return weatherCatalog;
+  weatherCatalogLoading = (async () => {
+    try {
+      const response = await fetch("api/entities", {cache:"no-store",
+        credentials:"same-origin"});
+      if (!response.ok) return null;
+      const catalog = await response.json();
+      if (!Array.isArray(catalog.entities)) return null;
+      weatherCatalog = catalog;
+      weatherCatalogAt = Date.now();
+      if (["weather_priorities","weather_sources"].includes(selection.kind))
+        render();
+      return catalog;
+    } catch (_) { return null; }
+    finally { weatherCatalogLoading = null; }
+  })();
+  return weatherCatalogLoading;
+}
 let explorerWidth = 275;
 let menuReturnFocus = null;
 
@@ -141,16 +166,17 @@ function buildTree(data) {
     node("outdoor_sensor",namedOutdoorSensor(s),s.quantity==="temperature"?"🌡":"💧",
       [],{id:s.id,technicalId:s.id,sourceName:s.entity_id,haName:s.friendly_name})
   );
-  const weatherChildren=weather.source_model==="sensors"?[
-    node("providers",t("weather_providers"),"▤",providerNodes),
-    node("outdoor_physical",t("weather_physical"),"▤",physicalNodes),
-    node("weather_priorities",t("weather_priorities"),"▤"),
-  ]:[];
+  const weatherChildren = [
+    node("weather_sources",t("weather_sources_and_sensors"),"▤",
+      weather.source_model==="sensors"?
+        [...providerNodes,...physicalNodes]:[]),
+    node("weather_priorities",t("weather_sensor_priorities"),"≡"),
+    node("season", t("season"), "◷"),
+  ];
   return [node("system", t("system"), "◈", [
     node("weather", t("weather"), "☁",weatherChildren),
     node("home", t("home"), "⌂", [
       node("resources", t("resources"), "▤", resourceNodes),
-      node("season", t("season"), "◷"),
       node("rooms", t("rooms"), "▤", roomNodes),
     ]),
   ])];
@@ -169,6 +195,10 @@ function navigate(item) {
   if (window.DHClimateEditor && !window.DHClimateEditor.onNavigate()) return;
   selection = {kind:item.kind, id:item.id || null, room:item.room || null,
     resource:item.resource || null, partType:item.partType || null};
+  if (["weather_sources","weather_priorities"].includes(item.kind)) {
+    window.DHClimateEditor?.enterWeatherSection?.(item.kind);
+    void loadWeatherCatalog();
+  }
   const path = findPath(selection);
   if (path) path.slice(0, -1).forEach(n => expanded.add(keyOf(n)));
   render();
@@ -448,11 +478,16 @@ function showWeather(main) {
   main.append(paragraph(t("weather_priority_note"),"subtle small"));
 }
 function showProviders(main) {
-  const links=(snapshot.weather.providers||[]).map(p=>
+  const w=snapshot.weather;
+  const providers=(w.providers||[]).map(p=>
     clickable(namedProvider(p),p.entity_id,
       ()=>navigate({kind:"provider",id:p.id})));
-  add(main,title(t("weather_providers")),
-    card(t("weather_providers"),listOrEmpty(links)));
+  const physical=(w.physical_sensors||[]).map(p=>
+    clickable(namedOutdoorSensor(p),p.entity_id,
+      ()=>navigate({kind:"outdoor_sensor",id:p.id})));
+  add(main,title(t("weather_sources_and_sensors")),
+    card(t("weather_providers"),listOrEmpty(providers)),
+    card(t("weather_physical"),listOrEmpty(physical)));
 }
 function showProvider(main) {
   const provider=(snapshot.weather.providers||[]).find(p=>p.id===selection.id);
@@ -502,13 +537,53 @@ function showOutdoorSensor(main) {
     stats(stat(t(sensor.quantity),
       number(sensor.value,sensor.quantity==="temperature"?" °C":" %"))));
 }
+function weatherSourceMetadata(id,quantity) {
+  const w=snapshot?.weather || {};
+  const physical=(w.physical_sensors||[]).find(s=>s.id===id);
+  const provider=(w.providers||[]).find(p=>
+    id===p.id+"."+quantity);
+  const source=(w[quantity+"_sources"]||[]).find(s=>s.entity_id===id);
+  const matching=(weatherCatalog?.entities||[]).find(s=>
+    s.climate_source_id===id ||
+    (physical && s.entity_id===physical.entity_id));
+  const suggested=physical?.entity_id ||
+    "sensor.dh_climate_app_weather_"+id.replace(".","_");
+  const name=matching?.name || (
+    physical?namedOutdoorSensor(physical):
+    provider?namedWeatherSensor(provider,quantity):id
+  );
+  const value=source ? source.state : matching?.state;
+  const valid=value!==null && value!==undefined &&
+    value!=="" && value!=="unknown" && value!=="unavailable" &&
+    Number.isFinite(Number(value));
+  return {
+    name, entityId:matching?.entity_id || suggested,
+    value:valid?number(value,quantity==="temperature"?" °C":" %"):
+      t("weather_unavailable"),
+    valid,
+  };
+}
 function showWeatherPriorities(main) {
   const w=snapshot.weather;
-  add(main,title(t("weather_priorities")),
-    card(t("temperature_sources"),
-      signalRows((w.temperature_sources||[]).map(e=>({...e,role:"temperature"})))),
-    card(t("humidity_sources"),
-      signalRows((w.humidity_sources||[]).map(e=>({...e,role:"humidity"})))));
+  const makeRows=quantity=>{
+    const refs=w[quantity+"_sources"]||[];
+    const lines=refs.map((s,i)=>{
+      const item=weatherSourceMetadata(s.entity_id,quantity);
+      const line=dom("div","weather-priority-readonly");
+      add(line,dom("strong","",String(i+1)+"."),
+        dom("div","weather-priority-readonly-name",item.name),
+        dom("span",item.valid?"":"warn",item.value),
+        paragraph(item.entityId,"mono subtle"));
+      return line;
+    });
+    return listOrEmpty(lines);
+  };
+  add(main,title(t("weather_sensor_priorities")),
+    paragraph(t("weather_priority_help"),"subtle small"),
+    card(t("temperature_sources"),makeRows("temperature")),
+    card(t("humidity_sources"),makeRows("humidity")));
+  if (!window.DHClimateEditor?.canChange?.())
+    main.append(paragraph(t("weather_readonly_priority"),"subtle small"));
 }
 function showSeason(main) {
   const w = snapshot.weather;
@@ -749,6 +824,7 @@ async function restartApp() {
 }
 
 function render() {
+  window.DHClimateEditor?.setWeatherContext?.(snapshot?.weather,weatherCatalog);
   renderRestartBanner();
   $("top-title").textContent = t("explorer");
   $("explorer-heading").textContent = t("explorer").toUpperCase();
@@ -765,7 +841,7 @@ function render() {
     if (!snapshot) main.append(paragraph(t("loading"), "subtle"));
     else {
       const views = {system:showSystem, weather:showWeather,
-        providers:showProviders, provider:showProvider,
+        weather_sources:showProviders, providers:showProviders, provider:showProvider,
         weather_sensor:showWeatherSensor,
         outdoor_physical:showOutdoorPhysical, outdoor_sensor:showOutdoorSensor,
         weather_priorities:showWeatherPriorities, home:showHome,

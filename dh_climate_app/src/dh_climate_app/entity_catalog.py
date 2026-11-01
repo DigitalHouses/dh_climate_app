@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import math
+import re
 import time
 from typing import Any, Mapping
 
@@ -20,6 +21,9 @@ PICKER_DOMAINS = frozenset({
     "weather", "number",
 })
 MAX_ENTITIES = 8000
+CLIMATE_WEATHER_UNIQUE_ID = re.compile(
+    r"^dh_climate_app_provider_([a-z][a-z0-9_]{0,63})_(temperature|humidity)$"
+)
 
 
 def _weather_number(attributes: Mapping[str, Any], key: str, domain: str) -> float | None:
@@ -83,8 +87,19 @@ def build_catalog(
         area_id = reg.get("ai", reg.get("area_id")) or device.get("area_id")
         raw_state = state.get("state")
         available = raw_state not in ("unknown", "unavailable", None)
+        raw_unique_id = reg.get("uid", reg.get("unique_id"))
+        source_match = (
+            CLIMATE_WEATHER_UNIQUE_ID.fullmatch(raw_unique_id)
+            if isinstance(raw_unique_id, str) and domain == "sensor"
+            else None
+        )
         result.append({
             "entity_id": entity_id,
+            # Only expose app-owned unique IDs, as a logical source key.
+            "climate_source_id": (
+                source_match.group(1) + "." + source_match.group(2)
+                if source_match else None
+            ),
             "name": _string(attributes.get("friendly_name")) or
                     _string(reg.get("en", reg.get("name"))) or entity_id,
             "domain": domain,
@@ -183,6 +198,16 @@ class EntityCatalog:
                         areas = value
                 except RuntimeError as exc:
                     LOGGER.warning("HA catalogue enrichment: %s", exc)
+            # The compact display registry can omit unique_id. A full
+            # registry read lets us resolve renamed HA entity_ids reliably.
+            # The command is optional: fallback keeps the picker usable
+            # with restricted HA credentials.
+            try:
+                full = await request(5, "config/entity_registry/list")
+                if isinstance(full, list):
+                    reg = full
+            except RuntimeError as exc:
+                LOGGER.debug("Full entity registry unavailable: %s", exc)
             if not isinstance(states, list):
                 raise RuntimeError("HA states catalogue unavailable")
             return build_catalog(states, reg, dev, areas)

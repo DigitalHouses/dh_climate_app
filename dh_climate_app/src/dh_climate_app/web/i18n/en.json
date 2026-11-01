@@ -247,5 +247,15 @@
   "restart_confirm": "Restart only DH Climate App now? Home Assistant will keep running. Climate control will be briefly unavailable during the restart.",
   "restart_requested": "Restart request sent to Supervisor. Waiting for reconnection and confirmation of the new configuration…",
   "restart_rejected": "Supervisor did not accept the restart request",
-  "restart_unconfirmed": "Restart has not been confirmed. Check the app status or retry."
+  "restart_unconfirmed": "Restart has not been confirmed. Check the app status or retry.",
+  "weather_sources_and_sensors": "Providers and sensors",
+  "weather_sensor_priorities": "Sensor priorities",
+  "weather_unavailable": "Unavailable",
+  "weather_priority_help": "The first available sensor has highest priority. Temperature and humidity are configured independently.",
+  "weather_readonly_priority": "Only an administrator can edit priorities, once the app restart is complete.",
+  "editor.weather_priorities_page": "Sensor priorities",
+  "editor.weather_drag_help": "Drag rows or use ↑/↓. Full Home Assistant names, current readings and entity IDs are displayed. Changes stay in a draft until applied.",
+  "editor.weather_drag_handle": "Drag sensor",
+  "editor.weather_remove_priority": "Remove from priorities",
+  "editor.weather_unavailable": "Unavailable"
 }
