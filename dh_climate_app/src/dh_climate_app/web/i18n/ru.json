@@ -251,11 +251,5 @@
   "restart_confirm": "Перезапустить только DH Climate App сейчас? Home Assistant продолжит работать. Во время перезапуска управление климатом временно недоступно.",
   "restart_requested": "Запрос перезапуска отправлен Supervisor. Ожидаем переподключения и подтверждения новой конфигурации…",
   "restart_rejected": "Supervisor не принял запрос перезапуска",
-  "restart_unconfirmed": "Перезапуск пока не подтверждён. Проверь состояние приложения или повтори запрос.",
-  "editor.weather_short_temperature": "Температура",
-  "editor.weather_short_humidity": "Влажность",
-  "editor.weather_observation_only": "Не участвует",
-  "editor.weather_enable_priority": "Добавить в приоритеты",
-  "editor.weather_disable_priority": "Исключить из приоритетов",
-  "editor.weather_provider_priority_hint": "Приоритеты температуры и влажности независимы. Стрелки меняют только выбранный показатель; удаление из приоритета не удаляет провайдера."
+  "restart_unconfirmed": "Перезапуск пока не подтверждён. Проверь состояние приложения или повтори запрос."
 }
