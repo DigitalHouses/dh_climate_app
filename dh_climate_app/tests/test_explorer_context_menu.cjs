@@ -107,6 +107,54 @@ test("weather editor permits inline labels and preserves the unsaved form",()=>{
   assert.match(editor,/sensor\.dh_climate_app_weather_/);
   assert.match(editor,/weatherSensorTitle\(logicalId,quantity\)/);
 });
+test("persistent top banner and restart action reflect post-Apply state",async()=>{
+  const editorPending=await runEditor(true,true);
+  const editorReady=await runEditor(true,false);
+  const reader=await runEditor(false,false);
+  assert.equal(editorPending.needsRestart(),true);
+  assert.equal(editorReady.needsRestart(),false);
+  assert.equal(reader.needsRestart(),false);
+  assert.match(html,/id="restart-banner"/);
+  assert.match(html,/id="restart-app"/);
+  assert.match(css,/\.restart-banner\[hidden\]/);
+  assert.match(app,/function renderRestartBanner\(/);
+  assert.match(app,/events\.addEventListener\("open"/);
+  assert.match(app,/refreshAfterReconnect/);
+  assert.doesNotMatch(editor,/main\.append\(text\("p",localize\("pending_restart"\)/);
+});
+test("restart button requires confirmation, sends only self-restart request",async()=>{
+  const start=app.indexOf("let restartRequested = false;");
+  const end=app.indexOf("function render() {",start);
+  assert.ok(start>0 && end>start);
+  const elements=new Map();
+  for(const name of ["restart-banner","restart-heading","restart-details",
+      "restart-error","restart-app"])elements.set(name,{hidden:true,textContent:"",disabled:false});
+  let allowed=true,confirmed=false,called=0,request=null;
+  const editor={needsRestart:()=>allowed};
+  const context={window:{DHClimateEditor:editor,confirm:()=>confirmed},
+    $:id=>elements.get(id),streamConnected:true,t:key=>key,
+    fetch:async (url,args)=>{called++;request={url,args};return {ok:true,status:202};},
+    setTimeout:()=>{},JSON,Error,Promise};
+  vm.runInNewContext(app.slice(start,end)+
+    "\nglobalThis.restartTest={renderRestartBanner,restartApp};",context);
+  const api=context.restartTest;
+  api.renderRestartBanner();
+  assert.equal(elements.get("restart-banner").hidden,false);
+  assert.equal(elements.get("restart-app").disabled,false);
+  await api.restartApp();
+  assert.equal(called,0,"confirmation required");
+  confirmed=true;
+  await api.restartApp();
+  assert.equal(called,1);
+  assert.equal(request.url,"api/app/restart");
+  assert.equal(request.args.method,"POST");
+  assert.equal(request.args.headers["X-Requested-With"],"DHClimateExplorer");
+  assert.deepEqual(JSON.parse(request.args.body),{confirm:"RESTART"});
+  assert.equal(elements.get("restart-app").disabled,true);
+  allowed=false;api.renderRestartBanner();
+  assert.equal(elements.get("restart-banner").hidden,true);
+  assert.equal(elements.get("restart-app").disabled,true);
+});
 test("translated context actions exist in both locales",()=>{
   for(const lang of ["en","ru"]){
     const dictionary=JSON.parse(fs.readFileSync(path.join(root,"i18n",lang+".json"),"utf8"));

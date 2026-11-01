@@ -8,12 +8,48 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from .manifest import ManifestEditor, EditConflict, EditValidation
 from .ui_labels import UILabels
 from .entity_catalog import EntityCatalog
+
+
+LOGGER = logging.getLogger(__name__)
+
+
+async def _supervisor_restart_self() -> None:
+    """Only restart this HAOS App; never restart HA Core/Supervisor.
+
+    /addons/self/restart is accessible with this app's token without
+    additional Supervisor roles. A successful request can terminate the
+    current process before Supervisor returns a complete HTTP response.
+    """
+    token = os.environ.get("SUPERVISOR_TOKEN", "")
+    if not token:
+        raise RuntimeError("Supervisor token unavailable")
+    reader, writer = await asyncio.wait_for(
+        asyncio.open_connection("supervisor", 80), timeout=5,
+    )
+    try:
+        writer.write((
+            "POST /addons/self/restart HTTP/1.1\r\n"
+            "Host: supervisor\r\n"
+            "Authorization: Bearer " + token + "\r\n"
+            "Content-Length: 0\r\n"
+            "Connection: close\r\n\r\n"
+        ).encode("ascii"))
+        await asyncio.wait_for(writer.drain(), timeout=5)
+        # Supervisor may kill the container before sending its reply.
+        status = await asyncio.wait_for(reader.readline(), timeout=10)
+        if status and not status.startswith((b"HTTP/1.1 200", b"HTTP/1.1 202",
+                                             b"HTTP/1.1 204")):
+            raise RuntimeError("Supervisor rejected self-restart")
+    finally:
+        writer.close()
 
 
 WEB_ROOT = Path(__file__).with_name("web")
@@ -44,6 +80,7 @@ class OperationsWebServer:
         editor: ManifestEditor | None = None,
         labels: UILabels | None = None,
         catalog: EntityCatalog | None = None,
+        restart_app: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         self.host = host
         self.port = port
@@ -52,6 +89,8 @@ class OperationsWebServer:
         self.editor = editor
         self.labels = labels
         self.catalog = catalog
+        self._restart_app = restart_app or _supervisor_restart_self
+        self._restart_task: asyncio.Task[None] | None = None
         self.revision = 0
         self._server: asyncio.AbstractServer | None = None
         self._condition = asyncio.Condition()
@@ -311,6 +350,71 @@ class OperationsWebServer:
         await self._reply(writer, "200 OK", self._json(payload),
                           "application/json; charset=utf-8")
 
+    async def _run_restart(self) -> None:
+        # Give the response to the browser before Supervisor stops this process.
+        await asyncio.sleep(0.5)
+        try:
+            await self._restart_app()
+        except Exception:
+            # Do not log the Supervisor token or entire HTTP request.
+            LOGGER.exception("Failed to request restart of DH Climate App")
+
+    async def _restart(self, reader: asyncio.StreamReader,
+                       writer: asyncio.StreamWriter, method: str,
+                       headers: dict[str, str]) -> None:
+        if self.editor is None:
+            await self._reply(writer, "404 Not Found", b"No editor")
+            return
+        if not self._is_admin(headers):
+            await self._reply(writer, "403 Forbidden", b"Administrator required")
+            return
+        if method != "POST":
+            await self._reply(writer, "405 Method Not Allowed", b"POST required",
+                              extra="Allow: POST\\r\\n")
+            return
+        if headers.get("x-requested-with") != "DHClimateExplorer":
+            await self._reply(writer, "403 Forbidden", b"Invalid request marker")
+            return
+        if headers.get("content-type", "").split(";", 1)[0].lower() != "application/json":
+            await self._reply(writer, "415 Unsupported Media Type", b"JSON required")
+            return
+        if "transfer-encoding" in headers:
+            await self._reply(writer, "400 Bad Request", b"Chunked not supported")
+            return
+        try:
+            length = int(headers.get("content-length", ""))
+        except ValueError:
+            length = -1
+        if not 0 < length <= 128:
+            await self._reply(writer, "413 Content Too Large", b"Invalid body size")
+            return
+        try:
+            payload = json.loads(
+                await asyncio.wait_for(reader.readexactly(length), timeout=5),
+            )
+        except (ValueError, UnicodeError, asyncio.IncompleteReadError,
+                TimeoutError) as exc:
+            await self._reply(writer, "400 Bad Request", b"Invalid JSON")
+            return
+        if not isinstance(payload, dict) or payload != {"confirm": "RESTART"}:
+            await self._reply(writer, "422 Unprocessable Content", b"Confirm RESTART")
+            return
+        state = await self.editor.state()
+        if not state["pending_restart"]:
+            await self._reply(writer, "409 Conflict", b"Restart not required")
+            return
+        if self._restart_task is not None and not self._restart_task.done():
+            await self._reply(writer, "409 Conflict", b"Restart already requested")
+            return
+        if self._restart_app is _supervisor_restart_self and not os.environ.get("SUPERVISOR_TOKEN"):
+            await self._reply(writer, "503 Service Unavailable", b"Supervisor unavailable")
+            return
+        # This response means *scheduled*, not that restart has succeeded.
+        await self._reply(writer, "202 Accepted",
+                          self._json({"status": "scheduled"}),
+                          "application/json; charset=utf-8")
+        self._restart_task = asyncio.create_task(self._run_restart())
+
     async def _handle(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
     ) -> None:
@@ -326,6 +430,9 @@ class OperationsWebServer:
                 return
             if peer is None or peer[0] not in self.allowed_peers:
                 await self._reply(writer, "403 Forbidden", b"Forbidden")
+                return
+            if path == "/api/app/restart":
+                await self._restart(reader, writer, method, headers)
                 return
             if path == "/api/entities":
                 await self._entities(writer, method, headers)
