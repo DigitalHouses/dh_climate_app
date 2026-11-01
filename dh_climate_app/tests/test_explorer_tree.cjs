@@ -73,6 +73,29 @@ test("configured heating resource remains visible without telemetry",()=>{
   assert.equal(walk(tree,n=>n.kind==="resource").label,"CENTRAL_HEATING");
   assert.equal(walk(tree,n=>n.kind==="resource").children.length,0);
 });
+test("one provider expands into two sensor nodes with stable IDs",()=>{
+  const weather={
+    ...fixture.weather,source_model:"sensors",
+    providers:[{id:"google",entity_id:"weather.asyl_mura",
+      friendly_name:"Asyl Mura",temperature:11.3,humidity:48}],
+    physical_sensors:[{id:"garden",entity_id:"sensor.garden",
+      quantity:"temperature",friendly_name:"Garden thermometer",value:10.3}],
+    temperature_sources:[{entity_id:"google.temperature"}],
+    humidity_sources:[{entity_id:"google.humidity"}],
+  };
+  const tree=u.buildTree({...fixture,weather});
+  const provider=walk(tree,n=>n.kind==="provider");
+  assert.equal(provider.id,"google");
+  assert.equal(provider.sourceName,"weather.asyl_mura");
+  assert.deepEqual(Array.from(provider.children).map(n=>n.id),
+    ["google.temperature","google.humidity"]);
+  const physical=walk(tree,n=>n.kind==="outdoor_sensor");
+  assert.equal(physical.sourceName,"sensor.garden");
+  const priorities=walk(tree,n=>n.kind==="weather_priorities");
+  assert.ok(priorities);
+  assert.deepEqual(Array.from(u.findPath(provider.children[0],tree)).map(n=>n.kind),
+    ["system","weather","providers","provider","weather_sensor"]);
+});
 test("technical behaviour codes are not translated",()=>{
   assert.equal(u.technical("fast_heat"),"FAST_HEAT");
   assert.equal(u.technical("slow_heat"),"SLOW_HEAT");

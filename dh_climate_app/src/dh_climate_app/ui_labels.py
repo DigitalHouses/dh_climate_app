@@ -8,18 +8,24 @@ from __future__ import annotations
 
 import asyncio
 from copy import deepcopy
+import logging
 import json
 from pathlib import Path
 import re
-from typing import Any
+from typing import Any, Callable
 
 from .manifest import _atomic_json, EditConflict, EditValidation
+
+LOGGER = logging.getLogger(__name__)
 
 _ROOM_ID = re.compile(r"^[a-z][a-z0-9_]{0,79}$")
 _AREA_ID = re.compile(r"^[a-z0-9][a-z0-9_-]{0,127}$")
 
 _KEY = re.compile(
     r"^(?:room:[a-z][a-z0-9_]*|"
+    r"provider:[a-z][a-z0-9_]*|"
+    r"weather_sensor:[a-z][a-z0-9_]*\.(?:temperature|humidity)|"
+    r"outdoor_sensor:[a-z][a-z0-9_]*|"
     r"entity:(?:sensor|binary_sensor|climate|switch|weather|number|humidifier)\.[a-z0-9_]+|"
     r"resource:(?:boiler|central_heating|vrf)|"
     r"part:(?:boiler|central_heating|vrf):(?:pumps|circuits):[a-z][a-z0-9_]*)$"
@@ -31,6 +37,12 @@ class UILabels:
         self.path = Path(data_dir) / "dh_climate_ui_labels.json"
         self._lock = asyncio.Lock()
         self._state = self._load()
+        self._on_names_saved: Callable[[dict[str, Any]], None] | None = None
+
+    def on_names_saved(
+        self, callback: Callable[[dict[str, Any]], None] | None,
+    ) -> None:
+        self._on_names_saved = callback
 
     def _load(self) -> dict[str, Any]:
         if not self.path.exists():
@@ -112,4 +124,12 @@ class UILabels:
             next_state["revision"] += 1
             _atomic_json(self.path, next_state)
             self._state = next_state
-            return deepcopy(self._state)
+            result = deepcopy(self._state)
+        if self._on_names_saved is not None:
+            try:
+                self._on_names_saved(deepcopy(result))
+            except Exception:
+                # MQTT rediscovery of a renamed entity must not roll back
+                # the already-durable UI label file.
+                LOGGER.exception("Provider MQTT label refresh failed")
+        return result

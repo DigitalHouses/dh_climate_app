@@ -42,6 +42,13 @@ const namedResource = resource => withOverride("resource",resource?.id,
     ? technical(resource?.id) : t(resource.id));
 const namedPart = (resource,type,part) =>
   withOverride("part",resource+":"+type+":"+part.id,part.name);
+const namedProvider = provider => withOverride("provider",provider.id,
+  provider.friendly_name || provider.entity_id || provider.id);
+const namedWeatherSensor = (provider,quantity) =>
+  withOverride("weather_sensor",provider.id+"."+quantity,
+    t(quantity)+" · "+namedProvider(provider));
+const namedOutdoorSensor = sensor => withOverride("outdoor_sensor",sensor.id,
+  sensor.friendly_name || sensor.entity_id || sensor.id);
 
 function dom(tag, cls, text) {
   const el = document.createElement(tag);
@@ -120,8 +127,27 @@ function buildTree(data) {
     return node("resource", namedResource(resource), "▱", children,
       {id:resource.id,technicalId:resource.id});
   });
+  const weather = data?.weather || {};
+  const providerNodes = (weather.providers || []).map(p =>
+    node("provider", namedProvider(p), "☁", [
+      ...["temperature","humidity"].map(quantity=>
+        node("weather_sensor",namedWeatherSensor(p,quantity),
+          quantity==="temperature"?"🌡":"💧",[],
+          {id:p.id+"."+quantity,provider:p.id,quantity,technicalId:p.id+"."+quantity,
+            sourceName:p.entity_id}))
+    ],{id:p.id,technicalId:p.id,sourceName:p.entity_id,haName:p.friendly_name})
+  );
+  const physicalNodes = (weather.physical_sensors || []).map(s =>
+    node("outdoor_sensor",namedOutdoorSensor(s),s.quantity==="temperature"?"🌡":"💧",
+      [],{id:s.id,technicalId:s.id,sourceName:s.entity_id,haName:s.friendly_name})
+  );
+  const weatherChildren=weather.source_model==="sensors"?[
+    node("providers",t("weather_providers"),"▤",providerNodes),
+    node("outdoor_physical",t("weather_physical"),"▤",physicalNodes),
+    node("weather_priorities",t("weather_priorities"),"▤"),
+  ]:[];
   return [node("system", t("system"), "◈", [
-    node("weather", t("weather"), "☁"),
+    node("weather", t("weather"), "☁",weatherChildren),
     node("home", t("home"), "⌂", [
       node("resources", t("resources"), "▤", resourceNodes),
       node("season", t("season"), "◷"),
@@ -360,7 +386,14 @@ function signalRows(signals) {
     if (signal.attributes?.humidity !== null && signal.attributes?.humidity !== undefined)
       extra.push(number(signal.attributes.humidity, " %"));
     line.append(row(t(signal.role), observedText(signal) + (extra.length ? " · " + extra.join(" · ") : "")));
-    if (signal.friendly_name) line.append(paragraph(signal.friendly_name, "small"));
+    const label = snapshot?.weather?.source_model==="sensors"
+      ? (signal.original_entity_id?.startsWith("weather.")
+          ? withOverride("weather_sensor",signal.entity_id,
+              t(signal.role)+" · "+(signal.friendly_name || signal.entity_id))
+          : withOverride("outdoor_sensor",signal.entity_id,
+              signal.friendly_name || signal.entity_id))
+      : signal.friendly_name;
+    if (label) line.append(paragraph(label, "small"));
     line.append(paragraph(signal.entity_id, "mono subtle small"));
     return line;
   }));
@@ -413,6 +446,66 @@ function showWeather(main) {
     card(t("temperature_sources"), signalRows((w.temperature_sources || []).map(e => ({...e, role:"temperature"})))),
     card(t("humidity_sources"), signalRows((w.humidity_sources || []).map(e => ({...e, role:"humidity"})))));
   main.append(paragraph(t("weather_priority_note"),"subtle small"));
+}
+function showProviders(main) {
+  const links=(snapshot.weather.providers||[]).map(p=>
+    clickable(namedProvider(p),p.entity_id,
+      ()=>navigate({kind:"provider",id:p.id})));
+  add(main,title(t("weather_providers")),
+    card(t("weather_providers"),listOrEmpty(links)));
+}
+function showProvider(main) {
+  const provider=(snapshot.weather.providers||[]).find(p=>p.id===selection.id);
+  if(!provider)return showProviders(main);
+  const sensorLinks=["temperature","humidity"].map(quantity=>
+    clickable(namedWeatherSensor(provider,quantity),
+      number(provider[quantity],quantity==="temperature"?" °C":" %"),
+      ()=>navigate({kind:"weather_sensor",id:provider.id+"."+quantity})));
+  add(main,
+    title(namedProvider(provider)),
+    paragraph(provider.entity_id,"mono subtle"),
+    card(t("identification"),row(t("source"),provider.entity_id)),
+    stats(stat(t("temperature"),number(provider.temperature," °C")),
+      stat(t("humidity"),number(provider.humidity," %"))),
+    card(t("sensors"),listOrEmpty(sensorLinks)));
+}
+function showWeatherSensor(main) {
+  const [providerId,quantity]=String(selection.id||"").split(".");
+  const provider=(snapshot.weather.providers||[]).find(p=>p.id===providerId);
+  if(!provider)return showProviders(main);
+  const entity="sensor.dh_climate_app_provider_"+providerId+"_"+quantity;
+  add(main,
+    title(namedWeatherSensor(provider,quantity)),
+    paragraph(selection.id,"mono subtle"),
+    card(t("identification"),row(t("source"),provider.entity_id),
+      row(t("sensor"),entity)),
+    stats(stat(t(quantity),number(provider[quantity],
+      quantity==="temperature"?" °C":" %"))));
+}
+function showOutdoorPhysical(main) {
+  const links=(snapshot.weather.physical_sensors||[]).map(s=>
+    clickable(namedOutdoorSensor(s),s.entity_id,
+      ()=>navigate({kind:"outdoor_sensor",id:s.id})));
+  add(main,title(t("weather_physical")),
+    card(t("weather_physical"),listOrEmpty(links)));
+}
+function showOutdoorSensor(main) {
+  const sensor=(snapshot.weather.physical_sensors||[]).find(s=>s.id===selection.id);
+  if(!sensor)return showOutdoorPhysical(main);
+  add(main,title(namedOutdoorSensor(sensor)),
+    paragraph(sensor.entity_id,"mono subtle"),
+    card(t("identification"),row(t("source"),sensor.entity_id),
+      row(t("role"),t(sensor.quantity))),
+    stats(stat(t(sensor.quantity),
+      number(sensor.value,sensor.quantity==="temperature"?" °C":" %"))));
+}
+function showWeatherPriorities(main) {
+  const w=snapshot.weather;
+  add(main,title(t("weather_priorities")),
+    card(t("temperature_sources"),
+      signalRows((w.temperature_sources||[]).map(e=>({...e,role:"temperature"})))),
+    card(t("humidity_sources"),
+      signalRows((w.humidity_sources||[]).map(e=>({...e,role:"humidity"})))));
 }
 function showSeason(main) {
   const w = snapshot.weather;
@@ -570,6 +663,15 @@ function renderInspector() {
     if (dev) add(pane, row(t("role"), technical(dev.role)),
       row(t("device_type"), technical(dev.device_type)));
   }
+  if (["provider","weather_sensor","outdoor_sensor"].includes(selection.kind)) {
+    const w=snapshot.weather;
+    if(selection.kind==="outdoor_sensor")
+      entity=(w.physical_sensors||[]).find(s=>s.id===selection.id)?.entity_id;
+    else {
+      const providerId=String(selection.id||"").split(".")[0];
+      entity=(w.providers||[]).find(p=>p.id===providerId)?.entity_id;
+    }
+  }
   if (entity) {
     pane.append(paragraph(entity, "mono source-id"));
     if (updateTime) pane.append(row(t("last_updated"), updateTime));
@@ -598,7 +700,11 @@ function render() {
     main.replaceChildren();
     if (!snapshot) main.append(paragraph(t("loading"), "subtle"));
     else {
-      const views = {system:showSystem, weather:showWeather, home:showHome,
+      const views = {system:showSystem, weather:showWeather,
+        providers:showProviders, provider:showProvider,
+        weather_sensor:showWeatherSensor,
+        outdoor_physical:showOutdoorPhysical, outdoor_sensor:showOutdoorSensor,
+        weather_priorities:showWeatherPriorities, home:showHome,
         resources:showResources, resource:showResource, parts:showParts,
         part:showPart, season:showSeason, rooms:showRooms, room:showRoom,
         thermostat:showThermostat, sensors:showSensors, sensor:showSensor,

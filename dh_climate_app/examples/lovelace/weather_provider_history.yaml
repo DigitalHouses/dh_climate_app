@@ -1,0 +1,30 @@
+# Пример сравнительных графиков после явного перехода на модель 0.2.12.
+# ID провайдеров соответствуют автоматической конвертации:
+# weather.forecast_home_assistant -> p_forecast_home_assistant
+# weather.asyl_mura -> p_asyl_mura
+# Если HA переименовал entity_id вручную, проверь фактические ID в HA.
+# Убедись, что Recorder включает новые сущности.
+type: vertical-stack
+cards:
+  - type: history-graph
+    title: "Наружная температура · провайдеры и DH Climate"
+    hours_to_show: 72
+    entities:
+      - entity: sensor.dh_climate_app_provider_p_forecast_home_assistant_temperature
+        name: "HA Forecast"
+      - entity: sensor.dh_climate_app_provider_p_asyl_mura_temperature
+        name: "Google Weather"
+      - entity: sensor.dh_climate_app_outdoor_temperature_raw
+        name: "Выбранный RAW"
+      - entity: sensor.dh_climate_app_outdoor_temperature
+        name: "EMA"
+  - type: history-graph
+    title: "Наружная влажность · провайдеры и DH Climate"
+    hours_to_show: 72
+    entities:
+      - entity: sensor.dh_climate_app_provider_p_forecast_home_assistant_humidity
+        name: "HA Forecast"
+      - entity: sensor.dh_climate_app_provider_p_asyl_mura_humidity
+        name: "Google Weather"
+      - entity: sensor.dh_climate_app_outdoor_humidity
+        name: "Выбранная влажность"

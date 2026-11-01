@@ -13,6 +13,8 @@
     if (kind==="actuator-hardware") return ["climate"];
     if (kind==="actuator-virtual") return ["climate","switch"];
     if (kind==="humidity-actuator") return ["humidifier","switch"];
+    if (kind==="provider") return ["weather"];
+    if (kind.startsWith("physical-")) return ["sensor"];
     if (kind==="weather" || kind==="outdoor-temperature" ||
         kind==="outdoor-humidity") return ["weather","sensor"];
     if (kind==="binary" || kind==="window") return ["binary_sensor"];
@@ -20,8 +22,10 @@
   };
   const classesFor = kind => ({
     temperature:["temperature"],
+    "physical-temperature":["temperature"],
     "outdoor-temperature":["temperature"],
     humidity:["humidity"],
+    "physical-humidity":["humidity"],
     "outdoor-humidity":["humidity"],
     window:["window","door","opening","garage_door"],
     power:["power"],
@@ -40,7 +44,7 @@
     // An unclassified temperature sensor with an explicit degree unit
     // is a useful fallback. A percentage alone cannot identify humidity
     // (it could be a battery level), so other types require device_class.
-    if(["temperature","outdoor-temperature"].includes(kind) &&
+    if(["temperature","outdoor-temperature","physical-temperature"].includes(kind) &&
        !item.device_class &&
        ["°C","°F","K"].includes(item.unit)) return true;
     return false;
@@ -56,6 +60,8 @@
   function match(item,filters) {
     const {kind,query,area,domain,availability,includeOther}=filters;
     if (!domainsFor(kind).includes(item.domain)) return false;
+    if (kind.startsWith("physical-") &&
+        item.entity_id.startsWith("sensor.dh_climate_app_")) return false;
     if (domain!=="all" && item.domain!==domain) return false;
     if (area==="none" && item.area_id) return false;
     if (area!=="all" && area!=="none" && item.area_id!==area) return false;

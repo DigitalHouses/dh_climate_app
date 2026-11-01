@@ -54,6 +54,20 @@ test("outdoor weather sources allow weather entities and correctly classified se
   assert.equal(match({...base,device_class:null,unit:null},
     filters({kind:"outdoor-temperature"})),false);
 });
+test("new provider picker is weather-only and physical picker excludes app feedback",()=>{
+  assert.deepEqual(Array.from(domainsFor("provider")),["weather"]);
+  assert.deepEqual(Array.from(domainsFor("physical-temperature")),["sensor"]);
+  assert.equal(match({...base,entity_id:"weather.asyl_mura",domain:"weather"},
+    filters({kind:"provider"})),true);
+  assert.equal(match({...base,entity_id:"weather.asyl_mura",domain:"weather"},
+    filters({kind:"physical-temperature"})),false);
+  assert.equal(match({...base,entity_id:"sensor.dh_climate_app_provider_google_temperature",
+    domain:"sensor",device_class:"temperature"},
+    filters({kind:"physical-temperature"})),false);
+  assert.equal(match({...base,entity_id:"sensor.garden",domain:"sensor",
+    device_class:"temperature"},
+    filters({kind:"physical-temperature"})),true);
+});
 test("area and availability filters act independently",()=>{
   assert.equal(match(base,filters({area:"living"})),true);
   assert.equal(match(base,filters({area:"bedroom"})),false);

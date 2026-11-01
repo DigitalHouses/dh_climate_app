@@ -69,9 +69,65 @@ def build_operations_snapshot(
     room_states: Mapping[str, Any], health: Any | None,
     problems: tuple[Any, ...], demands: Mapping[tuple[str, str], Any],
     states: Mapping[str, Any], version: str, ha_connected: bool,
+    source_readings: Mapping[str, float | None] | None = None,
 ) -> dict[str, Any]:
     """Assemble a small, transport-safe view; no state estimation or commands."""
     online = bool(ha_connected)
+    source_readings = source_readings or {}
+    registry = config.outdoor
+    providers_raw = getattr(registry, "providers", ())
+    physical_raw = getattr(registry, "physical_sensors", ())
+    source_model = getattr(registry, "source_model", "legacy")
+    provider_index = {p.provider_id: p for p in providers_raw}
+    physical_index = {p.sensor_id: p for p in physical_raw}
+
+    def source_entry(source_id: str) -> dict[str, Any]:
+        if source_model != "sensors":
+            return _entity(source_id, states) or {}
+        if source_id in physical_index:
+            original = physical_index[source_id].entity_id
+            quantity = physical_index[source_id].quantity
+        else:
+            source_provider, _, quantity = source_id.rpartition(".")
+            provider = provider_index.get(source_provider)
+            original = provider.entity_id if provider is not None else ""
+        value = source_readings.get(source_id) if online else None
+        return {
+            "entity_id": source_id, "original_entity_id": original,
+            "quantity": quantity,
+            "friendly_name": _friendly_name(original, states),
+            "state": value,
+            "available": value is not None,
+            "last_updated": (
+                states[original].last_updated.isoformat() if original in states else None
+            ),
+            "attributes": {},
+        }
+
+    providers = [
+        {
+            "id": p.provider_id,
+            "entity_id": p.entity_id,
+            "friendly_name": _friendly_name(p.entity_id, states),
+            "temperature": (
+                _number(source_readings.get(p.provider_id + ".temperature"))
+                if online else None
+            ),
+            "humidity": (
+                _number(source_readings.get(p.provider_id + ".humidity"))
+                if online else None
+            ),
+        } for p in providers_raw
+    ] if source_model == "sensors" else []
+    physical_sensors = [
+        {
+            "id": p.sensor_id,
+            "entity_id": p.entity_id,
+            "quantity": p.quantity,
+            "friendly_name": _friendly_name(p.entity_id, states),
+            "value": _number(source_readings.get(p.sensor_id)) if online else None,
+        } for p in physical_raw
+    ] if source_model == "sensors" else []
     rooms: list[dict[str, Any]] = []
     for room in config.rooms:
         state = room_states.get(room.room_id) if online else None
@@ -158,11 +214,14 @@ def build_operations_snapshot(
             "stale": outdoor.stale if online and outdoor is not None else None,
             "condition": weather.condition if online and weather is not None else None,
             "precipitation_mm": _number(weather.precipitation_mm) if online and weather is not None else None,
+            "source_model": source_model,
+            "providers": providers,
+            "physical_sensors": physical_sensors,
             "temperature_sources": [
-                _entity(e, states) for e in config.outdoor.temperature_sources
+                source_entry(e) for e in config.outdoor.temperature_sources
             ],
             "humidity_sources": [
-                _entity(e, states) for e in config.outdoor.humidity_sources
+                source_entry(e) for e in config.outdoor.humidity_sources
             ],
         },
         "home": {
