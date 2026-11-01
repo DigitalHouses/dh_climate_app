@@ -883,6 +883,8 @@ function render() {
   window.DHClimateEditor?.setWeatherContext?.(snapshot?.weather,weatherCatalog);
   renderRestartBanner();
   $("top-title").textContent = t("explorer");
+  if (!$("save-diagnostics").disabled)
+    $("save-diagnostics").textContent = t("diagnostics_save");
   $("explorer-heading").textContent = t("explorer").toUpperCase();
   $("foot-mode").textContent = window.DHClimateEditor?.viewMode() || t("read_only");
   $("connection").textContent = !streamConnected && snapshot ? t("connection_lost") : !snapshot ? t("loading") :
@@ -911,6 +913,32 @@ function render() {
   window.DHClimateEditor?.controls(main);
   renderInspector();
   renderPanels();
+}
+function diagnosticContext() {
+  const path=findPath(selection);
+  return {
+    locale,
+    translations:dictionary,
+    selection:{...selection},
+    selected_path:path ? path.map(item=>({
+      kind:item.kind,id:item.id||null,label:item.label,
+    })) : [],
+    expanded_nodes:Array.from(expanded),
+    explorer_open:explorerOpen,
+    explorer_width:explorerWidth,
+    inspector_open:inspectorOpen,
+    stream_connected:streamConnected,
+    restart_requested:restartRequested,
+    restart_error:restartError,
+    tree:nodes,
+    snapshot_browser_cache:snapshot,
+    weather_catalog_browser_cache:weatherCatalog,
+    editor:window.DHClimateEditor?.diagnosticState?.() || null,
+  };
+}
+async function saveDiagnostics() {
+  await window.DHClimateDiagnostics.save(
+    diagnosticContext,$("save-diagnostics"),t);
 }
 async function language(code) {
   const target = ["en","ru"].includes(code) ? code : "en";
@@ -960,6 +988,7 @@ $("toggle-explorer").onclick = () => { explorerOpen = !explorerOpen; renderPanel
 $("collapse-all").onclick = () => { expanded.clear(); expanded.add(keyOf(nodes[0] || {kind:"system"})); renderTree(); };
 $("language").onchange = e => language(e.target.value);
 $("restart-app").onclick = restartApp;
+$("save-diagnostics").onclick = saveDiagnostics;
 (async () => {
   let preferred = locale;
   try { preferred = localStorage.getItem("dh-climate-language") || preferred; } catch (_) {}

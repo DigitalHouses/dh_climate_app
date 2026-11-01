@@ -29,7 +29,8 @@ from .problems import Problem, collect_problems
 from .rooms import ProfileEditOverlay, RoomEngine, RoomState
 from .telemetry import TelemetryClient, TelemetryRunner
 from .topology import build_topology
-from .operations import build_operations_snapshot
+from .operations import build_operations_snapshot, _entity
+from .diagnostics import BoundedDiagnosticLogHandler
 from .ingress import OperationsWebServer
 from .entity_catalog import EntityCatalog
 from .manifest import ManifestEditor
@@ -97,6 +98,8 @@ class ClimateRuntime:
         self.command_queue: asyncio.Queue[MqttCommand] = asyncio.Queue()
         self._calculation_lock = asyncio.Lock()
         self._ha_connected = False
+        self._diagnostic_log_handler = BoundedDiagnosticLogHandler()
+        logging.getLogger("dh_climate_app").addHandler(self._diagnostic_log_handler)
         self._last_outdoor_state: OutdoorState | None = None
         self._last_room_states: dict[str, RoomState] = {}
         self._last_humidity_states: dict[str, HumidityState] = {}
@@ -118,7 +121,8 @@ class ClimateRuntime:
             health=None, problems=(), demands={}, states={},
             version=APP_VERSION, ha_connected=False,
         ), editor=editor, labels=labels,
-            catalog=EntityCatalog(token=os.environ["SUPERVISOR_TOKEN"]))
+            catalog=EntityCatalog(token=os.environ["SUPERVISOR_TOKEN"]),
+            diagnostics_provider=self._runtime_diagnostics)
 
         loop = asyncio.get_running_loop()
         self.mqtt = MqttBridge(
@@ -157,6 +161,86 @@ class ClimateRuntime:
             version=APP_VERSION,
         )
         self.telemetry_runner = TelemetryRunner(self.telemetry)
+
+    def _runtime_diagnostics(self) -> dict[str, object]:
+        """Whitelist runtime facts. No MQTT credentials or HA access tokens."""
+        outdoor = self._last_outdoor_state
+        states = self.cache.snapshot()
+        with self.store.connect() as db:
+            rows = db.execute(
+                """
+                SELECT kind, COUNT(*) AS count, MIN(observed_at) AS oldest,
+                       MAX(observed_at) AS newest
+                FROM outdoor_samples
+                GROUP BY kind
+                """
+            ).fetchall()
+        return {
+            "started_at": self.started_at.isoformat(),
+            "ha_connected": self._ha_connected,
+            "ha_cache": {
+                "allowed_count": len(self.cache.allowed),
+                "observed_count": len(states),
+                "missing_entities": sorted(self.cache.allowed.difference(states)),
+                "observed_entities": [
+                    _entity(entity_id, states)
+                    for entity_id in sorted(states)
+                ],
+            },
+            "mqtt": {
+                "started": self._facade_started,
+                "ever_connected": self.mqtt._connected_once,
+                "subscription_count": len(self.mqtt._subscriptions),
+                "published_topic_count": len(self.mqtt._last_payloads),
+                "queued_commands": self.command_queue.qsize(),
+            },
+            "execution": {
+                "calculation_in_progress": self._calculation_lock.locked(),
+                "pending_device_rechecks": sorted(self._device_recheck_tasks),
+                "pending_window_rechecks": sorted(self._window_recheck_tasks),
+                "startup_deferred": list(self._last_startup_deferred),
+                "last_reconcile_commands": self._last_reconcile.commands,
+                "problem_count": len(self._last_problems),
+            },
+            "outdoor": {
+                "last_evaluated_at": (
+                    outdoor.observed_at.isoformat() if outdoor else None
+                ),
+                "active_temperature_source": (
+                    outdoor.temperature_source if outdoor else None
+                ),
+                "history_sources": (
+                    list(outdoor.temperature_history_sources) if outdoor else []
+                ),
+                "stale": outdoor.stale if outdoor else None,
+                "ema_minutes": self.config.outdoor.temperature_ema_minutes,
+                "forecast_fetched_at": (
+                    self._weather_forecast_fetched_at.isoformat()
+                    if self._weather_forecast_fetched_at else None
+                ),
+                "condition_source": self.weather_source,
+            },
+            "global_tuning": {
+                key: self.store.get_global_tuning(key)
+                for key in GLOBAL_TUNING_SEEDS
+            },
+            "sqlite": {
+                "file": self.store.path.name,
+                "size_bytes": (
+                    self.store.path.stat().st_size
+                    if self.store.path.exists() else None
+                ),
+                "integrity_check_on_startup": True,
+                "samples": {
+                    row["kind"]: {
+                        "count": row["count"],
+                        "oldest": row["oldest"],
+                        "newest": row["newest"],
+                    } for row in rows
+                },
+            },
+            "recent_warnings_and_errors": self._diagnostic_log_handler.snapshot(),
+        }
 
     def _on_names_saved(self, data: dict[str, object]) -> None:
         self.facade.configure_provider_labels(data.get("labels", {}))
@@ -207,6 +291,9 @@ class ClimateRuntime:
             self._facade_started = False
             self.facade.stop()
             await self.operations.stop()
+            logging.getLogger("dh_climate_app").removeHandler(
+                self._diagnostic_log_handler
+            )
 
     async def _on_snapshot(self, states: list[HaState]) -> None:
         observed_at = datetime.now(timezone.utc)

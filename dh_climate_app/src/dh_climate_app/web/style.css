@@ -19,6 +19,15 @@ button:disabled { cursor:default; opacity:.5; }
 .section-title { padding-left:12px; border-left:1px solid var(--border); font-weight:600; }
 .grow { flex:1; }
 .connection { font-size:12px; white-space:nowrap; }
+.diagnostics-button { background:var(--surface-2); border:1px solid var(--border);
+  padding:5px 10px; font-size:12px; border-radius:5px; white-space:nowrap; }
+.diagnostics-button:hover { border-color:var(--accent); color:var(--accent); }
+.diagnostics-button:disabled { opacity:.7; }
+@media (max-width:640px) {
+  .topbar { gap:6px; padding:0 6px; }
+  .diagnostics-button { padding:4px 6px; font-size:11px; }
+  .brand { font-size:11px; letter-spacing:0; }
+}
 .chrome-button { background:transparent; border:1px solid transparent; color:var(--muted);
   border-radius:5px; min-width:30px; height:30px; padding:3px 7px; font-size:17px; }
 .chrome-button:hover, .chrome-button[aria-pressed="true"] { color:var(--text); background:var(--surface-2); border-color:var(--border); }
