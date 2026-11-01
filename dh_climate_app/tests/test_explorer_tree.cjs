@@ -14,7 +14,12 @@ const context = vm.createContext({
   document: {}, window:{},
   Intl, Number, Set,
 });
-vm.runInContext(source.slice(0, boot) +
+// Import only the pure view functions: boot handlers need a full browser.
+const seasonStart = source.indexOf("function seasonSourceNode(");
+const seasonEnd = source.indexOf("function showHome(", seasonStart);
+assert.ok(seasonStart > boot && seasonEnd > seasonStart);
+vm.runInContext(source.slice(0, boot) + "\n" +
+  source.slice(seasonStart, seasonEnd) +
   "\nglobalThis.unit = {buildTree, keyOf, findPath, technical, number, showSeason};", context);
 const u = context.unit;
 const fixture = {
