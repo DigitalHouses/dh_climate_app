@@ -213,6 +213,29 @@ body.resizing-explorer { cursor:col-resize; user-select:none; }
   background:var(--surface);color:var(--text);border-radius:5px;cursor:pointer;}
 .editor-source-actions button:disabled{opacity:.35;cursor:not-allowed;}
 
+/* Provider priority controls are independent for temperature and humidity.
+   The order of provider registration itself is not a control priority. */
+.editor-provider-row { gap:12px; }
+.editor-provider-row > .mono { min-width:120px; flex:1; overflow-wrap:anywhere; }
+.editor-provider-priorities { display:flex; flex-wrap:wrap;
+  justify-content:flex-end; align-items:center; gap:7px; margin-left:auto; }
+.editor-provider-priority { display:inline-flex; align-items:center; gap:3px;
+  border:1px solid var(--border); border-radius:5px; padding:3px 5px;
+  background:var(--surface-2); }
+.editor-provider-priority .editor-priority-status { min-width:115px;
+  padding:0 4px; font-size:12px; white-space:nowrap; color:var(--text); }
+.editor-provider-priority button { border:1px solid var(--border);
+  color:var(--text); border-radius:4px; min-width:27px; min-height:28px;
+  background:var(--surface); cursor:pointer; font-size:15px; }
+.editor-provider-priority button:hover:not(:disabled) { border-color:var(--accent); }
+.editor-provider-priority button:disabled { opacity:.35; cursor:default; }
+@media(max-width:820px) {
+  .editor-provider-row { flex-wrap:wrap; }
+  .editor-provider-priorities { width:100%; justify-content:flex-start;
+    order:2; margin-left:0; }
+  .editor-provider-row > button { margin-left:auto; }
+}
+
 /* Provenance: HA Entity Registry platform, not guessed vendor labels. */
 .picker-source-row{display:flex;align-items:center;gap:9px;
  font-size:12px;color:var(--muted);}
