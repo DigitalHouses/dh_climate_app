@@ -58,18 +58,21 @@
     return areas.find(area=>hints.includes(area.name?.toLocaleLowerCase()))?.id || "all";
   }
   function match(item,filters) {
-    const {kind,query,area,domain,availability,includeOther}=filters;
+    const {kind,query,area,domain,availability,includeOther,integration="all"}=filters;
     if (!domainsFor(kind).includes(item.domain)) return false;
     if (kind.startsWith("physical-") &&
         item.entity_id.startsWith("sensor.dh_climate_app_")) return false;
     if (domain!=="all" && item.domain!==domain) return false;
+    if (integration!=="all" &&
+        (integration==="none" ? !!item.integration : item.integration!==integration))
+      return false;
     if (area==="none" && item.area_id) return false;
     if (area!=="all" && area!=="none" && item.area_id!==area) return false;
     if (availability==="available" && !item.available) return false;
     if (availability==="unavailable" && item.available) return false;
     if (!includeOther && !appropriateClass(item,kind)) return false;
     const phrase=(item.name+" "+item.entity_id+" "+(item.area_name||"")+
-      " "+(item.device_name||"")).toLocaleLowerCase();
+      " "+(item.device_name||"")+" "+(item.integration||"")).toLocaleLowerCase();
     return phrase.includes(query.toLocaleLowerCase().trim());
   }
   function close() {
@@ -119,7 +122,7 @@
     status.remove();
     const filters={kind,query:"",
       area:resolveArea(catalog.areas,areaId,areaHint,areaHints),
-      domain:"all",availability:"all",includeOther:false};
+      domain:"all",availability:"all",includeOther:false,integration:"all"};
     const linked=areaId && catalog.areas.find(area=>area.id===areaId);
     const row=el("div","picker-filters");
     const search=el("input","picker-search");
@@ -140,6 +143,25 @@
                            ["unavailable","picker.unavailable"]])
       option(availability,v,tr(key));
     row.append(search,area,domain,availability);sheet.append(row);
+    // A second row keeps the current search row compact.
+    // Only integration IDs present in the registry are offered.
+    const sourceRow=el("div","picker-source-row");
+    const origin=el("select");
+    origin.setAttribute("aria-label",tr("picker.integration"));
+    option(origin,"all",tr("picker.all_integrations"));
+    const eligible=catalog.entities.filter(item=>
+      domainsFor(kind).includes(item.domain) &&
+      !(kind.startsWith("physical-") &&
+        item.entity_id.startsWith("sensor.dh_climate_app_")) &&
+      appropriateClass(item,kind));
+    const integrations=[...new Set(eligible.map(item=>item.integration).filter(Boolean))]
+      .sort((a,b)=>a.localeCompare(b));
+    for(const name of integrations)option(origin,name,name);
+    if(eligible.some(item=>!item.integration))
+      option(origin,"none",tr("picker.integration_missing"));
+    sourceRow.append(el("span","",tr("picker.integration")+":"),origin);
+    if(integrations.length || eligible.some(item=>!item.integration))
+      sheet.append(sourceRow);
     if(areaId && !linked)sheet.append(el("p","picker-area-warning",
       tr("picker.area_missing")+": "+areaId));
     const advanced=el("label","picker-advanced");
@@ -201,6 +223,7 @@
           el("span","mono subtle",item.entity_id),
           el("span","subtle small",
             [item.area_name||tr("picker.no_area"),item.device_name,
+             item.integration ? tr("picker.integration")+": "+item.integration : null,
              item.device_class,item.unit].filter(Boolean).join(" · ")));
         if(used.length)information.append(el("span","picker-in-use",
           tr("picker.used")+": "+used.join(", ")));
@@ -238,6 +261,7 @@
     search.oninput=()=>{filters.query=search.value;refresh();};
     area.onchange=()=>{filters.area=area.value;refresh();};
     domain.onchange=()=>{filters.domain=domain.value;refresh();};
+    origin.onchange=()=>{filters.integration=origin.value;refresh();};
     availability.onchange=()=>{filters.availability=availability.value;refresh();};
     toggle.onchange=()=>{filters.includeOther=toggle.checked;refresh();};
     refresh();

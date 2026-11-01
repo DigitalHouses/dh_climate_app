@@ -178,7 +178,7 @@
   "picker.error": "Unable to load HA catalog. Existing bindings are unchanged.",
   "picker.cancel": "Cancel",
   "picker.attach": "Attach",
-  "picker.search": "Search names, entity IDs, devices…",
+  "picker.search": "Search names, IDs, devices, integrations…",
   "picker.area": "Home Assistant area",
   "picker.domain": "Domain",
   "picker.availability": "Availability",
@@ -224,11 +224,15 @@
   "weather_priority_note": "Provider-derived sensors retain readings independently of priority. Temperature and humidity have separate fallback lists.",
   "picker.weather_no_value": "No current reading",
   "weather_providers": "Providers",
-  "weather_physical": "Physical sensors",
+  "weather_physical": "Other HA sensors",
   "weather_priorities": "Priorities",
   "editor.weather_providers": "Weather providers",
-  "editor.weather_physical": "Physical sensors",
+  "editor.weather_physical": "Other HA sensors",
   "editor.weather_add_priority": "Add to priorities",
   "editor.weather_convert": "Create new-model draft",
-  "editor.weather_legacy_notice": "The previous model repeats weather.* in measurement lists. Convert locally to a draft: providers → numeric sensors → independent priorities. Runtime control is unchanged until Validate, Apply and restart."
+  "editor.weather_legacy_notice": "The previous model repeats weather.* in measurement lists. Convert locally to a draft: providers → numeric sensors → independent priorities. Runtime control is unchanged until Validate, Apply and restart.",
+  "picker.integration": "HA integration",
+  "picker.all_integrations": "All integrations",
+  "picker.integration_missing": "Unknown source",
+  "editor.weather_sensor_hint": "Lists existing sensor.* entities. Add weather.* under Providers above: temperature and humidity sensors are derived automatically. Picker shows the originating HA integration."
 }

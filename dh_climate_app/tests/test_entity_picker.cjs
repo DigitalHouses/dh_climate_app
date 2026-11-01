@@ -81,6 +81,20 @@ test("search considers name, entity id, device, area",()=>{
     assert.equal(match(base,filters({query:word})),true);
   assert.equal(match(base,filters({query:"sitting room"})),false);
 });
+test("integration provenance can be searched and filtered separately",()=>{
+  const fromWeather={...base,entity_id:"sensor.asyl_mura_temperature",
+    name:"Температура",integration:"google_weather",area_id:null};
+  const zha={...base,integration:"zha"};
+  assert.equal(match(fromWeather,filters({kind:"physical-temperature",query:"weather"})),true);
+  assert.equal(match(fromWeather,filters({kind:"physical-temperature",query:"GOOGLE"})),true);
+  assert.equal(match(fromWeather,filters({kind:"physical-temperature",integration:"google_weather"})),true);
+  assert.equal(match(zha,filters({kind:"physical-temperature",integration:"google_weather"})),false);
+  assert.equal(match(fromWeather,filters({kind:"physical-temperature",integration:"zha"})),false);
+  assert.equal(match({...base,integration:null},
+    filters({kind:"physical-temperature",integration:"none"})),true);
+  assert.equal(match(fromWeather,filters({kind:"physical-temperature",integration:"none"})),false);
+  assert.equal(match(zha,filters({kind:"physical-temperature",query:"mqtt"})),false);
+});
 test("domain constraints follow hardware and virtual actuator requirements",()=>{
   assert.deepEqual(Array.from(domainsFor("actuator-hardware")),["climate"]);
   assert.deepEqual(Array.from(domainsFor("actuator-virtual")),["climate","switch"]);

@@ -95,6 +95,9 @@ def build_catalog(
             "area_id": area_id if isinstance(area_id, str) else None,
             "area_name": area_names.get(area_id),
             "device_name": _string(device.get("name_by_user") or device.get("name")),
+            # HA Entity Registry platform: compact pl or full platform.
+            # Never infer integration origin from name or domain.
+            "integration": _string(reg.get("pl", reg.get("platform")), 64),
             # Explicit whitelist: weather state is a condition string.
             # Temperature/humidity are attributes; no other HA attributes leak.
             "temperature": _weather_number(attributes, "temperature", domain),

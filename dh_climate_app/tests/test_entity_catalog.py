@@ -24,7 +24,7 @@ class CatalogProjectionTests(unittest.TestCase):
             {"entity_id":"sensor.no_area","state":"unknown","attributes":{}},
         ]
         reg={"entities":[
-            {"ei":"sensor.th_livingroom_temperature","di":"d1"},
+            {"ei":"sensor.th_livingroom_temperature","di":"d1","pl":"zha"},
             {"ei":"climate.thermostat","ai":"bedroom"},
         ]}
         devices=[{"id":"d1","area_id":"living","name_by_user":"Термостат в гостиной"}]
@@ -34,12 +34,26 @@ class CatalogProjectionTests(unittest.TestCase):
         self.assertEqual(len(out["entities"]),3)
         catalog={x["entity_id"]:x for x in out["entities"]}
         self.assertEqual(catalog["sensor.th_livingroom_temperature"]["area_name"],"Гостиная")
+        self.assertEqual(catalog["sensor.th_livingroom_temperature"]["integration"],"zha")
+        self.assertIsNone(catalog["sensor.no_area"]["integration"])
         self.assertEqual(catalog["climate.thermostat"]["area_id"],"bedroom")
         self.assertFalse(catalog["climate.thermostat"]["available"])
         self.assertIsNone(catalog["sensor.no_area"]["area_id"])
         self.assertNotIn("do-not-expose",json.dumps(out,ensure_ascii=False))
         self.assertNotIn("person.someone",json.dumps(out,ensure_ascii=False))
         self.assertIn("sensor.no_area",catalog)
+
+    def test_integration_source_comes_only_from_entity_registry(self):
+        state={"entity_id":"sensor.asyl_mura_temperature","state":"8.0",
+               "attributes":{"friendly_name":"Weather temperature",
+                             "device_class":"temperature",
+                             "integration":"malicious_fake_source"}}
+        compact={"entities":[{"ei":"sensor.asyl_mura_temperature","pl":"google_weather"}]}
+        out=build_catalog([state],compact,[],[])
+        self.assertEqual(out["entities"][0]["integration"],"google_weather")
+        self.assertNotIn("malicious_fake_source",json.dumps(out))
+        full=[{"entity_id":"sensor.asyl_mura_temperature","platform":"met"}]
+        self.assertEqual(build_catalog([state],full,[],[])["entities"][0]["integration"],"met")
 
     def test_weather_asyl_mura_readings_are_distinct_from_condition(self):
         states=[{"entity_id":"weather.asyl_mura","state":"partlycloudy",
