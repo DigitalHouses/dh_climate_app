@@ -104,6 +104,10 @@ test("save report includes tree, DOM, CSS, runtime and masks sensitive fields",a
   assert.match(report.ui.css[0].rules,/card/);
   assert.equal(report.backend.data.runtime.queued_commands,0);
   assert.equal(report.backend.data.manifest.options.api_key,"[REDACTED]");
+  const cleaned=f.window.DHClimateDiagnostics.sanitize({
+    stack:"https://ha.example/api/hassio_ingress/private-route-token/app.js?api_key=secret",
+  });
+  assert.doesNotMatch(JSON.stringify(cleaned),/private-route-token|api_key=secret/);
   assert.equal(f.statusElement.textContent,"diagnostics_ready");
 });
 
