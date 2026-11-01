@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="style.css">
   <script src="entity_picker.js" defer></script>
   <script src="editor.js" defer></script>
+  <script src="diagnostics.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -17,6 +18,8 @@
     <span class="section-title" id="top-title">Explorer</span>
     <span class="grow"></span>
     <span class="connection" id="connection" role="status"></span>
+    <button id="save-diagnostics" class="diagnostics-button" type="button">Сохранить диагностику</button>
+    <span id="diagnostics-status" class="sr-only" role="status" aria-live="polite"></span>
     <button id="toggle-inspector" class="chrome-button" type="button" aria-pressed="false" title="Inspector">ⓘ</button>
     <label for="language" class="sr-only">Language</label>
     <select id="language" aria-label="Interface language">
