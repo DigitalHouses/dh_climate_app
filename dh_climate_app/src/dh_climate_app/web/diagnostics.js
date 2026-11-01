@@ -29,7 +29,7 @@
     if (value === null || typeof value === "boolean") return value;
     return value === undefined ? null : safeText(value);
   }
-  const entityId=/^(?:sensor|binary_sensor|climate|humidifier|weather|number|switch|input_boolean|input_number|input_select|input_text|select|fan|cover|valve|water_heater)\\.[a-z0-9_]+$/;
+  const entityId=/^(?:sensor|binary_sensor|climate|humidifier|weather|number|switch|input_boolean|input_number|input_select|input_text|select|fan|cover|valve|water_heater)\.[a-z0-9_]+$/;
   function referencedEntities(value,result,depth=0) {
     if(depth>20)return;
     if(typeof value==="string" && entityId.test(value))result.add(value);
@@ -50,7 +50,7 @@
       integrations.push(entry.integration||"unknown");
       return refs.has(entry.entity_id) || entry.climate_source_id ||
         entry.climate_avg24_sensor===true ||
-        /^(?:sensor|binary_sensor|climate|number)\\.dh_climate_app_/.test(entry.entity_id||"");
+        /^(?:sensor|binary_sensor|climate|number)\.dh_climate_app_/.test(entry.entity_id||"");
     });
     const countIntegrations={};
     for(const name of integrations)countIntegrations[name]=(countIntegrations[name]||0)+1;
