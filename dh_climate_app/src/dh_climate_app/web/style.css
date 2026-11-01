@@ -235,3 +235,32 @@ body.resizing-explorer { cursor:col-resize; user-select:none; }
   .restart-banner { align-items:stretch; flex-direction:column; gap:9px; }
   .restart-action { width:100%; }
 }
+
+/* Weather priorities: one row per logical sensor, drag or keyboard arrows. */
+.editor-priority-list { display:flex; flex-direction:column; gap:6px; }
+.editor-priority-row { display:flex; align-items:center; gap:9px; min-height:55px;
+  cursor:grab; padding:8px; }
+.editor-priority-row:active { cursor:grabbing; }
+.editor-priority-row:focus-within { outline:1px solid var(--accent); }
+.editor-drag-handle { color:var(--muted); font-size:19px; flex-shrink:0; }
+.editor-priority-rank { min-width:23px; color:var(--muted); }
+.editor-priority-info { display:flex; flex:1; flex-direction:column; gap:2px;
+  min-width:100px; overflow-wrap:anywhere; }
+.editor-priority-name { font-size:13px; font-weight:600; }
+.editor-priority-entity { font-size:11px; color:var(--muted); }
+.editor-priority-value { font-size:14px; font-weight:600; white-space:nowrap;
+  min-width:80px; text-align:right; }
+.editor-priority-value.unavailable { color:var(--warning); }
+.editor-priority-add { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.editor-priority-add select { flex:1; min-width:160px; }
+.weather-priority-readonly { display:grid; grid-template-columns:26px 1fr auto;
+  gap:9px; align-items:start; padding:9px 4px;
+  border-bottom:1px solid var(--border); }
+.weather-priority-readonly-name { font-size:13px; min-width:0; overflow-wrap:anywhere; }
+.weather-priority-readonly .mono { grid-column:2 / 4; margin:0;
+  font-size:11px; overflow-wrap:anywhere; }
+@media(max-width:640px) {
+  .editor-priority-row { flex-wrap:wrap; }
+  .editor-priority-info { min-width:0; }
+  .editor-priority-value { width:100%; text-align:left; }
+}

@@ -55,6 +55,34 @@ class CatalogProjectionTests(unittest.TestCase):
         full=[{"entity_id":"sensor.asyl_mura_temperature","platform":"met"}]
         self.assertEqual(build_catalog([state],full,[],[])["entities"][0]["integration"],"met")
 
+    def test_ha_renamed_climate_mqtt_entity_resolves_stable_logical_id(self):
+        states = [
+            {"entity_id": "sensor.custom_google_temperature", "state": "2.7",
+             "attributes": {"friendly_name": "Google температура на улице",
+                            "device_class": "temperature",
+                            "unit_of_measurement": "°C"}},
+            {"entity_id": "sensor.secret_other", "state": "12.3",
+             "attributes": {"friendly_name": "Other sensor"}},
+        ]
+        registry = [
+            {"entity_id": "sensor.custom_google_temperature",
+             "unique_id": "dh_climate_app_provider_p_asyl_mura_temperature",
+             "platform": "mqtt"},
+            {"entity_id": "sensor.secret_other",
+             "unique_id": "private-serial-token",
+             "platform": "mqtt"},
+        ]
+        rows = build_catalog(states, registry, [], [])["entities"]
+        by_id = {row["entity_id"]: row for row in rows}
+        self.assertEqual(
+            by_id["sensor.custom_google_temperature"]["climate_source_id"],
+            "p_asyl_mura.temperature",
+        )
+        self.assertEqual(by_id["sensor.custom_google_temperature"]["name"],
+                         "Google температура на улице")
+        self.assertIsNone(by_id["sensor.secret_other"]["climate_source_id"])
+        self.assertNotIn("private-serial-token", json.dumps(rows))
+
     def test_weather_asyl_mura_readings_are_distinct_from_condition(self):
         states=[{"entity_id":"weather.asyl_mura","state":"partlycloudy",
             "attributes":{"friendly_name":"Google Weather",
