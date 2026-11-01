@@ -20,22 +20,22 @@ SECRET_FIELD = re.compile(
 )
 SENSITIVE_PARAMETER = re.compile(
     r"([?&](?:access_token|token|api_key|password|secret|signature|"
-    r"auth|code|key)=)[^&#\\s]+", re.IGNORECASE,
+    r"auth|code|key)=)[^&#\s]+", re.IGNORECASE,
 )
 AUTH_HEADER = re.compile(
-    r"(\\b(?:Bearer|Basic)\\s+)[A-Za-z0-9._~+/-]+={0,2}",
+    r"(\b(?:Bearer|Basic)\s+)[A-Za-z0-9._~+/-]+={0,2}",
     re.IGNORECASE,
 )
 URL_PASSWORD = re.compile(
-    r"(https?://)[^/\\s:@]+:[^/\\s@]+@", re.IGNORECASE,
+    r"(https?://)[^/\s:@]+:[^/\s@]+@", re.IGNORECASE,
 )
 
 
 def mask_text(value: str) -> str:
     """Protect credentials pasted into incidental labels/error messages."""
-    value = SENSITIVE_PARAMETER.sub(r"\\1[REDACTED]", value)
-    value = AUTH_HEADER.sub(r"\\1[REDACTED]", value)
-    return URL_PASSWORD.sub(r"\\1[REDACTED]@", value)
+    value = SENSITIVE_PARAMETER.sub(r"\1[REDACTED]", value)
+    value = AUTH_HEADER.sub(r"\1[REDACTED]", value)
+    return URL_PASSWORD.sub(r"\1[REDACTED]@", value)
 
 
 def sanitize_export(value: Any, *, depth: int = 0) -> Any:
