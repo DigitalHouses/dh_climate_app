@@ -58,6 +58,7 @@ WEB_ROOT = Path(__file__).with_name("web")
 ASSETS = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+    "/diagnostics.js": ("diagnostics.js", "text/javascript; charset=utf-8"),
     "/editor.js": ("editor.js", "text/javascript; charset=utf-8"),
     "/entity_picker.js": ("entity_picker.js", "text/javascript; charset=utf-8"),
     "/style.css": ("style.css", "text/css; charset=utf-8"),
