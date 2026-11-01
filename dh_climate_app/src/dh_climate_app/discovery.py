@@ -323,7 +323,9 @@ def provider_discovery_payloads(
                         label,
                     ),
                     "unique_id": object_id,
-                    "default_entity_id": f"sensor.{object_id}",
+                    # Include weather in suggested HA entity IDs.
+                    # Preserve unique_id and discovery topic for existing entities.
+                    "default_entity_id": f"sensor.dh_climate_app_weather_{provider.provider_id}_{quantity}",
                     "state_topic": f"{base}/state",
                     "availability": [
                         {"topic": SYSTEM_AVAILABILITY_TOPIC},

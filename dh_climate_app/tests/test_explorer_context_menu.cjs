@@ -74,6 +74,13 @@ test("context menu and real separator replace permanent plus buttons",()=>{
   assert.match(css,/--explorer-width/);
   assert.match(css,/\.context-menu\[hidden\]/);
 });
+test("weather editor permits inline labels and preserves the unsaved form",()=>{
+  assert.match(editor,/function editWeatherName\(/);
+  assert.match(editor,/fromWeather:true/);
+  assert.match(editor,/if \(edit\.fromWeather\)/);
+  assert.match(editor,/sensor\.dh_climate_app_weather_/);
+  assert.match(editor,/weatherSensorTitle\(logicalId,quantity\)/);
+});
 test("translated context actions exist in both locales",()=>{
   for(const lang of ["en","ru"]){
     const dictionary=JSON.parse(fs.readFileSync(path.join(root,"i18n",lang+".json"),"utf8"));

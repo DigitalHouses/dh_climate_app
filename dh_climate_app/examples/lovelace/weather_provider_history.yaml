@@ -1,8 +1,11 @@
-# Пример сравнительных графиков после явного перехода на модель 0.2.12.
+# Сравнительные графики для новых MQTT-сенсоров, создаваемых с версии 0.2.14.
 # ID провайдеров соответствуют автоматической конвертации:
 # weather.forecast_home_assistant -> p_forecast_home_assistant
 # weather.asyl_mura -> p_asyl_mura
-# Если HA переименовал entity_id вручную, проверь фактические ID в HA.
+# ВАЖНО: если сенсоры уже были зарегистрированы в HA до 0.2.14,
+# их entity_id останутся sensor.dh_climate_app_provider_… (старый формат).
+# Для существующих сенсоров используй фактические entity_id из HA.
+# Само обновление Discovery не переименовывает entity_id в HA.
 # Убедись, что Recorder включает новые сущности.
 type: vertical-stack
 cards:
@@ -10,9 +13,9 @@ cards:
     title: "Наружная температура · провайдеры и DH Climate"
     hours_to_show: 72
     entities:
-      - entity: sensor.dh_climate_app_provider_p_forecast_home_assistant_temperature
+      - entity: sensor.dh_climate_app_weather_p_forecast_home_assistant_temperature
         name: "HA Forecast"
-      - entity: sensor.dh_climate_app_provider_p_asyl_mura_temperature
+      - entity: sensor.dh_climate_app_weather_p_asyl_mura_temperature
         name: "Google Weather"
       - entity: sensor.dh_climate_app_outdoor_temperature_raw
         name: "Выбранный RAW"
@@ -22,9 +25,9 @@ cards:
     title: "Наружная влажность · провайдеры и DH Climate"
     hours_to_show: 72
     entities:
-      - entity: sensor.dh_climate_app_provider_p_forecast_home_assistant_humidity
+      - entity: sensor.dh_climate_app_weather_p_forecast_home_assistant_humidity
         name: "HA Forecast"
-      - entity: sensor.dh_climate_app_provider_p_asyl_mura_humidity
+      - entity: sensor.dh_climate_app_weather_p_asyl_mura_humidity
         name: "Google Weather"
       - entity: sensor.dh_climate_app_outdoor_humidity
         name: "Выбранная влажность"
