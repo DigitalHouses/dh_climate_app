@@ -740,6 +740,11 @@ async function connect() {
     if (response.ok) { snapshot = await response.json(); streamConnected = true; render(); }
   } catch (_) { $("connection").textContent = t("offline"); }
   const events = new EventSource("api/events");
+  events.addEventListener("open", () => {
+    // SSE reconnect after the App restarts does not refresh /api/config.
+    // Re-sync editor permissions and pending_restart without a page reload.
+    window.DHClimateEditor?.refreshAfterReconnect?.();
+  });
   events.addEventListener("snapshot", event => {
     try { snapshot = JSON.parse(event.data); streamConnected = true; render(); }
     catch (_) { /* never replace valid data with an invalid update */ }

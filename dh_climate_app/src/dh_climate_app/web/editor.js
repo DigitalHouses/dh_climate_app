@@ -188,6 +188,14 @@
     } catch (_) { info=null; }
     repaint();
   }
+  async function refreshAfterReconnect() {
+    // SSE reconnects after HAOS App restart, but the editor's /api/config
+    // state is not included in snapshots. Without refreshing, a previously
+    // applied manifest leaves pending_restart=true and hides edit menus.
+    // Never overwrite an unfinished local form while an admin is editing.
+    if (edit) return;
+    await refresh();
+  }
   async function persist() {
     if (!mutable() || !candidate) return;
     try {
@@ -879,7 +887,8 @@
   function viewMode(){ return !info?tr("read_only"):localize("administrator"); }
   window.DHClimateEditor = {
     init, canEdit:online, canChange:mutable, menuActions,
-    startRoom,startDevice,startWeather, renderEditor, controls, onNavigate,
+    startRoom,startDevice,startWeather, refreshAfterReconnect,
+    renderEditor, controls, onNavigate,
     isEditing:()=>!!edit, viewMode, previewRooms, previewRoom,
     displayName, loadLabels, roomAreaId, roomAreaLabel,
   };
