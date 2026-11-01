@@ -990,6 +990,24 @@
   }
   function onNavigate(){ return navigateAway(); }
   function viewMode(){ return !info?tr("read_only"):localize("administrator"); }
+  function diagnosticState() {
+    // Local unsaved edits matter for reproducing UI bugs. Never export the
+    // APPLY confirmation phrase, authentication headers or callbacks.
+    return {
+      manifest_editor_available:!!info,
+      manifest:info ? clone(info) : null,
+      candidate: candidate ? clone(candidate) : null,
+      editing: edit ? {
+        kind:edit.kind || null,id:edit.id || null,roomId:edit.roomId || null,
+        index:edit.index ?? null,returnWeatherKind:edit.returnWeatherKind || null,
+      } : null,
+      validated,confirmation_pending:!!confirmation,
+      message,failure,
+      labels:clone(labelsState),
+      weather_context_loaded:!!weatherState,
+      ha_catalog_cached:!!haWeatherCatalog,
+    };
+  }
   window.DHClimateEditor = {
     init, canEdit:online, canChange:mutable, menuActions,
     startRoom,startDevice,startWeather,enterWeatherSection,setWeatherContext,
@@ -998,5 +1016,6 @@
     isEditing:()=>!!edit, needsRestart:()=>!!info?.pending_restart,
     viewMode, previewRooms, previewRoom,
     displayName, loadLabels, roomAreaId, roomAreaLabel,
+    diagnosticState,
   };
 })();
