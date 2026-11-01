@@ -182,7 +182,7 @@
   "picker.error": "Не удалось получить каталог HA. Существующие привязки сохранены.",
   "picker.cancel": "Отмена",
   "picker.attach": "Привязать",
-  "picker.search": "Поиск по имени, entity_id, устройству…",
+  "picker.search": "Поиск по имени, entity_id, устройству, интеграции…",
   "picker.area": "Зона Home Assistant",
   "picker.domain": "Домен",
   "picker.availability": "Доступность",
@@ -228,11 +228,15 @@
   "weather_priority_note": "Провайдеры и производные сенсоры: показания доступны независимо от выбранного приоритета. Переключение выполняется по числовым показателям, отдельно для температуры и влажности.",
   "picker.weather_no_value": "Нет текущего значения",
   "weather_providers": "Провайдеры",
-  "weather_physical": "Физические датчики",
+  "weather_physical": "Отдельные сенсоры HA",
   "weather_priorities": "Приоритеты",
   "editor.weather_providers": "Погодные провайдеры",
-  "editor.weather_physical": "Физические датчики",
+  "editor.weather_physical": "Отдельные сенсоры HA",
   "editor.weather_add_priority": "Добавить в приоритеты",
   "editor.weather_convert": "Создать черновик новой модели",
-  "editor.weather_legacy_notice": "Работает прежняя схема, где weather.* повторяется в списках измерений. Создайте локальный черновик новой модели: провайдеры → числовые сенсоры → независимые приоритеты. Действующий климат не изменится до Validate, Apply и перезапуска."
+  "editor.weather_legacy_notice": "Работает прежняя схема, где weather.* повторяется в списках измерений. Создайте локальный черновик новой модели: провайдеры → числовые сенсоры → независимые приоритеты. Действующий климат не изменится до Validate, Apply и перезапуска.",
+  "picker.integration": "Интеграция HA",
+  "picker.all_integrations": "Все интеграции",
+  "picker.integration_missing": "Источник не определён",
+  "editor.weather_sensor_hint": "Показаны обычные sensor.* из HA. Погодные weather.* добавляй выше в «Провайдеры»: их температура и влажность создаются автоматически. Интеграцию происхождения видно в Picker."
 }

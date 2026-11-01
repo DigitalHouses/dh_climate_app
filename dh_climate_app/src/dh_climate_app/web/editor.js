@@ -339,6 +339,8 @@
   }
   function weatherPhysicalEditor(parent,quantity) {
     const sources=(candidate.physical_sensors||[]).filter(s=>s.quantity===quantity);
+    if(quantity==="temperature")
+      parent.append(text("p",localize("weather_sensor_hint"),"subtle small"));
     const listed=sources.map(s=>({
       entity:s.entity_id,name:weatherSensorTitle(s.id,quantity)+" ["+s.entity_id+"]",
     }));
