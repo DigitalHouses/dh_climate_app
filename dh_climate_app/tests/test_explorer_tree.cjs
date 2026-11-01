@@ -15,7 +15,7 @@ const context = vm.createContext({
   Intl, Number, Set,
 });
 vm.runInContext(source.slice(0, boot) +
-  "\nglobalThis.unit = {buildTree, keyOf, findPath, technical, number};", context);
+  "\nglobalThis.unit = {buildTree, keyOf, findPath, technical, number, showSeason};", context);
 const u = context.unit;
 const fixture = {
   app: {version:"0.2.2", ha_connected:true, health:"healthy", problems:[]},
