@@ -7,6 +7,7 @@ HA system-admin group, CSRF-resistant JSON requests, and optimistic locking.
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 import json
 import logging
 import os
@@ -16,6 +17,7 @@ from typing import Any, Awaitable, Callable
 from .manifest import ManifestEditor, EditConflict, EditValidation
 from .ui_labels import UILabels
 from .entity_catalog import EntityCatalog
+from .diagnostics import sanitize_export
 
 
 LOGGER = logging.getLogger(__name__)
@@ -81,6 +83,7 @@ class OperationsWebServer:
         labels: UILabels | None = None,
         catalog: EntityCatalog | None = None,
         restart_app: Callable[[], Awaitable[None]] | None = None,
+        diagnostics_provider: Callable[[], dict[str, Any]] | None = None,
     ) -> None:
         self.host = host
         self.port = port
@@ -89,6 +92,7 @@ class OperationsWebServer:
         self.editor = editor
         self.labels = labels
         self.catalog = catalog
+        self.diagnostics_provider = diagnostics_provider
         self._restart_app = restart_app or _supervisor_restart_self
         self._restart_task: asyncio.Task[None] | None = None
         self.revision = 0
@@ -350,6 +354,53 @@ class OperationsWebServer:
         await self._reply(writer, "200 OK", self._json(payload),
                           "application/json; charset=utf-8")
 
+    async def _diagnostics(self, writer: asyncio.StreamWriter,
+                           method: str, headers: dict[str, str]) -> None:
+        """One admin-only, on-demand support snapshot.
+
+        Faults in an optional section must not prevent downloading the other
+        sections. The result is sanitized before being sent to the browser.
+        """
+        if method != "GET":
+            await self._reply(writer, "405 Method Not Allowed",
+                              b"GET required", extra="Allow: GET\\r\\n")
+            return
+        if not self._is_admin(headers):
+            await self._reply(writer, "403 Forbidden", b"Administrator required")
+            return
+        report: dict[str, Any] = {
+            "schema_version": 1,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "ingress": {
+                "revision": self.revision,
+                "connected_clients": len(self._clients),
+            },
+            "snapshot": self.snapshot,
+            "errors": {},
+        }
+        for name, operation in (
+            ("manifest", self.editor.state if self.editor else None),
+            ("labels", self.labels.state if self.labels else None),
+            ("entity_catalog", self.catalog.get if self.catalog else None),
+        ):
+            if operation is None:
+                report[name] = None
+                continue
+            try:
+                report[name] = await operation()
+            except Exception as exc:
+                report[name] = None
+                report["errors"][name] = type(exc).__name__
+        if self.diagnostics_provider is not None:
+            try:
+                report["runtime"] = self.diagnostics_provider()
+            except Exception as exc:
+                report["runtime"] = None
+                report["errors"]["runtime"] = type(exc).__name__
+        await self._reply(writer, "200 OK",
+                          self._json(sanitize_export(report)),
+                          "application/json; charset=utf-8")
+
     async def _run_restart(self) -> None:
         # Give the response to the browser before Supervisor stops this process.
         await asyncio.sleep(0.5)
@@ -430,6 +481,9 @@ class OperationsWebServer:
                 return
             if peer is None or peer[0] not in self.allowed_peers:
                 await self._reply(writer, "403 Forbidden", b"Forbidden")
+                return
+            if path == "/api/diagnostics":
+                await self._diagnostics(writer, method, headers)
                 return
             if path == "/api/app/restart":
                 await self._restart(reader, writer, method, headers)
