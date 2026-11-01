@@ -247,5 +247,11 @@
   "restart_confirm": "Restart only DH Climate App now? Home Assistant will keep running. Climate control will be briefly unavailable during the restart.",
   "restart_requested": "Restart request sent to Supervisor. Waiting for reconnection and confirmation of the new configuration…",
   "restart_rejected": "Supervisor did not accept the restart request",
-  "restart_unconfirmed": "Restart has not been confirmed. Check the app status or retry."
+  "restart_unconfirmed": "Restart has not been confirmed. Check the app status or retry.",
+  "editor.weather_short_temperature": "Temperature",
+  "editor.weather_short_humidity": "Humidity",
+  "editor.weather_observation_only": "Monitoring only",
+  "editor.weather_enable_priority": "Add to priorities",
+  "editor.weather_disable_priority": "Remove from priorities",
+  "editor.weather_provider_priority_hint": "Temperature and humidity have independent priorities. Arrows affect only the selected measurement; removing a priority does not remove the provider."
 }
