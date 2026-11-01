@@ -207,6 +207,22 @@ def build_operations_snapshot(
             "raw_temperature": _number(outdoor.raw_temperature) if online and outdoor is not None else None,
             "temperature": _number(outdoor.current_temperature) if online and outdoor is not None else None,
             "avg24": _number(outdoor.avg_24h_temperature) if online and outdoor is not None else None,
+            "avg24_input_sources": (
+                list(getattr(outdoor, "temperature_history_sources", ()))
+                if online and outdoor is not None else []
+            ),
+            "heat_threshold": (
+                _number(getattr(outdoor, "heat_threshold", None))
+                if online and outdoor is not None else None
+            ),
+            "cool_threshold": (
+                _number(getattr(outdoor, "cool_threshold", None))
+                if online and outdoor is not None else None
+            ),
+            "season_hysteresis": (
+                _number(getattr(outdoor, "hysteresis", None))
+                if online and outdoor is not None else None
+            ),
             "humidity": _number(outdoor.current_humidity) if online and outdoor is not None else None,
             "source": outdoor.temperature_source if online and outdoor is not None else None,
             "humidity_source": getattr(outdoor, "humidity_source", None) if online and outdoor is not None else None,

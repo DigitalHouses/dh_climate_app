@@ -100,6 +100,12 @@ def build_catalog(
                 source_match.group(1) + "." + source_match.group(2)
                 if source_match else None
             ),
+            # Resolve the real HA entity_id even if the app-owned avg24
+            # sensor was renamed by the user in the HA Entity Registry.
+            "climate_avg24_sensor": (
+                domain == "sensor"
+                and raw_unique_id == "dh_climate_app_outdoor_temperature_avg24"
+            ),
             "name": _string(attributes.get("friendly_name")) or
                     _string(reg.get("en", reg.get("name"))) or entity_id,
             "domain": domain,

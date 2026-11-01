@@ -38,6 +38,8 @@ def make_snapshot(online: bool):
             season=s(value="heat"), raw_temperature=8.4, current_temperature=8.2,
             avg_24h_temperature=9.0, current_humidity=None,
             temperature_source="sensor.outdoor", stale=False,
+            temperature_history_sources=("sensor.outdoor", "weather.home"),
+            heat_threshold=10.5, cool_threshold=19.5, hysteresis=1.0,
         ),
         weather=None,
         room_states={
@@ -66,6 +68,11 @@ class OperationsProjectionTests(unittest.TestCase):
         self.assertIsNone(snap["rooms"][0]["devices"][0]["hvac_action"])
         self.assertEqual(snap["home"]["heating_source"], "boiler")
         self.assertEqual(snap["weather"]["temperature"], 8.2)
+        self.assertEqual(snap["weather"]["avg24_input_sources"],
+                         ["sensor.outdoor", "weather.home"])
+        self.assertEqual(snap["weather"]["heat_threshold"], 10.5)
+        self.assertEqual(snap["weather"]["cool_threshold"], 19.5)
+        self.assertEqual(snap["weather"]["season_hysteresis"], 1.0)
         self.assertEqual(snap["rooms"][0]["name"], "Bedroom")
         json.dumps(snap, allow_nan=False)
 
@@ -117,6 +124,8 @@ class OperationsProjectionTests(unittest.TestCase):
         self.assertIsNone(snap["rooms"][0]["temperature"])
         self.assertIsNone(snap["rooms"][0]["devices"][0]["observed"]["state"])
         self.assertIsNone(snap["weather"]["temperature"])
+        self.assertEqual(snap["weather"]["avg24_input_sources"], [])
+        self.assertIsNone(snap["weather"]["heat_threshold"])
 
 
 class OperationsIngressTests(unittest.IsolatedAsyncioTestCase):
