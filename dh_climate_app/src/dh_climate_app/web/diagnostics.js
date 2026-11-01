@@ -6,12 +6,14 @@
   const sensitiveQuery = /([?&](?:access_token|token|api_key|password|secret|signature|auth|code|key)=)[^&#\s]+/gi;
   const authHeader = /\b(Bearer|Basic)\s+[A-Za-z0-9._~+/-]+={0,2}/gi;
   const urlPassword = /(https?:\/\/)[^/\s:@]+:[^/\s@]+@/gi;
+  const ingressPath = /(\/(?:api\/hassio_ingress|hassio\/ingress)\/)[^/?#\s"\x27]+/gi;
 
   function safeText(value) {
     return String(value)
       .replace(sensitiveQuery, "$1[REDACTED]")
       .replace(authHeader, "$1 [REDACTED]")
-      .replace(urlPassword, "$1[REDACTED]@");
+      .replace(urlPassword, "$1[REDACTED]@")
+      .replace(ingressPath, "$1[REDACTED]");
   }
   function sanitize(value, depth=0) {
     if (depth >= 24) return "[DEPTH LIMIT]";
@@ -30,7 +32,7 @@
   function rememberError(type, message, location="", line=null) {
     browserErrors.push({at:new Date().toISOString(),type,
       message:safeText(message).slice(0,2000),
-      source:safeText(location).slice(0,200),line});
+      source:safeText(location).split(/[?#]/)[0].split("/").pop().slice(0,120),line});
     if (browserErrors.length>50) browserErrors.shift();
   }
   window.addEventListener("error",event=>{
@@ -47,7 +49,8 @@
     for (const field of clone.querySelectorAll("input,textarea,select")) {
       field.removeAttribute("value");
       field.removeAttribute("placeholder");
-      field.textContent = field.tagName==="TEXTAREA" ? "" : field.textContent;
+      if (field.tagName==="TEXTAREA") field.textContent="";
+      // Select option labels and their order matter for reconstructing UI.
     }
     for (const child of clone.querySelectorAll("*")) {
       for (const attribute of Array.from(child.attributes)) {
