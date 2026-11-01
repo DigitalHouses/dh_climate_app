@@ -240,5 +240,12 @@
   "editor.weather_name_saved": "Name saved. Active provider names are updated through MQTT Discovery; new providers appear after Apply and restart.",
   "picker.weather_provider_help": "All weather.* entities are shown, including Met.no (integration ID met). No integration-name filter is required.",
   "suggested_entity_id": "Suggested entity_id for a new sensor",
-  "weather_existing_entity_id": "If this entity is already registered in HA, its current entity_id is retained. The display name can be changed without renaming its ID."
+  "weather_existing_entity_id": "If this entity is already registered in HA, its current entity_id is retained. The display name can be changed without renaming its ID.",
+  "restart_heading": "DH Climate App restart required",
+  "restart_details": "Configuration is saved in /data, but the running Climate Engine still uses the previous settings until this app is restarted.",
+  "restart_button": "Restart DH Climate App",
+  "restart_confirm": "Restart only DH Climate App now? Home Assistant will keep running. Climate control will be briefly unavailable during the restart.",
+  "restart_requested": "Restart request sent to Supervisor. Waiting for reconnection and confirmation of the new configuration…",
+  "restart_rejected": "Supervisor did not accept the restart request",
+  "restart_unconfirmed": "Restart has not been confirmed. Check the app status or retry."
 }

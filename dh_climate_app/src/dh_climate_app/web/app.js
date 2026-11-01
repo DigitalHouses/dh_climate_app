@@ -688,7 +688,68 @@ function renderInspector() {
   }
   pane.append(paragraph(t("inspector_note"), "subtle small"));
 }
+let restartRequested = false;
+let restartError = "";
+let restartDisconnected = false;
+
+function renderRestartBanner() {
+  const pending = !!window.DHClimateEditor?.needsRestart?.();
+  const banner = $("restart-banner");
+  banner.hidden = !pending;
+  if (!pending) {
+    restartRequested = false;
+    restartError = "";
+    restartDisconnected = false;
+    return;
+  }
+  $("restart-heading").textContent = t("restart_heading");
+  $("restart-details").textContent = t(
+    restartRequested ? "restart_requested" : "restart_details",
+  );
+  const error = $("restart-error");
+  error.hidden = !restartError;
+  error.textContent = restartError;
+  const button = $("restart-app");
+  button.textContent = t("restart_button");
+  button.disabled = restartRequested || !streamConnected;
+}
+
+async function restartApp() {
+  if (restartRequested || !window.DHClimateEditor?.needsRestart?.()) return;
+  if (!window.confirm(t("restart_confirm"))) return;
+  restartRequested = true;
+  restartDisconnected = false;
+  restartError = "";
+  renderRestartBanner();
+  try {
+    const response = await fetch("api/app/restart", {
+      method:"POST", credentials:"same-origin",
+      headers:{"Content-Type":"application/json",
+        "X-Requested-With":"DHClimateExplorer"},
+      body:JSON.stringify({confirm:"RESTART"}),
+    });
+    if (!response.ok) throw Error(t("restart_rejected") + " (HTTP " + response.status + ")");
+    // 202 means queued, NOT that the new process is already running.
+    // SSE reconnection + /api/config is what confirms completion.
+  } catch (error) {
+    restartRequested = false;
+    restartError = error.message || t("restart_rejected");
+    renderRestartBanner();
+    return;
+  }
+  // Supervisor can reject a queued request after the browser received 202.
+  // Do not leave the button locked indefinitely when no reconnect occurs.
+  setTimeout(() => {
+    if (restartRequested && window.DHClimateEditor?.needsRestart?.()) {
+      restartRequested = false;
+      restartError = t("restart_unconfirmed");
+      renderRestartBanner();
+    }
+  }, 30000);
+}
+
 function render() {
+  renderRestartBanner();
   $("top-title").textContent = t("explorer");
   $("explorer-heading").textContent = t("explorer").toUpperCase();
   $("foot-mode").textContent = window.DHClimateEditor?.viewMode() || t("read_only");
@@ -741,8 +802,12 @@ async function connect() {
   } catch (_) { $("connection").textContent = t("offline"); }
   const events = new EventSource("api/events");
   events.addEventListener("open", () => {
-    // SSE reconnect after the App restarts does not refresh /api/config.
-    // Re-sync editor permissions and pending_restart without a page reload.
+    // SSE reconnect after App restart: confirm the newly loaded manifest.
+    if (restartDisconnected) {
+      restartRequested = false;
+      restartDisconnected = false;
+      restartError = "";
+    }
     window.DHClimateEditor?.refreshAfterReconnect?.();
   });
   events.addEventListener("snapshot", event => {
@@ -750,7 +815,9 @@ async function connect() {
     catch (_) { /* never replace valid data with an invalid update */ }
   });
   events.onerror = () => {
+    if (restartRequested) restartDisconnected = true;
     streamConnected = false;
+    renderRestartBanner();
     $("connection").textContent = t("connection_lost");
     $("connection").className = "connection warn";
   };
@@ -760,6 +827,7 @@ $("toggle-inspector").onclick = () => { inspectorOpen = !inspectorOpen; renderIn
 $("toggle-explorer").onclick = () => { explorerOpen = !explorerOpen; renderPanels(); };
 $("collapse-all").onclick = () => { expanded.clear(); expanded.add(keyOf(nodes[0] || {kind:"system"})); renderTree(); };
 $("language").onchange = e => language(e.target.value);
+$("restart-app").onclick = restartApp;
 (async () => {
   let preferred = locale;
   try { preferred = localStorage.getItem("dh-climate-language") || preferred; } catch (_) {}

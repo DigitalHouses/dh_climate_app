@@ -216,8 +216,9 @@
     try {
       await api("apply",{...requestMeta(),confirm:"APPLY"});
       validated = false; approvalPhrase = "";
+      message = "";
+      failure = false;
       await refresh();
-      show(localize("pending_restart"));
     } catch(e) { show(e.message,true); }
   }
   function discard() {
@@ -784,7 +785,8 @@
       main.prepend(panel);
     }
     if (info.pending_restart) {
-      main.append(text("p",localize("pending_restart"),"notice warn"));
+      // Persistent banner above the workbench owns the restart instruction.
+      // Keep the editor immutable until the new App process is observed.
       return;
     }
     if (!info.dirty) return;
@@ -889,7 +891,8 @@
     init, canEdit:online, canChange:mutable, menuActions,
     startRoom,startDevice,startWeather, refreshAfterReconnect,
     renderEditor, controls, onNavigate,
-    isEditing:()=>!!edit, viewMode, previewRooms, previewRoom,
+    isEditing:()=>!!edit, needsRestart:()=>!!info?.pending_restart,
+    viewMode, previewRooms, previewRoom,
     displayName, loadLabels, roomAreaId, roomAreaLabel,
   };
 })();
