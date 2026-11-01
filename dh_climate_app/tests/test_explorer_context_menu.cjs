@@ -40,6 +40,32 @@ test("WEATHER context has one admin configuration action only",async()=>{
   assert.equal(viewer.menuActions({kind:"weather"}).length,0);
   assert.equal(pending.menuActions({kind:"weather"}).length,0);
 });
+test("editor menu recovers automatically on SSE reconnect after Apply and restart",async()=>{
+  let pendingRestart=true, calls=0;
+  const window={};
+  const context={window,fetch:async()=>{
+    calls++;
+    return {ok:true,json:async()=>({
+      base_hash:"hash",revision:0,dirty:false,
+      pending_restart:pendingRestart,options:baseOptions,
+    })};
+  },JSON,Promise};
+  vm.runInNewContext(editor,context);
+  const api=window.DHClimateEditor;
+  await api.init(key=>key,()=>{},()=>{});
+  assert.equal(api.menuActions({kind:"weather"}).length,0);
+  pendingRestart=false; // New App process started using active manifest.
+  await api.refreshAfterReconnect();
+  assert.deepEqual(Array.from(api.menuActions({kind:"weather"}),a=>a.label),
+    ["editor.weather_edit"]);
+  const afterSync=calls;
+  api.startWeather(); // Local unsaved form must never be overwritten.
+  assert.equal(api.isEditing(),true);
+  await api.refreshAfterReconnect();
+  assert.equal(calls,afterSync);
+  assert.match(app,/events\.addEventListener\("open"/);
+  assert.match(app,/refreshAfterReconnect/);
+});
 test("room menu contains add/edit/delete and device menu contains edit/delete",async()=>{
   const api=await runEditor();
   assert.deepEqual(Array.from(api.menuActions({kind:"room",id:"bedroom"}),a=>a.label),
