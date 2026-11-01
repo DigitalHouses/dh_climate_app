@@ -46,6 +46,7 @@ jobs:
           node --check dh_climate_app/src/dh_climate_app/web/entity_picker.js
           node --test dh_climate_app/tests/test_entity_picker.cjs
           node --test dh_climate_app/tests/test_weather_priority_editor.cjs
+          node --test dh_climate_app/tests/test_diagnostics_export.cjs
       - name: Build HAOS image
         run: |
           VERSION="$(awk '$1 == "version:" {print $2; exit}' dh_climate_app/config.yaml)"
