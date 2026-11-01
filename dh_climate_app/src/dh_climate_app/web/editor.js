@@ -312,21 +312,14 @@
       " · "+(provider?providerTitle(provider):id);
     return displayName("weather_sensor",id,lang,fallback);
   }
-  function pickerSources(parent,kind,title_,items,onConfirm,extras=null){
+  function pickerSources(parent,kind,title_,items,onConfirm){
     const panel=text("section","","editor-entity-field");
     panel.append(text("h3",title_,"section-heading"));
-    if(kind==="provider")
-      panel.append(text("p",localize("weather_provider_priority_hint"),"subtle small"));
     const list=text("div","","editor-bound-list");
     if(!items.length)list.append(text("p",localize("none"),"subtle small"));
     for(const item of items){
-      const line=text("div","","editor-bound-entity"+
-        (kind==="provider"?" editor-provider-row":""));
+      const line=text("div","","editor-bound-entity");
       line.append(text("span",item.name,"mono"));
-      if(extras){
-        const extra=extras(item);
-        if(extra)line.append(extra);
-      }
       const remove=button("×",()=>{
         onConfirm(items.filter(x=>x.entity!==item.entity).map(x=>x.entity));
       });
@@ -355,66 +348,6 @@
     repaint();
   }
 
-  function shiftWeatherPriority(quantity,sourceId,direction) {
-    // Provider order is only registration order. These are two *independent*
-    // priority chains; physical sensor references occupy slots as well.
-    const refs=candidate?.priorities?.[quantity];
-    if(!Array.isArray(refs))return;
-    const index=refs.indexOf(sourceId);
-    if(direction==="add"){
-      if(index>=0)return;
-      refs.push(sourceId);
-    } else if(direction==="remove"){
-      if(index<0)return;
-      refs.splice(index,1);
-    } else {
-      const next=index+direction;
-      if(index<0 || next<0 || next>=refs.length)return;
-      [refs[index],refs[next]]=[refs[next],refs[index]];
-    }
-    validated=false;
-    repaint();
-  }
-
-  function providerPriorityButtons(provider) {
-    const controls=text("span","","editor-provider-priorities");
-    for(const quantity of ["temperature","humidity"]){
-      const sourceId=provider.id+"."+quantity;
-      const refs=candidate.priorities[quantity];
-      const index=refs.indexOf(sourceId);
-      const group=text("span","","editor-provider-priority");
-      const quantityName=quantity==="temperature"?localize("weather_short_temperature"):
-        localize("weather_short_humidity");
-      const status=index<0?localize("weather_observation_only"):
-        "№"+(index+1);
-      const caption=text("span",quantityName+": "+status,"editor-priority-status");
-      caption.title=quantity==="temperature"?localize("weather_temperature_sources"):
-        localize("weather_humidity_sources");
-      group.append(caption);
-      if(index<0){
-        const add=button("+",()=>shiftWeatherPriority(quantity,sourceId,"add"));
-        add.title=localize("weather_enable_priority")+" · "+quantityName;
-        add.setAttribute("aria-label",add.title);
-        group.append(add);
-      } else {
-        const up=button("↑",()=>shiftWeatherPriority(quantity,sourceId,-1));
-        up.disabled=index===0;
-        up.title=localize("weather_move_up")+" · "+quantityName;
-        up.setAttribute("aria-label",up.title);
-        const down=button("↓",()=>shiftWeatherPriority(quantity,sourceId,1));
-        down.disabled=index===refs.length-1;
-        down.title=localize("weather_move_down")+" · "+quantityName;
-        down.setAttribute("aria-label",down.title);
-        const remove=button("−",()=>shiftWeatherPriority(quantity,sourceId,"remove"));
-        remove.title=localize("weather_disable_priority")+" · "+quantityName;
-        remove.setAttribute("aria-label",remove.title);
-        group.append(up,down,remove);
-      }
-      controls.append(group);
-    }
-    return controls;
-  }
-
   function weatherProviderEditor(parent) {
     const listed=(candidate.providers||[]).map(provider=>({
       entity:provider.entity_id,name:providerTitle(provider)+" ["+provider.entity_id+"]",
@@ -433,9 +366,6 @@
         );
       }
       validated=false;repaint();
-    },item=>{
-      const provider=(candidate.providers||[]).find(p=>p.entity_id===item.entity);
-      return provider?providerPriorityButtons(provider):null;
     });
     if(!(candidate.providers||[]).length)return;
     const details=text("section","","editor-entity-field");
