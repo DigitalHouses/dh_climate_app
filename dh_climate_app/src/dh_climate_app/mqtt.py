@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 import json
 import logging
+from pathlib import Path
+import re
 from typing import Callable, Iterable
 
 import paho.mqtt.client as mqtt
 
-from .config import RoomConfig
+from .config import RoomConfig, WeatherProviderConfig
 from .core import DeviceClass
 from .demand import Demand
 from .health import ClimateHealth
@@ -36,6 +38,8 @@ from .discovery import (
     room_health_discovery_payload,
     slow_target_discovery_payload,
     outdoor_discovery_payloads,
+    provider_discovery_payloads,
+    provider_sensor_base,
     outdoor_state_topics,
     room_climate_discovery_payload,
     room_climate_discovery_topic,
@@ -58,6 +62,7 @@ from .discovery import (
     weather_state_topics,
 )
 from .humidity import HumidityState
+from .manifest import _atomic_json
 from .outdoor import OutdoorState
 from .rooms import RoomState
 from .weather import WeatherState
@@ -215,6 +220,8 @@ class ClimateMqttFacade:
         weather_enabled: bool = False,
         heating_source: str | None = None,
         vrf_enabled: bool | None = None,
+        providers: tuple[WeatherProviderConfig, ...] = (),
+        provider_registry_path: Path | None = None,
     ) -> None:
         self.bridge = bridge
         self.app_version = app_version
@@ -225,6 +232,11 @@ class ClimateMqttFacade:
         self.heating_source = heating_source
         self.vrf_enabled = vrf_enabled
         self._last_raw_temperature_publish_at = None
+        self.providers = tuple(providers)
+        self.provider_registry_path = provider_registry_path
+        self._provider_labels: dict[str, dict[str, str]] = {}
+        self._provider_last_published: dict[str, datetime] = {}
+        self._provider_online: set[str] = set()
         self.bridge.set_message_handler(self._on_message)
 
     def start(self) -> None:
@@ -243,6 +255,7 @@ class ClimateMqttFacade:
             "DigitalHouses/Global/dh_climate_app/rooms/+/targets/set/+"
         )
         self.publish_system_discovery()
+        self.publish_provider_discovery(reset_availability=True)
         self.publish_demand_discovery()
         self.bridge.publish(
             SYSTEM_AVAILABILITY_TOPIC,
@@ -364,6 +377,117 @@ class ClimateMqttFacade:
             retain=True,
             force=True,
         )
+
+    def configure_provider_labels(
+        self, labels: dict[str, dict[str, str]],
+    ) -> None:
+        """Presentation-only labels; never modify source IDs or control."""
+        self._provider_labels = dict(labels)
+
+    def _reconcile_provider_discovery(self) -> None:
+        """Clean retained MQTT entities of explicitly removed providers."""
+        path = self.provider_registry_path
+        if path is None:
+            return
+        current = {p.provider_id for p in self.providers}
+        previous: set[str] = set()
+        if path.exists():
+            try:
+                contents = json.loads(path.read_text(encoding="utf-8"))
+                if contents.get("schema_version") != 1 or not isinstance(contents.get("providers"), list):
+                    raise ValueError("Invalid provider registry")
+                previous = {
+                    identifier for identifier in contents["providers"]
+                    if isinstance(identifier, str) and re.fullmatch(
+                        r"[a-z][a-z0-9_]{0,63}", identifier,
+                    )
+                }
+            except (OSError, ValueError, TypeError):
+                LOGGER.exception("Unable to read retired weather-provider registry")
+                return
+        for provider_id in sorted(previous - current):
+            for quantity in ("temperature", "humidity"):
+                object_id=f"dh_climate_app_provider_{provider_id}_{quantity}"
+                self.bridge.publish(
+                    f"homeassistant/sensor/{object_id}/config",
+                    "", retain=True, force=True,
+                )
+                base=provider_sensor_base(provider_id, quantity)
+                self.bridge.publish(base+"/state","",retain=True,force=True)
+                self.bridge.publish(base+"/availability","",retain=True,force=True)
+        try:
+            if previous != current or not path.exists():
+                _atomic_json(path,{
+                    "schema_version":1,"providers":sorted(current),
+                })
+        except OSError:
+            LOGGER.exception("Unable to save weather-provider registry")
+
+    def publish_provider_discovery(self, *, reset_availability: bool = False) -> None:
+        """Announce provider measurements; keep readings online on rename."""
+        if reset_availability:
+            self._reconcile_provider_discovery()
+        for source_id, (topic, payload) in provider_discovery_payloads(
+            self.app_version, self.providers, self._provider_labels,
+        ).items():
+            self.bridge.publish(
+                topic,
+                json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+                retain=True,
+                force=True,
+            )
+            if reset_availability:
+                provider_id, quantity = source_id.rsplit(".", 1)
+                self.bridge.publish(
+                    provider_sensor_base(provider_id, quantity) + "/availability",
+                    "offline", retain=True, force=True,
+                )
+
+    def set_provider_samples_unavailable(self) -> None:
+        """Prevent stale retained numbers from appearing after an HA outage."""
+        for provider in self.providers:
+            for quantity in ("temperature", "humidity"):
+                key = provider.provider_id + "." + quantity
+                self.bridge.publish(
+                    provider_sensor_base(provider.provider_id, quantity) + "/availability",
+                    "offline", retain=True,
+                )
+                self._provider_online.discard(key)
+                self._provider_last_published.pop(key, None)
+
+    def publish_provider_samples(
+        self, readings: dict[str, float | None], *, observed_at: datetime,
+    ) -> None:
+        """At most one numeric update per minute per provider sensor.
+
+        Availability changes are immediate and independent for each metric.
+        MQTT deduplication additionally suppresses unchanged retained values.
+        """
+        for provider in self.providers:
+            for quantity in ("temperature", "humidity"):
+                key = provider.provider_id + "." + quantity
+                base = provider_sensor_base(provider.provider_id, quantity)
+                value = readings.get(key)
+                if value is None:
+                    if key in self._provider_online:
+                        self.bridge.publish(
+                            base + "/availability", "offline", retain=True,
+                        )
+                        self._provider_online.discard(key)
+                        self._provider_last_published.pop(key, None)
+                    continue
+                previous = self._provider_last_published.get(key)
+                if (
+                    key in self._provider_online and previous is not None
+                    and observed_at >= previous
+                    and observed_at - previous < timedelta(minutes=1)
+                ):
+                    continue
+                self.bridge.publish(base + "/state", str(round(value, 3)), retain=True)
+                self.bridge.publish(base + "/availability", "online", retain=True)
+                self._provider_online.add(key)
+                self._provider_last_published[key] = observed_at
+
 
     def _demand_layers(self) -> tuple[tuple[str, str], ...]:
         layers = [

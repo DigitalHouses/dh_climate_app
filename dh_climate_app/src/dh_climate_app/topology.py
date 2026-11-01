@@ -5,6 +5,8 @@ from datetime import datetime
 import math
 from typing import Any, Mapping
 
+from .source_registry import source_entity
+
 
 def _part(text: str, entity: str | None = None) -> dict[str, str]:
     value = {"text": text}
@@ -79,7 +81,35 @@ def _source_chain(
     return [chain] if chain is not None else []
 
 
-def _source_nodes(config: Any, snapshot: Mapping[str, Any], weather: Any | None) -> list[dict]:
+def _source_nodes(
+    config: Any, snapshot: Mapping[str, Any], weather: Any | None,
+    source_readings: Mapping[str, float | None] | None = None,
+) -> list[dict]:
+    if getattr(config.outdoor,"source_model","legacy") == "sensors":
+        readings=source_readings or {}
+        result=[]
+        for quantity,icon,unit in (
+            ("temperature","🌡️","°C"),
+            ("humidity","💧","%"),
+        ):
+            refs=(config.outdoor.temperature_sources if quantity=="temperature"
+                  else config.outdoor.humidity_sources)
+            chain=None
+            for ref in reversed(refs):
+                original=source_entity(config.outdoor,ref)
+                parts=[_part(f"{icon} {ref}",original)]
+                value=readings.get(ref)
+                parts.append(_part(
+                    " · UNKNOWN" if value is None else f" · {value:.1f}{unit}",
+                    original if value is not None else None,
+                ))
+                chain=_node(*parts,children=[chain] if chain else [])
+            if chain:
+                result.append(_node(_part(
+                    "🌡️ TEMPERATURE SOURCES" if quantity=="temperature"
+                    else "💧 HUMIDITY SOURCES",
+                ),children=[chain]))
+        return result
     temperature_sources = config.outdoor.temperature_sources
     humidity_sources = config.outdoor.humidity_sources
     if temperature_sources == humidity_sources:
@@ -284,6 +314,7 @@ def build_topology(
     room_targets: Mapping[str, Mapping[str, float | None]],
     demands: Mapping[tuple[str, str], Any] | None = None,
     resource_slices: Mapping[str, Any] | None = None,
+    source_readings: Mapping[str, float | None] | None = None,
 ) -> dict[str, Any]:
     """Stable click-addressable lines built from authoritative runtime inputs."""
     uptime_seconds = max(0, int((observed_at - started_at).total_seconds()))
@@ -294,7 +325,9 @@ def build_topology(
     avg = _measurement(outdoor.avg_24h_temperature, "°C")
     if avg is not None:
         outdoor_children.append(_node(_part("📊 Average 24h: " + avg, "sensor.dh_climate_app_outdoor_temperature_avg24")))
-    outdoor_children.extend(_source_nodes(config, snapshot, weather))
+    outdoor_children.extend(_source_nodes(
+        config, snapshot, weather, source_readings=source_readings,
+    ))
     out_health = "unknown" if outdoor.current_temperature is None and outdoor.last_valid_at is None else "degraded" if outdoor.stale else "healthy"
     root["children"].append(_node(_part("🌤️ OUTDOOR · " + _health_text(out_health)), children=outdoor_children))
 

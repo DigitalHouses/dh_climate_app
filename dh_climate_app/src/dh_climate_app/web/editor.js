@@ -31,6 +31,9 @@
   };
   const labelKey = item => {
     if (item.kind==="room") return "room:" + item.id;
+    if (item.kind==="provider") return "provider:" + item.id;
+    if (item.kind==="weather_sensor") return "weather_sensor:" + item.id;
+    if (item.kind==="outdoor_sensor") return "outdoor_sensor:" + item.id;
     if (item.kind==="sensor" || item.kind==="device") return "entity:" + item.id;
     if (item.kind==="resource") return "resource:" + item.id;
     if (item.kind==="part")
@@ -213,62 +216,228 @@
     if (!mutable() || !navigateAway()) return;
     openObject({kind:"weather"});
     candidate = clone(info.options);
-    if (!candidate.outdoor) candidate.outdoor={
-      temperature_sources:[],humidity_sources:[],
-    };
-    for(const key of ["temperature_sources","humidity_sources"])
-      if(!Array.isArray(candidate.outdoor[key]))candidate.outdoor[key]=[];
     edit={kind:"weather"};
     message="";
     repaint();
   }
-  function orderedWeatherField(parent,key,title_,pickerKind) {
-    const box=text("section","","editor-entity-field");
-    box.append(text("h3",title_,"section-heading"),
-      text("p",localize("weather_priority_help"),"subtle small"));
-    const sources=candidate.outdoor[key];
+  function modelConfigured() {
+    return Array.isArray(candidate?.providers) &&
+      Array.isArray(candidate?.physical_sensors) &&
+      !!candidate?.priorities;
+  }
+  function uniqueSourceId(entity, prefix, used) {
+    let base=prefix+String(entity).split(".",2)[1]
+      .toLowerCase().replace(/[^a-z0-9_]/g,"_").slice(0,45);
+    if(!/^[a-z]/.test(base))base="source_"+base;
+    let next=base,idx=2;
+    while(used.has(next)){next=base+"_"+idx++;if(idx>1000)throw Error("Too many duplicate IDs");}
+    used.add(next);
+    return next;
+  }
+  function convertWeatherModel() {
+    if (modelConfigured())return;
+    const old=candidate.outdoor||{};
+    const providers=[],physical_sensors=[];
+    const priorities={temperature:[],humidity:[]};
+    const used=new Set(), byProvider=new Map(), byPhysical=new Map();
+    for(const quantity of ["temperature","humidity"]){
+      for(const entityId of (old[quantity+"_sources"]||[])){
+        if(!["sensor","weather"].includes(String(entityId).split(".",1)[0]))continue;
+        let key;
+        if(entityId.startsWith("weather.")){
+          if(!byProvider.has(entityId)){
+            const id=uniqueSourceId(entityId,"p_",used);
+            byProvider.set(entityId,id);
+            providers.push({id,entity_id:entityId});
+          }
+          key=byProvider.get(entityId)+"."+quantity;
+        }else{
+          const ref=quantity+":"+entityId;
+          if(!byPhysical.has(ref)){
+            const id=uniqueSourceId(entityId,quantity==="temperature"?"t_":"h_",used);
+            byPhysical.set(ref,id);
+            physical_sensors.push({id,entity_id:entityId,quantity});
+          }
+          key=byPhysical.get(ref);
+        }
+        if(!priorities[quantity].includes(key))priorities[quantity].push(key);
+      }
+    }
+    candidate.providers=providers;
+    candidate.physical_sensors=physical_sensors;
+    candidate.priorities=priorities;
+    // Avoid shadowed legacy references in the canonical new manifest.
+    candidate.outdoor={temperature_sources:[],humidity_sources:[]};
+    validated=false;
+    repaint();
+  }
+  function allSourceIds() {
+    return new Set([
+      ...(candidate.providers||[]).map(p=>p.id),
+      ...(candidate.physical_sensors||[]).map(p=>p.id),
+    ]);
+  }
+  function providerTitle(provider) {
+    const fallback=provider.entity_id;
+    const lang=document.getElementById("language")?.value==="en"?"en":"ru";
+    return displayName("provider",provider.id,lang,fallback);
+  }
+  function weatherSensorTitle(id,quantity) {
+    const lang=document.getElementById("language")?.value==="en"?"en":"ru";
+    const physical=(candidate.physical_sensors||[]).find(s=>s.id===id);
+    if(physical){
+      return displayName("outdoor_sensor",id,lang,physical.entity_id);
+    }
+    const pid=String(id).split(".")[0];
+    const provider=(candidate.providers||[]).find(p=>p.id===pid);
+    const fallback=(quantity==="temperature"?tr("temperature"):tr("humidity"))+
+      " · "+(provider?providerTitle(provider):id);
+    return displayName("weather_sensor",id,lang,fallback);
+  }
+  function pickerSources(parent,kind,title_,items,onConfirm){
+    const panel=text("section","","editor-entity-field");
+    panel.append(text("h3",title_,"section-heading"));
     const list=text("div","","editor-bound-list");
-    if(!sources.length)list.append(text("p",localize("none"),"subtle small"));
-    sources.forEach((id,index)=>{
+    if(!items.length)list.append(text("p",localize("none"),"subtle small"));
+    for(const item of items){
       const line=text("div","","editor-bound-entity");
-      line.append(text("span",String(index+1)+". "+id,"mono"));
+      line.append(text("span",item.name,"mono"));
+      const remove=button("×",()=>{
+        onConfirm(items.filter(x=>x.entity!==item.entity).map(x=>x.entity));
+      });
+      remove.title=localize("remove_entity")+" "+item.entity;
+      line.append(remove);list.append(line);
+    }
+    const choose=button(localize("weather_choose_sources"),()=>{
+      window.DHClimateEntityPicker.open({
+        kind,multiple:true,values:items.map(x=>x.entity),title:title_,tr,
+        usage:usages(),
+        onConfirm:next=>onConfirm(next),
+      });
+    });
+    panel.append(list,choose);parent.append(panel);
+  }
+  function weatherProviderEditor(parent) {
+    const listed=(candidate.providers||[]).map(provider=>({
+      entity:provider.entity_id,name:providerTitle(provider)+" ["+provider.entity_id+"]",
+    }));
+    pickerSources(parent,"provider",localize("weather_providers"),listed,next=>{
+      const current=candidate.providers||[];
+      const known=new Map(current.map(p=>[p.entity_id,p]));
+      const used=allSourceIds();
+      candidate.providers=next.map(entityId=>known.get(entityId)||{
+        id:uniqueSourceId(entityId,"p_",used),entity_id:entityId,
+      });
+      const available=new Set(candidate.providers.map(p=>p.id));
+      for(const quantity of ["temperature","humidity"]){
+        candidate.priorities[quantity]=candidate.priorities[quantity].filter(key=>
+          !key.includes(".")||available.has(key.split(".")[0])
+        );
+      }
+      validated=false;repaint();
+    });
+  }
+  function weatherPhysicalEditor(parent,quantity) {
+    const sources=(candidate.physical_sensors||[]).filter(s=>s.quantity===quantity);
+    const listed=sources.map(s=>({
+      entity:s.entity_id,name:weatherSensorTitle(s.id,quantity)+" ["+s.entity_id+"]",
+    }));
+    pickerSources(parent,"physical-"+quantity,localize("weather_physical")+" · "+
+      (quantity==="temperature"?tr("temperature"):tr("humidity")),listed,next=>{
+      const known=new Map(sources.map(s=>[s.entity_id,s]));
+      const used=allSourceIds();
+      const accepted=next.map(entityId=>known.get(entityId)||{
+        id:uniqueSourceId(entityId,quantity==="temperature"?"t_":"h_",used),
+        entity_id:entityId,quantity,
+      });
+      const ids=new Set(accepted.map(s=>s.id));
+      const removed=new Set(sources.filter(s=>!ids.has(s.id)).map(s=>s.id));
+      candidate.physical_sensors=[
+        ...(candidate.physical_sensors||[]).filter(s=>s.quantity!==quantity),
+        ...accepted,
+      ];
+      candidate.priorities[quantity]=candidate.priorities[quantity]
+        .filter(key=>!removed.has(key));
+      validated=false;repaint();
+    });
+  }
+  function priorityCandidates(quantity) {
+    return [
+      ...(candidate.providers||[]).map(p=>({
+        id:p.id+"."+quantity,label:weatherSensorTitle(p.id+"."+quantity,quantity),
+      })),
+      ...(candidate.physical_sensors||[])
+        .filter(s=>s.quantity===quantity)
+        .map(s=>({id:s.id,label:weatherSensorTitle(s.id,quantity)})),
+    ];
+  }
+  function priorityField(parent,quantity) {
+    const panel=text("section","","editor-entity-field");
+    panel.append(text("h3",
+      quantity==="temperature"?localize("weather_temperature_sources"):
+        localize("weather_humidity_sources"),"section-heading"),
+      text("p",localize("weather_priority_help"),"subtle small"));
+    const refs=candidate.priorities[quantity];
+    const valid=new Map(priorityCandidates(quantity).map(item=>[item.id,item.label]));
+    const list=text("div","","editor-bound-list");
+    if(!refs.length)list.append(text("p",localize("none"),"subtle small"));
+    refs.forEach((id,index)=>{
+      const line=text("div","","editor-bound-entity");
+      line.append(text("span",(index+1)+". "+
+        (valid.get(id)||id)+" ["+id+"]","mono"));
       const actions=text("span","","editor-source-actions");
-      const move=(offset)=>{
-        const target=index+offset;
-        if(target<0||target>=sources.length)return;
-        [sources[index],sources[target]]=[sources[target],sources[index]];
+      const move=delta=>{
+        const to=index+delta;
+        if(to<0||to>=refs.length)return;
+        [refs[index],refs[to]]=[refs[to],refs[index]];
         validated=false;repaint();
       };
       const up=button("↑",()=>move(-1));
-      up.disabled=index===0;up.title=localize("weather_move_up");
+      up.disabled=index===0;
       const down=button("↓",()=>move(1));
-      down.disabled=index===sources.length-1;down.title=localize("weather_move_down");
+      down.disabled=index===refs.length-1;
       const remove=button("×",()=>{
-        sources.splice(index,1);validated=false;repaint();
+        refs.splice(index,1);validated=false;repaint();
       });
-      remove.title=localize("remove_entity")+" "+id;
       actions.append(up,down,remove);line.append(actions);list.append(line);
     });
-    const choose=button(localize("weather_choose_sources"),()=>
-      window.DHClimateEntityPicker.open({
-        kind:pickerKind,multiple:true,values:sources,title:title_,
-        tr,usage:usages(),
-        onConfirm:next=>{
-          // Existing precedence preserved; newly chosen sources go last.
-          candidate.outdoor[key]=next;validated=false;repaint();
-        },
-      }));
-    box.append(list,choose);parent.append(box);
+    panel.append(list);
+    const available=[...valid].filter(([id])=>!refs.includes(id));
+    if(available.length){
+      const select=document.createElement("select");
+      select.className="editor-ha-area-select";
+      for(const [id,label] of available){
+        const opt=document.createElement("option");
+        opt.value=id;opt.textContent=label+" ["+id+"]";
+        select.append(opt);
+      }
+      const add=button(localize("weather_add_priority"),()=>{
+        if(select.value && !refs.includes(select.value)){
+          refs.push(select.value);validated=false;repaint();
+        }
+      });
+      panel.append(select,add);
+    }
+    parent.append(panel);
   }
   function weatherForm(main) {
     main.append(text("h2",localize("weather_editor_title"),"page-title"));
     const box=text("section","","card");
+    if(!modelConfigured()){
+      box.append(text("p",localize("weather_legacy_notice"),"warn"),
+        text("p",JSON.stringify(candidate.outdoor||{}),"mono small"));
+      const control=text("div","","editor-actions");
+      control.append(button(localize("weather_convert"),convertWeatherModel),
+        button(localize("cancel"),()=>{discardLocal();repaint();}));
+      box.append(control);main.append(box);
+      return;
+    }
     box.append(text("p",localize("weather_engine_note"),"subtle"));
-    orderedWeatherField(box,"temperature_sources",
-      localize("weather_temperature_sources"),"outdoor-temperature");
-    orderedWeatherField(box,"humidity_sources",
-      localize("weather_humidity_sources"),"outdoor-humidity");
-    box.append(text("p",localize("weather_forecast_source"),"subtle small"));
+    weatherProviderEditor(box);
+    weatherPhysicalEditor(box,"temperature");
+    weatherPhysicalEditor(box,"humidity");
+    priorityField(box,"temperature");
+    priorityField(box,"humidity");
     const controls=text("div","","editor-actions");
     controls.append(button(localize("save_draft"),persist),
       button(localize("cancel"),()=>{discardLocal();repaint();}));

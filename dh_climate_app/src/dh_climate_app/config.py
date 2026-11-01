@@ -41,12 +41,28 @@ class GlobalConfig:
 
 
 @dataclass(frozen=True)
+class WeatherProviderConfig:
+    provider_id: str
+    entity_id: str
+
+
+@dataclass(frozen=True)
+class PhysicalOutdoorSensorConfig:
+    sensor_id: str
+    entity_id: str
+    quantity: str
+
+
+@dataclass(frozen=True)
 class OutdoorConfig:
     heat_threshold_default: float
     cool_threshold_default: float
     temperature_ema_minutes: float
     temperature_sources: tuple[str, ...]
     humidity_sources: tuple[str, ...]
+    providers: tuple[WeatherProviderConfig, ...] = ()
+    physical_sensors: tuple[PhysicalOutdoorSensorConfig, ...] = ()
+    source_model: str = "legacy"
 
 
 @dataclass(frozen=True)
@@ -423,6 +439,95 @@ def _resource_config(raw: Any, resource: str) -> ResourceConfig:
     return ResourceConfig(signals, parts["pumps"], parts["circuits"])
 
 
+def _outdoor_source_model(
+    root: Mapping[str, Any], legacy: OutdoorConfig,
+) -> OutdoorConfig:
+    """Optional explicit v2 model. Never silently migrate legacy HA options."""
+    keys = {"providers", "physical_sensors", "priorities"}
+    if not (keys & set(root)):
+        return legacy
+    if "priorities" not in root:
+        raise ConfigError("priorities are required with providers/physical_sensors")
+
+    providers: list[WeatherProviderConfig] = []
+    physical: list[PhysicalOutdoorSensorConfig] = []
+    source_ids: set[str] = set()
+    for index, raw in enumerate(_as_list(root.get("providers", []), "providers")):
+        entry = _as_mapping(raw, f"providers[{index}]")
+        if set(entry) != {"id", "entity_id"}:
+            raise ConfigError(f"providers[{index}] requires only id and entity_id")
+        source_id = str(entry["id"]).strip()
+        if not ROOM_ID_RE.fullmatch(source_id) or len(source_id) > 64:
+            raise ConfigError(f"providers[{index}].id is invalid")
+        if source_id in source_ids:
+            raise ConfigError(f"providers[{index}].id is duplicated")
+        source_ids.add(source_id)
+        entity_id = _entity(entry["entity_id"], f"providers[{index}].entity_id", ("weather",))
+        if any(provider.entity_id == entity_id for provider in providers):
+            raise ConfigError("weather provider entity_id must be unique")
+        providers.append(WeatherProviderConfig(source_id, entity_id))
+
+    for index, raw in enumerate(_as_list(root.get("physical_sensors", []), "physical_sensors")):
+        entry = _as_mapping(raw, f"physical_sensors[{index}]")
+        if set(entry) != {"id", "entity_id", "quantity"}:
+            raise ConfigError(
+                f"physical_sensors[{index}] requires id, entity_id and quantity"
+            )
+        sensor_id = str(entry["id"]).strip()
+        if not ROOM_ID_RE.fullmatch(sensor_id) or len(sensor_id) > 64:
+            raise ConfigError(f"physical_sensors[{index}].id is invalid")
+        if sensor_id in source_ids:
+            raise ConfigError(f"physical_sensors[{index}].id is duplicated")
+        source_ids.add(sensor_id)
+        quantity = str(entry["quantity"])
+        if quantity not in ("temperature", "humidity"):
+            raise ConfigError(f"physical_sensors[{index}].quantity is invalid")
+        entity_id = _entity(
+            entry["entity_id"], f"physical_sensors[{index}].entity_id", ("sensor",)
+        )
+        if entity_id.startswith("sensor.dh_climate_app_"):
+            raise ConfigError(
+                "physical_sensors cannot read DH Climate's own MQTT outputs"
+            )
+        if any(s.entity_id == entity_id for s in physical):
+            raise ConfigError("physical sensor entity_id must be unique")
+        physical.append(PhysicalOutdoorSensorConfig(sensor_id, entity_id, quantity))
+
+    raw_priorities = _as_mapping(root["priorities"], "priorities")
+    if set(raw_priorities) != {"temperature", "humidity"}:
+        raise ConfigError("priorities must contain temperature and humidity only")
+    valid = {
+        "temperature": {p.provider_id + ".temperature" for p in providers},
+        "humidity": {p.provider_id + ".humidity" for p in providers},
+    }
+    for sensor in physical:
+        valid[sensor.quantity].add(sensor.sensor_id)
+
+    def ordered(key: str) -> tuple[str, ...]:
+        items = _as_list(raw_priorities[key], "priorities." + key)
+        result: list[str] = []
+        for i, item in enumerate(items):
+            if not isinstance(item, str) or item not in valid[key]:
+                raise ConfigError(
+                    f"priorities.{key}[{i}] does not resolve to a {key} sensor"
+                )
+            if item in result:
+                raise ConfigError(f"priorities.{key}[{i}] is duplicated")
+            result.append(item)
+        return tuple(result)
+
+    return OutdoorConfig(
+        heat_threshold_default=legacy.heat_threshold_default,
+        cool_threshold_default=legacy.cool_threshold_default,
+        temperature_ema_minutes=legacy.temperature_ema_minutes,
+        temperature_sources=ordered("temperature"),
+        humidity_sources=ordered("humidity"),
+        providers=tuple(providers),
+        physical_sensors=tuple(physical),
+        source_model="sensors",
+    )
+
+
 def parse_options(raw: Any) -> AppConfig:
     """Only the target Supervisor contract; legacy options are not migrated."""
     root = _as_mapping(raw, "options")
@@ -430,6 +535,7 @@ def parse_options(raw: Any) -> AppConfig:
         "night_mode", "we_at_home", "outdoor", "rooms",
         "telemetry_enabled", "log_level", "heating_source", "vrf",
         "resources", "pumps", "circuits",
+        "providers", "physical_sensors", "priorities",
     }
     unknown = set(root) - allowed
     if unknown:
@@ -501,6 +607,7 @@ def parse_options(raw: Any) -> AppConfig:
             "outdoor.humidity_sources", ("sensor", "weather"),
         ),
     )
+    outdoor = _outdoor_source_model(root, outdoor)
     rooms: list[RoomConfig] = []
     room_ids: set[str] = set()
     for index, item in enumerate(_as_list(root.get("rooms", []), "rooms")):
@@ -601,8 +708,12 @@ def configured_entity_ids(config: AppConfig) -> frozenset[str]:
     if config.global_config.we_at_home:
         result.add(config.global_config.we_at_home)
 
-    result.update(config.outdoor.temperature_sources)
-    result.update(config.outdoor.humidity_sources)
+    if config.outdoor.source_model == "sensors":
+        result.update(p.entity_id for p in config.outdoor.providers)
+        result.update(s.entity_id for s in config.outdoor.physical_sensors)
+    else:
+        result.update(config.outdoor.temperature_sources)
+        result.update(config.outdoor.humidity_sources)
     for resource in config.resources.values():
         result.update(resource.signals.values())
         for part in (*resource.pumps, *resource.circuits):

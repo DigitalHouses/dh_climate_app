@@ -73,6 +73,23 @@ class UILabelsTests(unittest.IsolatedAsyncioTestCase):
         final = await self.store.save(key="room:livingroom", names={"ru":"  ","en":""},revision=1)
         self.assertNotIn("room:livingroom",final["labels"])
 
+    async def test_provider_and_derived_sensor_names_are_presentation_metadata(self):
+        notifications=[]
+        self.store.on_names_saved(lambda state:notifications.append(state))
+        provider=await self.store.save(
+            key="provider:google",names={"ru":"Google Weather"},revision=0)
+        reading=await self.store.save(
+            key="weather_sensor:google.temperature",
+            names={"ru":"Температура Google"},revision=1)
+        physical=await self.store.save(
+            key="outdoor_sensor:garden",names={"ru":"Уличный датчик"},revision=2)
+        self.assertEqual(provider["labels"]["provider:google"]["ru"],"Google Weather")
+        self.assertEqual(reading["labels"]["weather_sensor:google.temperature"]["ru"],
+                         "Температура Google")
+        self.assertEqual(physical["labels"]["outdoor_sensor:garden"]["ru"],
+                         "Уличный датчик")
+        self.assertEqual(len(notifications),3)
+
     async def test_rejects_stale_revision_and_invalid_keys(self):
         await self.store.save(key="room:bedroom",names={"ru":"Спальня"},revision=0)
         with self.assertRaises(EditConflict):

@@ -4,7 +4,9 @@ from datetime import datetime
 import json
 from typing import Any
 
-from .config import RoomConfig, SEASON_MIN_TEMP, SEASON_MAX_TEMP
+from .config import (
+    RoomConfig, WeatherProviderConfig, SEASON_MIN_TEMP, SEASON_MAX_TEMP,
+)
 from .events import EVENT_TYPES
 from .humidity import HumidityState
 from .outdoor import OutdoorState
@@ -274,6 +276,69 @@ def outdoor_discovery_payloads(
             },
         ),
     }
+
+
+def provider_sensor_base(provider_id: str, quantity: str) -> str:
+    return f"{WEATHER_BASE}/providers/{provider_id}/{quantity}"
+
+
+def provider_discovery_payloads(
+    app_version: str,
+    providers: tuple[WeatherProviderConfig, ...],
+    labels: dict[str, dict[str, str]] | None = None,
+) -> dict[str, tuple[str, dict[str, Any]]]:
+    """Stable numeric MQTT entities; physical HA sensors are not duplicated."""
+    out: dict[str, tuple[str, dict[str, Any]]] = {}
+    ui_labels = labels or {}
+
+    def name(key: str, fallback: str) -> str:
+        translations = ui_labels.get(key, {})
+        return translations.get("ru") or translations.get("en") or fallback
+
+    for provider in providers:
+        provider_name = name(
+            "provider:" + provider.provider_id,
+            provider.entity_id.split(".", 1)[-1].replace("_", " ").title(),
+        )
+        device = {
+            "identifiers": [f"dh_climate_weather_provider_{provider.provider_id}"],
+            "name": f"DH Climate · {provider_name}",
+            "manufacturer": "Digital Houses",
+            "model": "Climate Weather Provider",
+            "sw_version": app_version,
+            "via_device": SYSTEM_DEVICE_ID,
+        }
+        for quantity, label, unit in (
+            ("temperature", "Temperature", "°C"),
+            ("humidity", "Humidity", "%"),
+        ):
+            object_id = f"dh_climate_app_provider_{provider.provider_id}_{quantity}"
+            topic = f"{DISCOVERY_PREFIX}/sensor/{object_id}/config"
+            base = provider_sensor_base(provider.provider_id, quantity)
+            out[provider.provider_id + "." + quantity] = (
+                topic,
+                {
+                    "name": name(
+                        "weather_sensor:" + provider.provider_id + "." + quantity,
+                        label,
+                    ),
+                    "unique_id": object_id,
+                    "default_entity_id": f"sensor.{object_id}",
+                    "state_topic": f"{base}/state",
+                    "availability": [
+                        {"topic": SYSTEM_AVAILABILITY_TOPIC},
+                        {"topic": f"{base}/availability"},
+                    ],
+                    "availability_mode": "all",
+                    "device_class": quantity,
+                    "state_class": "measurement",
+                    "unit_of_measurement": unit,
+                    "entity_category": "diagnostic",
+                    "device": device,
+                    "origin": _origin(app_version),
+                },
+            )
+    return out
 
 
 def weather_discovery_payloads(

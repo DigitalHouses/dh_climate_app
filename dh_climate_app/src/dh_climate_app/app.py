@@ -34,7 +34,8 @@ from .ingress import OperationsWebServer
 from .entity_catalog import EntityCatalog
 from .manifest import ManifestEditor
 from .ui_labels import UILabels
-from .weather import WeatherState, build_weather_state, select_weather_source
+from .weather import WeatherState, build_weather_state
+from .source_registry import project_sensors, weather_condition_entity
 from .window_cooling import WindowCoolingGuard
 
 
@@ -73,6 +74,8 @@ class ClimateRuntime:
     def __init__(self, config: AppConfig, editor: ManifestEditor | None = None,
                  labels: UILabels | None = None) -> None:
         self.config = config
+        self.ui_labels = labels
+        self._facade_started = False
         self.started_at = datetime.now(timezone.utc)
         self.stop_event = asyncio.Event()
         self.cache = StateCache(configured_entity_ids(config))
@@ -89,10 +92,7 @@ class ClimateRuntime:
         self.profile_overlay = ProfileEditOverlay(idle_timeout_seconds=10.0)
         self.humidity = HumidityEngine(config=config, store=self.store)
         self.events = ClimateEventEngine()
-        self.weather_source = select_weather_source(
-            config.outdoor.temperature_sources,
-            config.outdoor.humidity_sources,
-        )
+        self.weather_source = weather_condition_entity(config.outdoor)
 
         self.command_queue: asyncio.Queue[MqttCommand] = asyncio.Queue()
         self._calculation_lock = asyncio.Lock()
@@ -137,7 +137,11 @@ class ClimateRuntime:
             weather_enabled=self.weather_source is not None,
             heating_source=config.heating_source,
             vrf_enabled=config.vrf_enabled,
+            providers=config.outdoor.providers,
+            provider_registry_path=OPTIONS_FILE.parent / "dh_climate_weather_provider_ids.json",
         )
+        if labels is not None:
+            labels.on_names_saved(self._on_names_saved)
         self.ha = HomeAssistantClient(
             token=os.environ["SUPERVISOR_TOKEN"],
             entity_ids=self.cache.allowed,
@@ -154,13 +158,23 @@ class ClimateRuntime:
         )
         self.telemetry_runner = TelemetryRunner(self.telemetry)
 
+    def _on_names_saved(self, data: dict[str, object]) -> None:
+        self.facade.configure_provider_labels(data.get("labels", {}))
+        if self._facade_started:
+            self.facade.publish_provider_discovery()
+
     async def run(self) -> None:
         try:
             await self.operations.start()
         except OSError:
             # Climate control must continue even when the read-only UI fails.
             LOGGER.exception("Operations Ingress unavailable; climate engine continues")
+        if self.ui_labels is not None:
+            self.facade.configure_provider_labels(
+                (await self.ui_labels.state()).get("labels", {}),
+            )
         self.facade.start()
+        self._facade_started = True
         self.telemetry_runner.start()
         self.facade.set_season_available(False)
         self.facade.set_rooms_available(False)
@@ -190,6 +204,7 @@ class ClimateRuntime:
             await self._cancel_window_rechecks()
             self.telemetry_runner.stop()
             await self.climate_log.close()
+            self._facade_started = False
             self.facade.stop()
             await self.operations.stop()
 
@@ -309,6 +324,7 @@ class ClimateRuntime:
             self.facade.set_rooms_available(False)
             self.facade.set_demand_available(False)
             self.facade.set_topology_available(False)
+            self.facade.set_provider_samples_unavailable()
             await self.operations.publish(build_operations_snapshot(
                 config=self.config, outdoor=None, weather=None, room_states={},
                 health=None, problems=(), demands={}, states={},
@@ -400,11 +416,13 @@ class ClimateRuntime:
         async with self._calculation_lock:
             values = self.cache.values()
             snapshot = self.cache.snapshot()
+            readings = project_sensors(self.config.outdoor, snapshot)
+            weather_input = {**snapshot, **readings}
             self.outdoor.hysteresis = self.store.get_global_tuning(
                 "season_hysteresis"
             )
             outdoor_state = self.outdoor.evaluate(
-                snapshot,
+                weather_input,
                 observed_at=observed_at,
                 record_sample=record_outdoor_sample,
             )
@@ -512,6 +530,9 @@ class ClimateRuntime:
             self._last_weather_state = weather_state
 
             self.facade.publish_season(outdoor_state)
+            self.facade.publish_provider_samples(
+                readings, observed_at=datetime.now(timezone.utc),
+            )
             if weather_state is not None:
                 self.facade.publish_weather(weather_state)
 
@@ -688,13 +709,15 @@ class ClimateRuntime:
                 room_targets=published_room_targets,
                 demands=demands,
                 resource_slices=resource_slices,
+                source_readings=readings,
             ))
 
             try:
                 await self.operations.publish(build_operations_snapshot(
                     config=self.config, outdoor=outdoor_state, weather=weather_state,
                     room_states=room_states, health=health, problems=self._last_problems,
-                    demands=demands, states=snapshot, version=APP_VERSION,
+                    demands=demands, states=snapshot, source_readings=readings,
+                    version=APP_VERSION,
                     ha_connected=self._ha_connected,
                 ))
             except Exception:
