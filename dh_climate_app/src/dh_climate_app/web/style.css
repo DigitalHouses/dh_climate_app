@@ -264,3 +264,11 @@ body.resizing-explorer { cursor:col-resize; user-select:none; }
   .editor-priority-info { min-width:0; }
   .editor-priority-value { width:100%; text-align:left; }
 }
+
+/* Season is operational diagnostics only: no second parameter editor. */
+.season-source-item { padding:6px 0; overflow-wrap:anywhere; }
+.season-source-item + .season-source-item {
+  border-top:1px solid var(--border);
+}
+.season-source-name { font-size:13px; font-weight:600; margin:0 0 3px; }
+.season-source-item .mono { font-size:11px; margin:2px 0; }

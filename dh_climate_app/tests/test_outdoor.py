@@ -156,6 +156,10 @@ class OutdoorEngineTests(unittest.TestCase):
         expected = 10.0 + self._alpha() * 10.0
         self.assertEqual("sensor.outdoor_temperature", first.temperature_source)
         self.assertEqual("sensor.weather_temperature", switched.temperature_source)
+        self.assertEqual(
+            ("sensor.outdoor_temperature", "sensor.weather_temperature"),
+            after_tick.temperature_history_sources,
+        )
         self.assertEqual(20.0, switched.raw_temperature)
         self.assertEqual(10.0, switched.current_temperature)
         self.assertAlmostEqual(expected, after_tick.current_temperature)

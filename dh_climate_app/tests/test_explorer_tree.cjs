@@ -14,8 +14,13 @@ const context = vm.createContext({
   document: {}, window:{},
   Intl, Number, Set,
 });
-vm.runInContext(source.slice(0, boot) +
-  "\nglobalThis.unit = {buildTree, keyOf, findPath, technical, number};", context);
+// Import only the pure view functions: boot handlers need a full browser.
+const seasonStart = source.indexOf("function seasonSourceNode(");
+const seasonEnd = source.indexOf("function showHome(", seasonStart);
+assert.ok(seasonStart > boot && seasonEnd > seasonStart);
+vm.runInContext(source.slice(0, boot) + "\n" +
+  source.slice(seasonStart, seasonEnd) +
+  "\nglobalThis.unit = {buildTree, keyOf, findPath, technical, number, showSeason};", context);
 const u = context.unit;
 const fixture = {
   app: {version:"0.2.2", ha_connected:true, health:"healthy", problems:[]},
@@ -117,4 +122,46 @@ test("both locale JSON files expose new Explorer terms",()=>{
     const dict=JSON.parse(fs.readFileSync(path.join(web,"i18n",lang+".json"),"utf8"));
     for(const key of needed) assert.ok(dict[key],lang+" missing "+key);
   }
+});
+
+test("season diagnostics render actual sensor and weather ancestry without controls",()=>{
+  class Element {
+    constructor(tag){this.tagName=tag;this.children=[];this.className="";this._text="";}
+    set textContent(v){this._text=String(v);this.children=[];}
+    get textContent(){return this._text+this.children.map(x=>x.textContent||"").join("");}
+    append(...items){this.children.push(...items);}
+  }
+  context.document.createElement=tag=>new Element(tag);
+  context.caseSeason={
+    app:{ha_connected:true},weather:{
+      season:"heat",avg24:9.8,source:"google.temperature",
+      stale:false,heat_threshold:10.5,cool_threshold:19.5,
+      season_hysteresis:1.0,
+      providers:[{id:"google",entity_id:"weather.asyl_mura",
+        friendly_name:"Google Weather"}],
+      physical_sensors:[],
+      temperature_sources:[{entity_id:"google.temperature",
+        original_entity_id:"weather.asyl_mura",state:11.2}],
+      avg24_input_sources:["google.temperature","sensor.backup"],
+    },
+  };
+  context.caseCatalog={entities:[
+    {entity_id:"sensor.actual_google",climate_source_id:"google.temperature",
+      name:"Температура Google"},
+    {entity_id:"sensor.avg24_renamed",climate_avg24_sensor:true,
+      name:"Средняя за сутки"},
+  ]};
+  vm.runInContext("snapshot=caseSeason;weatherCatalog=caseCatalog;",context);
+  const main=new Element("main");
+  context.unit.showSeason(main);
+  const rendered=main.textContent;
+  assert.match(rendered,/Средняя за сутки/);
+  assert.match(rendered,/sensor.avg24_renamed/);
+  assert.match(rendered,/Температура Google/);
+  assert.match(rendered,/sensor.actual_google/);
+  assert.match(rendered,/weather.asyl_mura → temperature/);
+  assert.match(rendered,/sensor.backup/);
+  assert.match(rendered,/10,5.*°C/);
+  assert.equal((function visit(e){return (e.tagName==="input"||e.tagName==="button"?1:0)+
+    e.children.reduce((n,x)=>n+visit(x),0);})(main),0);
 });

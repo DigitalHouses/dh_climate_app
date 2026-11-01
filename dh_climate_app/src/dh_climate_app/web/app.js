@@ -27,7 +27,7 @@ async function loadWeatherCatalog() {
       if (!Array.isArray(catalog.entities)) return null;
       weatherCatalog = catalog;
       weatherCatalogAt = Date.now();
-      if (["weather_priorities","weather_sources"].includes(selection.kind))
+      if (["weather_priorities","weather_sources","season"].includes(selection.kind))
         render();
       return catalog;
     } catch (_) { return null; }
@@ -195,8 +195,9 @@ function navigate(item) {
   if (window.DHClimateEditor && !window.DHClimateEditor.onNavigate()) return;
   selection = {kind:item.kind, id:item.id || null, room:item.room || null,
     resource:item.resource || null, partType:item.partType || null};
-  if (["weather_sources","weather_priorities"].includes(item.kind)) {
-    window.DHClimateEditor?.enterWeatherSection?.(item.kind);
+  if (["weather_sources","weather_priorities","season"].includes(item.kind)) {
+    if (item.kind !== "season")
+      window.DHClimateEditor?.enterWeatherSection?.(item.kind);
     void loadWeatherCatalog();
   }
   const path = findPath(selection);
@@ -585,11 +586,66 @@ function showWeatherPriorities(main) {
   if (!window.DHClimateEditor?.canChange?.())
     main.append(paragraph(t("weather_readonly_priority"),"subtle small"));
 }
+// Temperature source provenance is presentation-only; never modifies the
+// Engine's priority order, thresholds, or the authoritative manifest.
+function seasonSourceNode(id) {
+  const w = snapshot?.weather || {};
+  const source = (w.temperature_sources || []).find(s => s.entity_id === id);
+  const physical = (w.physical_sensors || []).find(s => s.id === id);
+  const provider = (w.providers || []).find(p => id === p.id + ".temperature");
+  const original = source?.original_entity_id ||
+    ((id.startsWith("sensor.") || id.startsWith("weather.")) ? id : null);
+  const registered = (weatherCatalog?.entities || []).find(e =>
+    e.climate_source_id === id ||
+    (id.startsWith("sensor.") && e.entity_id === id));
+  const name = registered?.name ||
+    (physical ? namedOutdoorSensor(physical) :
+      provider ? namedWeatherSensor(provider,"temperature") :
+      source?.friendly_name || id);
+  const box = dom("div","season-source-item");
+  box.append(paragraph(name,"season-source-name"));
+  // Never pretend that a suggested MQTT entity_id is the one used in HA.
+  const actualId = registered?.entity_id ||
+    (id.startsWith("sensor.") ? id : null);
+  if (actualId) box.append(paragraph(actualId,"mono subtle"));
+  else if (id !== original) box.append(paragraph(id,"mono subtle"));
+  if (original?.startsWith("weather."))
+    box.append(paragraph(original+" → temperature","mono subtle"));
+  else if (original && original !== actualId)
+    box.append(paragraph(original,"mono subtle"));
+  return box;
+}
 function showSeason(main) {
   const w = snapshot.weather;
-  add(main, title(t("season")), stats(stat(t("season"), statusText(w.season)),
-      stat(t("avg24"), number(w.avg24, " °C"))),
-    card(t("season"), paragraph(t("season_info"), "subtle")));
+  const avgSensor = (weatherCatalog?.entities || []).find(
+    e => e.climate_avg24_sensor === true);
+  const avgInfo = [
+    paragraph(avgSensor?.name || t("season_avg_internal"),"season-source-name"),
+    paragraph(t("season_avg_method"),"subtle small"),
+  ];
+  if (avgSensor?.entity_id)
+    avgInfo.splice(1,0,paragraph(avgSensor.entity_id,"mono subtle"));
+  const history = (w.avg24_input_sources || [])
+    .filter(id => typeof id === "string" && id.length)
+    .map(seasonSourceNode);
+  const active = w.source
+    ? seasonSourceNode(w.source)
+    : paragraph(t("unknown"),"subtle");
+  add(main, title(t("season")),
+    stats(stat(t("season"),statusText(w.season)),
+      stat(t("avg24"),number(w.avg24," °C"))),
+    card(t("season_avg_sensor"),...avgInfo),
+    card(t("season_current_source"),active,
+      row(t("data_quality"),w.stale === null || w.stale === undefined
+        ? unknown() : w.stale ? t("stale") : t("current"))),
+    card(t("season_history_sources"),
+      listOrEmpty(history,"season_history_empty"),
+      paragraph(t("season_history_note"),"subtle small")),
+    card(t("season_thresholds"),
+      row(t("season_heat_threshold"),number(w.heat_threshold," °C")),
+      row(t("season_cool_threshold"),number(w.cool_threshold," °C")),
+      row(t("season_hysteresis"),number(w.season_hysteresis," °C"))),
+    paragraph(t("season_info"),"subtle small"));
 }
 function showHome(main) {
   add(main, title(t("home")),

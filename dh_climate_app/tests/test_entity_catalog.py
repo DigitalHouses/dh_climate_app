@@ -83,6 +83,24 @@ class CatalogProjectionTests(unittest.TestCase):
         self.assertIsNone(by_id["sensor.secret_other"]["climate_source_id"])
         self.assertNotIn("private-serial-token", json.dumps(rows))
 
+    def test_renamed_avg24_sensor_uses_its_own_unique_id(self):
+        states = [
+            {"entity_id": "sensor.avg24_renamed", "state": "12.4",
+             "attributes": {"friendly_name": "Среднесуточная на улице"}},
+            {"entity_id": "sensor.unrelated", "state": "5",
+             "attributes": {}},
+        ]
+        registry = [
+            {"entity_id": "sensor.avg24_renamed",
+             "unique_id": "dh_climate_app_outdoor_temperature_avg24"},
+            {"entity_id": "sensor.unrelated", "unique_id": "private-unique-id"},
+        ]
+        rows = build_catalog(states, registry, [], [])["entities"]
+        by_id = {row["entity_id"]: row for row in rows}
+        self.assertTrue(by_id["sensor.avg24_renamed"]["climate_avg24_sensor"])
+        self.assertFalse(by_id["sensor.unrelated"]["climate_avg24_sensor"])
+        self.assertNotIn("private-unique-id", json.dumps(rows))
+
     def test_weather_asyl_mura_readings_are_distinct_from_condition(self):
         states=[{"entity_id":"weather.asyl_mura","state":"partlycloudy",
             "attributes":{"friendly_name":"Google Weather",

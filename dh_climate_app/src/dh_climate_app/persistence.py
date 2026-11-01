@@ -414,6 +414,28 @@ class StateStore:
                 ],
             )
 
+    def load_temperature_source_names(self, *, since: datetime) -> tuple[str, ...]:
+        """Actual source IDs recorded with the EMA samples in the 24h window.
+
+        A source-free EMA replay marker is excluded: it cannot establish
+        the identity of a historical sensor. No schema migration is needed.
+        """
+        with self.connect() as db:
+            rows = db.execute(
+                """
+                SELECT source_name
+                FROM outdoor_samples
+                WHERE kind='temperature' AND observed_at>=?
+                GROUP BY source_name
+                ORDER BY MIN(observed_at), source_name
+                """,
+                (since.isoformat(),),
+            ).fetchall()
+        return tuple(
+            str(row["source_name"]) for row in rows
+            if row["source_name"] and row["source_name"] != "ema_migration"
+        )
+
     def load_outdoor_samples(
         self,
         *,

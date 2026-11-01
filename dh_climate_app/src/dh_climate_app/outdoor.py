@@ -40,6 +40,7 @@ class OutdoorState:
     raw_temperature: float | None = None
     stale: bool = False
     last_valid_at: str | None = None
+    temperature_history_sources: tuple[str, ...] = ()
 
     @property
     def available(self) -> bool:
@@ -144,6 +145,13 @@ class OutdoorEngine:
             window_end=observed_at,
         )
 
+        # Provenance of minute EMA samples, not an approximation from the
+        # currently selected sensor. Earlier migrations may lack provenance.
+        history_sources = (
+            self.store.load_temperature_source_names(since=since)
+            if temperature_samples else ()
+        )
+
         thresholds = self.store.get_season_thresholds()
         season = (
             decide_season(
@@ -209,6 +217,7 @@ class OutdoorEngine:
             raw_temperature=temperature[1] if temperature else None,
             stale=stale,
             last_valid_at=last_valid_at,
+            temperature_history_sources=history_sources,
         )
 
     def set_thresholds(self, *, heat: float, cool: float) -> None:
