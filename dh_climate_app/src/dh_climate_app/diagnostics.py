@@ -64,7 +64,7 @@ def sanitize_export(value: Any, *, depth: int = 0) -> Any:
 ENTITY_ID = re.compile(
     r"^(?:sensor|binary_sensor|climate|humidifier|weather|number|switch|"
     r"input_boolean|input_number|input_select|input_text|select|fan|cover|"
-    r"valve|water_heater)\\.[a-z0-9_]+$"
+    r"valve|water_heater)\.[a-z0-9_]+$"
 )
 
 
