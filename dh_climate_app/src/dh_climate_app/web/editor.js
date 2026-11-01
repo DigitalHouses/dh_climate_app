@@ -115,12 +115,21 @@
         });
         const result=await response.json();
         if(!response.ok)throw Error(result.error || "HTTP "+response.status);
-        labelsState=result;discardLocal();show(localize("name_saved"));
+        labelsState=result;
+        if (edit.fromWeather) {
+          edit={kind:"weather"};
+          show(localize("weather_name_saved"));
+        } else {
+          discardLocal();show(localize("name_saved"));
+        }
       } catch(e) {
         show(e.message,true);
         await loadLabels();
       }
-    }),button(localize("cancel"),()=>{discardLocal();repaint();}));
+    }),button(localize("cancel"),()=>{
+      if(edit.fromWeather){edit={kind:"weather"};repaint();}
+      else{discardLocal();repaint();}
+    }));
     section.append(actions);
     main.append(section);
   }
@@ -317,6 +326,19 @@
     });
     panel.append(list,choose);parent.append(panel);
   }
+  function editWeatherName(kind,id,sourceName) {
+    if(!online() || !candidate || edit?.kind!=="weather")return;
+    const key=kind+":"+id;
+    const original=labelsState.labels?.[key] || {};
+    // Return to the same unsaved weather form after saving the label.
+    // Labels are independent UI metadata and never change source IDs.
+    edit={kind:"label",key,technicalId:id,sourceName,
+      haName:null,fromWeather:true,
+      names:{ru:original.ru||"",en:original.en||""}};
+    message="";
+    repaint();
+  }
+
   function weatherProviderEditor(parent) {
     const listed=(candidate.providers||[]).map(provider=>({
       entity:provider.entity_id,name:providerTitle(provider)+" ["+provider.entity_id+"]",
@@ -336,6 +358,35 @@
       }
       validated=false;repaint();
     });
+    if(!(candidate.providers||[]).length)return;
+    const details=text("section","","editor-entity-field");
+    details.append(
+      text("h3",localize("weather_names"),"section-heading"),
+      text("p",localize("weather_names_help"),"subtle small"),
+    );
+    for(const provider of candidate.providers){
+      const providerLine=text("div","","editor-bound-entity");
+      providerLine.append(
+        text("span",providerTitle(provider)+" · "+provider.entity_id,"mono"),
+        button(localize("rename"),
+          ()=>editWeatherName("provider",provider.id,provider.entity_id)),
+      );
+      details.append(providerLine);
+      for(const quantity of ["temperature","humidity"]){
+        const logicalId=provider.id+"."+quantity;
+        const expectedEntityId="sensor.dh_climate_app_weather_"+
+          provider.id+"_"+quantity;
+        const sensorLine=text("div","","editor-bound-entity");
+        sensorLine.append(
+          text("span",weatherSensorTitle(logicalId,quantity)+
+            " · "+expectedEntityId,"mono"),
+          button(localize("rename"),
+            ()=>editWeatherName("weather_sensor",logicalId,provider.entity_id)),
+        );
+        details.append(sensorLine);
+      }
+    }
+    parent.append(details);
   }
   function weatherPhysicalEditor(parent,quantity) {
     const sources=(candidate.physical_sensors||[]).filter(s=>s.quantity===quantity);

@@ -160,8 +160,13 @@
     if(eligible.some(item=>!item.integration))
       option(origin,"none",tr("picker.integration_missing"));
     sourceRow.append(el("span","",tr("picker.integration")+":"),origin);
-    if(integrations.length || eligible.some(item=>!item.integration))
+    // Provider selection uses the weather.* entity domain, not integration
+    // identifiers: for example Met.no uses platform "met" rather than "weather".
+    if(kind==="provider"){
+      sheet.append(el("p","subtle small",tr("picker.weather_provider_help")));
+    } else if(integrations.length || eligible.some(item=>!item.integration)){
       sheet.append(sourceRow);
+    }
     if(areaId && !linked)sheet.append(el("p","picker-area-warning",
       tr("picker.area_missing")+": "+areaId));
     const advanced=el("label","picker-advanced");

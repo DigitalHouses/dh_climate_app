@@ -234,5 +234,11 @@
   "picker.integration": "HA integration",
   "picker.all_integrations": "All integrations",
   "picker.integration_missing": "Unknown source",
-  "editor.weather_sensor_hint": "Lists existing sensor.* entities. Add weather.* under Providers above: temperature and humidity sensors are derived automatically. Picker shows the originating HA integration."
+  "editor.weather_sensor_hint": "Lists existing sensor.* entities. Add weather.* under Providers above: temperature and humidity sensors are derived automatically. Picker shows the originating HA integration.",
+  "editor.weather_names": "Weather sensor names",
+  "editor.weather_names_help": "After choosing a provider, you can name it and each derived sensor. Names are stored independently and appear in Home Assistant through MQTT Discovery once the source model is applied. IDs and priorities do not change.",
+  "editor.weather_name_saved": "Name saved. Active provider names are updated through MQTT Discovery; new providers appear after Apply and restart.",
+  "picker.weather_provider_help": "All weather.* entities are shown, including Met.no (integration ID met). No integration-name filter is required.",
+  "suggested_entity_id": "Suggested entity_id for a new sensor",
+  "weather_existing_entity_id": "If this entity is already registered in HA, its current entity_id is retained. The display name can be changed without renaming its ID."
 }

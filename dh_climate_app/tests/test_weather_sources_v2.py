@@ -243,6 +243,16 @@ class WeatherSourceMqttTests(unittest.TestCase):
             self.assertEqual(value["device_class"],key.rsplit(".",1)[1])
             self.assertEqual(value["state_class"],"measurement")
             self.assertEqual(value["default_entity_id"].split(".",1)[0],"sensor")
+            self.assertEqual(
+                value["default_entity_id"],
+                "sensor.dh_climate_app_weather_" + key.replace(".", "_"),
+            )
+            # Stable identity: changing suggested HA ID must not orphan
+            # sensors already created under the 0.2.12 default ID.
+            self.assertEqual(
+                value["unique_id"],
+                "dh_climate_app_provider_" + key.replace(".", "_"),
+            )
         self.facade.publish_provider_discovery()
         self.assertEqual(
             len([x for x in self.bridge.published if x[0].startswith("homeassistant/sensor/")]),4)

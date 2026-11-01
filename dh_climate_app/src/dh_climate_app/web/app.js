@@ -473,12 +473,15 @@ function showWeatherSensor(main) {
   const [providerId,quantity]=String(selection.id||"").split(".");
   const provider=(snapshot.weather.providers||[]).find(p=>p.id===providerId);
   if(!provider)return showProviders(main);
-  const entity="sensor.dh_climate_app_provider_"+providerId+"_"+quantity;
+  // Suggested ID applies when HA creates a new MQTT entity.
+  // Existing entities retain their registry entity_id, not renamed on update.
+  const suggested="sensor.dh_climate_app_weather_"+providerId+"_"+quantity;
   add(main,
     title(namedWeatherSensor(provider,quantity)),
     paragraph(selection.id,"mono subtle"),
     card(t("identification"),row(t("source"),provider.entity_id),
-      row(t("sensor"),entity)),
+      row(t("suggested_entity_id"),suggested),
+      paragraph(t("weather_existing_entity_id"),"subtle small")),
     stats(stat(t(quantity),number(provider[quantity],
       quantity==="temperature"?" °C":" %"))));
 }

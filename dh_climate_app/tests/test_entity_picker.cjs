@@ -68,6 +68,18 @@ test("new provider picker is weather-only and physical picker excludes app feedb
     device_class:"temperature"},
     filters({kind:"physical-temperature"})),true);
 });
+test("weather provider picker works by weather domain, not integration name",()=>{
+  assert.deepEqual(Array.from(domainsFor("provider")),["weather"]);
+  const met={...base,entity_id:"weather.forecast_home_assistant",domain:"weather",
+    device_class:null,integration:"met"};
+  const google={...met,entity_id:"weather.asyl_mura",integration:"google_weather"};
+  assert.equal(match(met,filters({kind:"provider"})),true);
+  assert.equal(match(google,filters({kind:"provider"})),true);
+  assert.equal(match(met,filters({kind:"provider",query:"weather"})),true);
+  assert.equal(match(google,filters({kind:"provider",query:"weather"})),true);
+  assert.match(src,/if\(kind==="provider"\)/);
+  assert.match(src,/picker\.weather_provider_help/);
+});
 test("area and availability filters act independently",()=>{
   assert.equal(match(base,filters({area:"living"})),true);
   assert.equal(match(base,filters({area:"bedroom"})),false);
