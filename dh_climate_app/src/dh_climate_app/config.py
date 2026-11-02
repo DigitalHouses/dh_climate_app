@@ -5,6 +5,7 @@ import re
 from typing import Any, Mapping, Sequence
 
 from .core import DeviceClass, Profile
+from .hydraulics import HydraulicsConfig, parse_hydraulics, hydraulic_entity_ids
 
 # Начальные значения применяются только при отсутствии записей в SQLite.
 SEASON_MIN_TEMP = 5.0
@@ -134,6 +135,7 @@ class AppConfig:
     heating_source: str | None = None
     vrf_enabled: bool | None = None
     resources: Mapping[str, ResourceConfig] = field(default_factory=dict)
+    hydraulics: HydraulicsConfig = field(default_factory=HydraulicsConfig)
 
 
 def _as_mapping(value: Any, path: str) -> Mapping[str, Any]:
@@ -534,7 +536,7 @@ def parse_options(raw: Any) -> AppConfig:
     allowed = {
         "night_mode", "we_at_home", "outdoor", "rooms",
         "telemetry_enabled", "log_level", "heating_source", "vrf",
-        "resources", "pumps", "circuits",
+        "resources", "pumps", "circuits", "hydraulics",
         "providers", "physical_sensors", "priorities",
     }
     unknown = set(root) - allowed
@@ -696,6 +698,9 @@ def parse_options(raw: Any) -> AppConfig:
         heating_source=heating_source,
         vrf_enabled=vrf_enabled,
         resources=resources,
+        hydraulics=parse_hydraulics(
+            root.get("hydraulics"), room_ids=room_ids, entity_parser=_entity,
+        ),
     )
 
 
@@ -718,6 +723,8 @@ def configured_entity_ids(config: AppConfig) -> frozenset[str]:
         result.update(resource.signals.values())
         for part in (*resource.pumps, *resource.circuits):
             result.update(part.signals.values())
+
+    result.update(hydraulic_entity_ids(config.hydraulics))
 
     for room in config.rooms:
         result.update(room.temperature_sensors)
