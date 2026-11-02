@@ -40,7 +40,8 @@ test("Russian locale localizes structural tree nodes and resources",()=>{
  assert.equal(nodes[0].children[1].label,"Дом");
  assert.equal(nodes[0].children[1].children[0].label,"Ресурсы");
  assert.equal(nodes[0].children[1].children[1].label,"Комнаты");
- assert.equal(nodes[0].children[0].children[2].label,"Сезон");
+ assert.deepEqual(Array.from(nodes[0].children[0].children).map(n=>n.label),
+   ["Провайдеры погоды","Аппаратные сенсоры","Приоритеты сенсоров","Сезон"]);
  assert.equal(locate(nodes,n=>n.kind==="resource").label,"Котёл");
 });
 test("HA friendly names appear in the tree without changing entity identity",()=>{
