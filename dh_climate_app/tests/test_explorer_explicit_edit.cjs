@@ -123,8 +123,13 @@ test("room and device page editing is explicit, viewers get no edit button",asyn
   const pending=(await setup(true,true)).api;
   for(const kind of ["weather_sources","weather_priorities","room","device"])
     assert.equal(viewer.pageAction({kind,id:"bedroom",room:"bedroom"}),null);
-  for(const kind of ["weather_sources","weather_priorities","room","device"])
-    assert.equal(pending.pageAction({kind,id:"bedroom",room:"bedroom"}),null);
+  for(const kind of ["weather_sources","weather_priorities"])
+    assert.equal(pending.pageAction({kind}),null);
+  // Pending restart prevents edits to the canonical manifest, but DH label
+  // changes remain an independent, non-restarting UI operation.
+  assert.equal(pending.pageAction({kind:"room",id:"bedroom"}).label,"editor.rename");
+  assert.equal(pending.pageAction({kind:"device",room:"bedroom",
+    id:"climate.bedroom_ac"}).label,"editor.rename");
 });
 test("UI titles offer an explicit edit action without implicit auto editor",()=>{
   assert.match(app,/pageAction\?\.\(item\)/);
