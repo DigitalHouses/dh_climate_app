@@ -390,6 +390,8 @@
     for(const item of items){
       const line=text("div","","editor-bound-entity");
       line.append(text("span",item.name,"mono"));
+      line.append(text("span",item.reading || configuredReading(item.entity),
+        "editor-bound-value"));
       const remove=button("×",()=>{
         onConfirm(items.filter(x=>x.entity!==item.entity).map(x=>x.entity));
       });
@@ -428,6 +430,8 @@
   function weatherProviderEditor(parent) {
     const listed=(candidate.providers||[]).map(provider=>({
       entity:provider.entity_id,name:providerTitle(provider)+" ["+provider.entity_id+"]",
+      reading:weatherReading(provider.id,"temperature")+" · "+
+        weatherReading(provider.id,"humidity"),
     }));
     pickerSources(parent,"provider",localize("weather_providers"),listed,next=>{
       const current=candidate.providers||[];
@@ -454,6 +458,8 @@
       const providerLine=text("div","","editor-bound-entity");
       providerLine.append(
         text("span",providerTitle(provider)+" · "+provider.entity_id,"mono"),
+        text("span",weatherReading(provider.id,"temperature")+" · "+
+          weatherReading(provider.id,"humidity"),"editor-bound-value"),
         button(localize("rename"),
           ()=>editWeatherName("provider",provider.id,provider.entity_id)),
       );
@@ -466,6 +472,7 @@
         sensorLine.append(
           text("span",weatherSensorTitle(logicalId,quantity)+
             " · "+expectedEntityId,"mono"),
+          text("span",weatherReading(provider.id,quantity),"editor-bound-value"),
           button(localize("rename"),
             ()=>editWeatherName("weather_sensor",logicalId,provider.entity_id)),
         );
@@ -480,6 +487,7 @@
       parent.append(text("p",localize("weather_sensor_hint"),"subtle small"));
     const listed=sources.map(s=>({
       entity:s.entity_id,name:weatherSensorTitle(s.id,quantity)+" ["+s.entity_id+"]",
+      reading:weatherReading(s.entity_id,quantity),
     }));
     pickerSources(parent,"physical-"+quantity,localize("weather_physical")+" · "+
       (quantity==="temperature"?tr("temperature"):tr("humidity")),listed,next=>{
@@ -771,7 +779,9 @@
         repaint();
       });
       remove.setAttribute("aria-label",localize("remove_entity")+" "+id);
-      line.append(name,remove);list.append(line);
+      line.append(name,
+        text("span",configuredReading(id),"editor-bound-value"),
+        remove);list.append(line);
     }
     const choose=button(ids.length?localize("change_binding"):localize("add_binding"),
       ()=>window.DHClimateEntityPicker.open({
