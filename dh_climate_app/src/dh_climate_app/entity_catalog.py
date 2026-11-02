@@ -18,7 +18,7 @@ import websockets
 LOGGER = logging.getLogger(__name__)
 PICKER_DOMAINS = frozenset({
     "sensor", "binary_sensor", "climate", "switch", "humidifier",
-    "weather", "number",
+    "weather", "number", "input_boolean", "input_number", "valve", "select",
 })
 MAX_ENTITIES = 8000
 CLIMATE_WEATHER_UNIQUE_ID = re.compile(
