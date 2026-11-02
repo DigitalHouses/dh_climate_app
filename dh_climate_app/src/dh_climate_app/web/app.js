@@ -938,7 +938,7 @@ async function restartApp() {
 }
 
 function render() {
-  window.DHClimateEditor?.setWeatherContext?.(snapshot?.weather,weatherCatalog);
+  window.DHClimateEditor?.setWeatherContext?.(snapshot?.weather,weatherCatalog,snapshot);
   renderRestartBanner();
   $("top-title").textContent = t("explorer");
   if (!$("save-diagnostics").disabled)
