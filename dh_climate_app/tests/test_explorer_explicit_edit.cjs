@@ -56,21 +56,21 @@ test("navigation between weather branches does not enter editing mode",()=>{
   };
   vm.runInNewContext(app.slice(start,end)+
     "\nglobalThis.switchPage=navigate;globalThis.currentPage=()=>selection;",ctx);
-  for(const kind of ["weather_sources","weather_priorities","season",
-    "home","weather_sources","weather_priorities","system"]){
+  for(const kind of ["weather_sources","outdoor_physical","weather_priorities","season",
+    "home","weather_sources","outdoor_physical","weather_priorities","system"]){
     ctx.switchPage({kind});
     assert.equal(ctx.currentPage().kind,kind);
   }
   assert.equal(autoEdits,0,"tree navigation must never call enterWeatherSection");
-  assert.equal(renders,7);
-  assert.equal(catalogLoads,5);
-  assert.equal(checks,7);
+  assert.equal(renders,9);
+  assert.equal(catalogLoads,7);
+  assert.equal(checks,9);
 });
 test("edit mode begins only after explicit section action and has visible editing heading",async()=>{
   const {api,writes}=await setup();
   assert.equal(api.isEditing(),false);
   assert.equal(api.viewMode(),"editor.view");
-  for(const kind of ["weather_sources","weather_priorities"]){
+  for(const kind of ["weather_sources","outdoor_physical","weather_priorities"]){
     const action=api.pageAction({kind});
     assert.ok(action);
     assert.equal(action.label,"editor.edit");
@@ -121,9 +121,9 @@ test("room and device page editing is explicit, viewers get no edit button",asyn
   assert.equal(api.isEditing(),true);
   const viewer=(await setup(false)).api;
   const pending=(await setup(true,true)).api;
-  for(const kind of ["weather_sources","weather_priorities","room","device"])
+  for(const kind of ["weather_sources","outdoor_physical","weather_priorities","room","device"])
     assert.equal(viewer.pageAction({kind,id:"bedroom",room:"bedroom"}),null);
-  for(const kind of ["weather_sources","weather_priorities"])
+  for(const kind of ["weather_sources","outdoor_physical","weather_priorities"])
     assert.equal(pending.pageAction({kind}),null);
   // Pending restart prevents edits to the canonical manifest, but DH label
   // changes remain an independent, non-restarting UI operation.
