@@ -73,8 +73,14 @@
     finally {haAreaLoading=null;}
   }
   function displayName(kind, id, language, fallback) {
-    const text=labelsState.labels?.[kind + ":" + id]?.[language];
-    return text || fallback;
+    const names=labelsState.labels?.[kind + ":" + id] || {};
+    const first=language==="en"?"en":"ru";
+    const second=first==="ru"?"en":"ru";
+    // A custom DH name in either language takes precedence over the HA
+    // friendly_name. Empty preferred translation must not hide the other.
+    return (typeof names[first]==="string" && names[first].trim()) ||
+      (typeof names[second]==="string" && names[second].trim()) ||
+      fallback;
   }
   async function loadLabels() {
     try {
@@ -358,8 +364,14 @@
     const original=labelsState.labels?.[key] || {};
     // Return to the same unsaved weather form after saving the label.
     // Labels are independent UI metadata and never change source IDs.
+    const liveProvider=(weatherState?.providers||[]).find(p=>
+      p.id===id || p.entity_id===sourceName);
+    const haEntity=(haWeatherCatalog?.entities||[]).find(item=>
+      kind==="provider" ? item.entity_id===sourceName :
+        item.climate_source_id===id);
     edit={kind:"label",key,technicalId:id,sourceName,
-      haName:null,fromWeather:true,returnWeatherKind:edit.kind,
+      haName:haEntity?.name || (kind==="provider"?liveProvider?.friendly_name:null) || null,
+      fromWeather:true,returnWeatherKind:edit.kind,
       names:{ru:original.ru||"",en:original.en||""}};
     message="";
     repaint();
@@ -475,6 +487,7 @@
     return {
       label:name,entityId:ha?.entity_id || fallbackId,
       numeric,invalid,
+      active:weatherState?.[quantity==="temperature"?"source":"humidity_source"]===id,
     };
   }
   function priorityField(parent,quantity) {
@@ -503,10 +516,11 @@
       grip.setAttribute("aria-hidden","true");
       const rank=text("strong",String(index+1)+".","editor-priority-rank");
       const info=text("div","","editor-priority-info");
-      info.append(
-        text("span",detail.label,"editor-priority-name"),
-        text("span",detail.entityId,"editor-priority-entity mono"),
-      );
+      const nameRow=text("div","","editor-priority-title-line");
+      nameRow.append(text("span",detail.label,"editor-priority-name"));
+      if(detail.active)
+        nameRow.append(text("span",tr("weather_active"),"weather-active-indicator"));
+      info.append(nameRow,text("span",detail.entityId,"editor-priority-entity mono"));
       const value=text("span",detail.numeric,
         "editor-priority-value"+(detail.invalid?" unavailable":""));
       const actions=text("span","","editor-source-actions");

@@ -9,6 +9,7 @@ async function bootstrap(admin=true){
   const window={};
   const labels={schema_version:1,revision:2,labels:{
     "room:livingroom":{ru:"Гостиная"},
+    "provider:p_almaty":{en:"accu weather"},
     "entity:sensor.th_livingroom_temperature":{ru:"Температура гостиной"},
   }};
   const state={options:{rooms:[{id:"livingroom",name:"Living Room"}]},
@@ -21,10 +22,12 @@ async function bootstrap(admin=true){
   await editor.init(key=>key,()=>{},()=>{renders++});
   return {editor,renders};
 }
-test("DH Russian labels override HA friendly names, with separate English fallback",async()=>{
+test("DH labels prefer current language, then the other language, then HA",async()=>{
   const {editor}=await bootstrap(true);
   assert.equal(editor.displayName("room","livingroom","ru","Living Room HA"),"Гостиная");
-  assert.equal(editor.displayName("room","livingroom","en","Living Room HA"),"Living Room HA");
+  assert.equal(editor.displayName("room","livingroom","en","Living Room HA"),"Гостиная");
+  assert.equal(editor.displayName("provider","p_almaty","ru","Almaty"),"accu weather");
+  assert.equal(editor.displayName("provider","p_almaty","en","Almaty"),"accu weather");
   assert.equal(editor.displayName("entity","sensor.th_livingroom_temperature","ru","HA Source"),"Температура гостиной");
   assert.equal(editor.displayName("entity","sensor.not_set","ru","HA Source"),"HA Source");
 });

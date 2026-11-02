@@ -571,9 +571,12 @@ function showWeatherPriorities(main) {
     const lines=refs.map((s,i)=>{
       const item=weatherSourceMetadata(s.entity_id,quantity);
       const line=dom("div","weather-priority-readonly");
+      const name=dom("div","weather-priority-readonly-name");
+      add(name,dom("span","",item.name));
+      if(w[quantity==="temperature"?"source":"humidity_source"]===s.entity_id)
+        name.append(dom("span","weather-active-indicator",t("weather_active")));
       add(line,dom("strong","",String(i+1)+"."),
-        dom("div","weather-priority-readonly-name",item.name),
-        dom("span",item.valid?"":"warn",item.value),
+        name,dom("span",item.valid?"":"warn",item.value),
         paragraph(item.entityId,"mono subtle"));
       return line;
     });

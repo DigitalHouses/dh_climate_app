@@ -15,12 +15,13 @@ const context = vm.createContext({
   Intl, Number, Set,
 });
 // Import only the pure view functions: boot handlers need a full browser.
+const priorityStart = source.indexOf("function weatherSourceMetadata(");
 const seasonStart = source.indexOf("function seasonSourceNode(");
 const seasonEnd = source.indexOf("function showHome(", seasonStart);
-assert.ok(seasonStart > boot && seasonEnd > seasonStart);
+assert.ok(priorityStart > boot && seasonStart > priorityStart && seasonEnd > seasonStart);
 vm.runInContext(source.slice(0, boot) + "\n" +
-  source.slice(seasonStart, seasonEnd) +
-  "\nglobalThis.unit = {buildTree, keyOf, findPath, technical, number, showSeason};", context);
+  source.slice(priorityStart, seasonEnd) +
+  "\nglobalThis.unit = {buildTree, keyOf, findPath, technical, number, showSeason, showWeatherPriorities};", context);
 const u = context.unit;
 const fixture = {
   app: {version:"0.2.2", ha_connected:true, health:"healthy", problems:[]},
@@ -164,4 +165,55 @@ test("season diagnostics render actual sensor and weather ancestry without contr
   assert.match(rendered,/10,5.*°C/);
   assert.equal((function visit(e){return (e.tagName==="input"||e.tagName==="button"?1:0)+
     e.children.reduce((n,x)=>n+visit(x),0);})(main),0);
+});
+
+test("read-only priorities mark just Engine-selected temperature and humidity sources",()=>{
+  class Element {
+    constructor(tag){this.tagName=tag;this.children=[];this.className="";this._text="";}
+    set textContent(v){this._text=String(v);this.children=[];}
+    get textContent(){return this._text+this.children.map(x=>x.textContent||"").join("");}
+    append(...items){this.children.push(...items);}
+  }
+  function all(e,kind) {
+    return [
+      ...(e.className===kind?[e]:[]),
+      ...e.children.flatMap(c=>all(c,kind)),
+    ];
+  }
+  context.document.createElement=tag=>new Element(tag);
+  context.window.DHClimateEditor={canChange:()=>false,displayName:(kind,id,locale,fallback)=>fallback};
+  context.caseWeather={
+    app:{ha_connected:true},
+    weather:{
+      source:"met.temperature",humidity_source:"google.humidity",
+      providers:[
+        {id:"met",entity_id:"weather.forecast_home_assistant",
+         friendly_name:"Met.no"},
+        {id:"google",entity_id:"weather.asyl_mura",
+         friendly_name:"Google"},
+      ],
+      physical_sensors:[],
+      temperature_sources:[
+        {entity_id:"met.temperature",state:9.4,available:true},
+        {entity_id:"google.temperature",state:3.2,available:true},
+      ],
+      humidity_sources:[
+        {entity_id:"google.humidity",state:69,available:true},
+        {entity_id:"met.humidity",state:34,available:true},
+      ],
+    },
+  };
+  vm.runInContext("snapshot=caseWeather;weatherCatalog=null;",context);
+  let main=new Element("main");
+  context.unit.showWeatherPriorities(main);
+  let rows=all(main,"weather-priority-readonly");
+  assert.equal(rows.length,4);
+  assert.deepEqual(rows.map(r=>all(r,"weather-active-indicator").length),[1,0,1,0]);
+  assert.equal(all(main,"weather-active-indicator").length,2);
+  context.caseWeather.weather.source="google.temperature";
+  vm.runInContext("snapshot=caseWeather;",context);
+  main=new Element("main");
+  context.unit.showWeatherPriorities(main);
+  rows=all(main,"weather-priority-readonly");
+  assert.deepEqual(rows.map(r=>all(r,"weather-active-indicator").length),[0,1,1,0]);
 });
