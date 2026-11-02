@@ -45,6 +45,13 @@ const base={
 };
 const weather={
   source_model:"sensors",
+  source:"met.temperature",
+  humidity_source:"google.humidity",
+  providers:[
+    {id:"met",entity_id:"weather.forecast_home_assistant",friendly_name:"Forecast"},
+    {id:"google",entity_id:"weather.asyl_mura",friendly_name:"Google"},
+    {id:"almaty",entity_id:"weather.almaty",friendly_name:"Almaty"},
+  ],
   temperature_sources:[
     {entity_id:"met.temperature",state:9.3,available:true},
     {entity_id:"google.temperature",state:2.7,available:true},
@@ -98,6 +105,9 @@ test("separate priority page shows HA names, values, allows arrow and drag witho
   }
   let all=rows();
   assert.equal(all.length,5);
+  assert.equal(all.filter(r=>r.textContent.includes("weather_active")).length,2);
+  assert.match(all[0].textContent,/weather_active/);
+  assert.match(all[3].textContent,/weather_active/);
   assert.match(all[0].textContent,/Полное имя из HA/);
   assert.match(all[0].textContent,/sensor.custom_ha_meto/);
   assert.match(all[0].textContent,/9,3.*°C/);
@@ -107,7 +117,14 @@ test("separate priority page shows HA names, values, allows arrow and drag witho
   up.onclick(); // Google becomes T #1, humidity unchanged.
   all=rows();
   assert.match(all[0].textContent,/Google температура/);
-  assert.match(all[3].textContent,/google.humidity|Google/);
+  assert.doesNotMatch(all[0].textContent,/weather_active/);
+  assert.match(all[1].textContent,/weather_active/);
+  assert.match(all[3].textContent,/weather_active/);
+  // Live Engine selection follows the source, not row position.
+  api.setWeatherContext({...weather,source:"google.temperature"},catalog);
+  all=rows();
+  assert.match(all[0].textContent,/weather_active/);
+  assert.doesNotMatch(all[1].textContent,/weather_active/);
 
   // Drag physical sensor from T #3 to T #1. Humidity remains unchanged.
   let started=null,prevented=0;
@@ -152,4 +169,15 @@ test("sources page is separate from priority editing",async()=>{
   assert.match(content,/editor.weather_physical/);
   assert.doesNotMatch(content,/editor.weather_priorities_page/);
   assert.doesNotMatch(content,/editor.weather_drag_help/);
+  // Naming panel must show HA original, not a dash.
+  const providerRow=find(main,x=>x.className==="editor-bound-entity" &&
+    x.textContent.includes("weather.almaty"))[0];
+  assert.ok(providerRow);
+  const rename=find(providerRow,x=>x.tagName==="button" &&
+    x.textContent==="editor.rename")[0];
+  assert.ok(rename);
+  rename.onclick();
+  api.renderEditor(main);
+  assert.match(main.textContent,/Almaty/);
+  assert.match(main.textContent,/editor.ha_name/);
 });
