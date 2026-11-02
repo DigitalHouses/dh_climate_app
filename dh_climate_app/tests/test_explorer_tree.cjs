@@ -181,7 +181,7 @@ test("read-only priorities mark just Engine-selected temperature and humidity so
     ];
   }
   context.document.createElement=tag=>new Element(tag);
-  context.window.DHClimateEditor={canChange:()=>false};
+  context.window.DHClimateEditor={canChange:()=>false,displayName:(kind,id,locale,fallback)=>fallback};
   context.caseWeather={
     app:{ha_connected:true},
     weather:{
