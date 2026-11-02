@@ -167,7 +167,8 @@ function buildTree(data) {
     const sensors = ["temperature", "humidity", "window"].flatMap(role =>
       (room.sensors?.[role] || []).map(sensor =>
         node("sensor", namedEntity(sensor), "◉", [], {room:room.id, id:sensor.entity_id,
-          role, haName:sensor.friendly_name, technicalId:sensor.entity_id})
+          role, haName:sensor.friendly_name, technicalId:sensor.entity_id,
+           reading:entityReading(sensor)})
       )
     );
     const devices = (room.devices || []).map(device =>
@@ -206,12 +207,13 @@ function buildTree(data) {
         node("weather_sensor",namedWeatherSensor(p,quantity),
           quantity==="temperature"?"🌡":"💧",[],
           {id:p.id+"."+quantity,provider:p.id,quantity,technicalId:p.id+"."+quantity,
-            sourceName:p.entity_id}))
+            sourceName:p.entity_id,reading:measurementReading(p[quantity],quantity)}))
     ],{id:p.id,technicalId:p.id,sourceName:p.entity_id,haName:p.friendly_name})
   );
   const physicalNodes = (weather.physical_sensors || []).map(s =>
     node("outdoor_sensor",namedOutdoorSensor(s),s.quantity==="temperature"?"🌡":"💧",
-      [],{id:s.id,technicalId:s.id,sourceName:s.entity_id,haName:s.friendly_name})
+      [],{id:s.id,technicalId:s.id,sourceName:s.entity_id,haName:s.friendly_name,
+         reading:physicalReading(s)})
   );
   const weatherChildren = [
     node("weather_sources",t("weather_sources_and_sensors"),"▤",
@@ -279,6 +281,8 @@ function renderTree() {
       ? item.label + "\n" + item.id : item.label;
     if (k === selectedKey()) select.setAttribute("aria-current", "page");
     add(select, dom("span", "tree-icon", item.icon), dom("span", "tree-text", item.label));
+    if(item.reading!==undefined)
+      select.append(dom("span","tree-sensor-reading",item.reading));
     select.onclick = () => navigate(item);
     if (["device","sensor"].includes(item.kind) ||
         window.DHClimateEditor?.menuActions(item)?.length)
@@ -464,7 +468,11 @@ function signalRows(signals) {
       extra.push(number(signal.attributes.temperature, " °C"));
     if (signal.attributes?.humidity !== null && signal.attributes?.humidity !== undefined)
       extra.push(number(signal.attributes.humidity, " %"));
-    line.append(row(t(signal.role), observedText(signal) + (extra.length ? " · " + extra.join(" · ") : "")));
+    line.append(row(t(signal.role),
+      (signal.quantity && signal.original_entity_id
+        ? measurementReading(signal.state,signal.quantity)
+        : entityReading(signal)) +
+      (extra.length ? " · " + extra.join(" · ") : "")));
     const label = snapshot?.weather?.source_model==="sensors"
       ? (signal.original_entity_id?.startsWith("weather.")
           ? withOverride("weather_sensor",signal.entity_id,
@@ -529,7 +537,7 @@ function showWeather(main) {
 function showProviders(main) {
   const w=snapshot.weather;
   const providers=(w.providers||[]).map(p=>
-    clickable(namedProvider(p),p.entity_id,
+    sensorClickable(namedProvider(p),p.entity_id,providerReadings(p),
       ()=>navigate({kind:"provider",id:p.id})));
   add(main,title(t("weather_sources_and_sensors")),
     card(t("weather_providers"),listOrEmpty(providers)));
@@ -567,7 +575,7 @@ function showWeatherSensor(main) {
 }
 function showOutdoorPhysical(main) {
   const links=(snapshot.weather.physical_sensors||[]).map(s=>
-    clickable(namedOutdoorSensor(s),s.entity_id,
+    sensorClickable(namedOutdoorSensor(s),s.entity_id,physicalReading(s),
       ()=>navigate({kind:"outdoor_sensor",id:s.id})));
   add(main,title(t("weather_physical")),
     card(t("weather_physical"),listOrEmpty(links)));
@@ -578,9 +586,9 @@ function showOutdoorSensor(main) {
   add(main,title(namedOutdoorSensor(sensor)),
     paragraph(sensor.entity_id,"mono subtle"),
     card(t("identification"),row(t("source"),sensor.entity_id),
-      row(t("role"),t(sensor.quantity))),
-    stats(stat(t(sensor.quantity),
-      number(sensor.value,sensor.quantity==="temperature"?" °C":" %"))));
+      row(t("role"),t(sensor.quantity)),
+      row(t("availability"),sensor.observed?.available?t("available"):t("unavailable"))),
+    stats(stat(t(sensor.quantity),physicalReading(sensor))));
 }
 function weatherSourceMetadata(id,quantity) {
   const w=snapshot?.weather || {};
@@ -803,7 +811,7 @@ function showSensor(main) {
     card(t("identification"),
       row(t("ha_friendly_name"),result.sensor.friendly_name || "—")),
     card(t("sensor"), row(t("role"), t(result.role)),
-      row(t("observed_state"), observedText(result.sensor)),
+      row(t("observed_state"), entityReading(result.sensor)),
       row(t("availability"), result.sensor.available ? t("available") : t("unavailable")),
       row(t("last_updated"), display(result.sensor.last_updated))));
 }
