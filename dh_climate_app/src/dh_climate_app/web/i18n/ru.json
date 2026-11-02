@@ -270,6 +270,7 @@
   "weather_sources_and_sensors": "Провайдеры и сенсоры",
   "weather_sensor_priorities": "Приоритеты сенсоров",
   "weather_unavailable": "Недоступно",
+  "weather_active": "Используется",
   "weather_priority_help": "Первый доступный сенсор имеет высший приоритет. Температура и влажность настраиваются независимо.",
   "weather_readonly_priority": "Изменение приоритетов доступно администратору после завершения перезапуска приложения.",
   "editor.weather_priorities_page": "Приоритеты сенсоров",
