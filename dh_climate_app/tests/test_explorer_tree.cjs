@@ -15,11 +15,12 @@ const context = vm.createContext({
   Intl, Number, Set,
 });
 // Import only the pure view functions: boot handlers need a full browser.
+const priorityStart = source.indexOf("function weatherSourceMetadata(");
 const seasonStart = source.indexOf("function seasonSourceNode(");
 const seasonEnd = source.indexOf("function showHome(", seasonStart);
-assert.ok(seasonStart > boot && seasonEnd > seasonStart);
+assert.ok(priorityStart > boot && seasonStart > priorityStart && seasonEnd > seasonStart);
 vm.runInContext(source.slice(0, boot) + "\n" +
-  source.slice(seasonStart, seasonEnd) +
+  source.slice(priorityStart, seasonEnd) +
   "\nglobalThis.unit = {buildTree, keyOf, findPath, technical, number, showSeason, showWeatherPriorities};", context);
 const u = context.unit;
 const fixture = {
