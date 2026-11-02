@@ -190,6 +190,10 @@ body.resizing-explorer { cursor:col-resize; user-select:none; }
 .editor-bound-list{display:flex;flex-direction:column;gap:5px;margin:0 0 8px;}
 .editor-bound-entity{display:flex;justify-content:space-between;align-items:center;
  gap:10px;padding:6px 9px;border:1px solid var(--border);border-radius:5px;background:var(--surface);}
+.editor-bound-value { margin-left:auto; min-width:70px; max-width:38%;
+  font-size:12px; font-weight:600; text-align:right;
+  font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.editor-bound-entity>span.mono { min-width:0; overflow-wrap:anywhere; }
 .editor-bound-entity>button{border:0;background:transparent;font-size:18px;color:var(--muted);}
 .editor-bound-entity>button:hover{color:var(--danger);}
 .picker-backdrop{position:fixed;inset:0;z-index:150;background:#000a;
