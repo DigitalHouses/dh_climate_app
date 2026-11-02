@@ -62,6 +62,13 @@ function fixture({status=200,offline=false}={}){
             temperature_sources:[{entity_id:"google.temperature",state:9.1}]
           }},
           runtime:{queued_commands:0,mqtt:{ever_connected:true}},
+          entity_catalog:{areas:[{id:"home",name:"Home"},{id:"other",name:"Private"}],
+            entities:[
+              {entity_id:"weather.asyl_mura",domain:"weather",integration:"met"},
+              {entity_id:"sensor.private_geocoded_location",domain:"sensor",
+               integration:"mobile_app",state:"Private location",
+               name:"Private street",area_id:"other"}
+            ]},
         })};
     }
     if(url==="api/snapshot")
@@ -89,13 +96,24 @@ test("save report includes tree, DOM, CSS, runtime and masks sensitive fields",a
     selection:{kind:"weather_priorities"},
     tree:[{kind:"weather",children:[{kind:"weather_priorities"}]}],
     local_unsaved:{priorities:{temperature:["google.temperature"]}},
+    editor:{manifest:{options:{providers:[
+      {entity_id:"weather.asyl_mura"}]}},labels:{room_areas:{}}},
+    weather_catalog_browser_cache:{
+      areas:[{id:"home",name:"Home"},{id:"other",name:"Private"}],
+      entities:[
+        {entity_id:"weather.asyl_mura",domain:"weather",integration:"met"},
+        {entity_id:"sensor.private_geocoded_location",domain:"sensor",
+         integration:"mobile_app",name:"Private street",state:"Private location",
+         area_id:"other"},
+      ]
+    },
     bearer:"Bearer hiddenValue",
   }),button,key=>key);
   assert.equal(f.getClicks(),1);
   assert.equal(f.getRequests(),1);
   assert.equal(button.disabled,false);
   const raw=f.exports[0].text;
-  assert.doesNotMatch(raw,/SHOULD_NOT_LEAK|private-user|hiddenValue/);
+  assert.doesNotMatch(raw,/SHOULD_NOT_LEAK|private-user|hiddenValue|Private street|Private location/);
   const report=JSON.parse(raw);
   assert.equal(report.schema_version,1);
   assert.equal(report.ui.state.selection.kind,"weather_priorities");
@@ -104,6 +122,12 @@ test("save report includes tree, DOM, CSS, runtime and masks sensitive fields",a
   assert.match(report.ui.css[0].rules,/card/);
   assert.equal(report.backend.data.runtime.queued_commands,0);
   assert.equal(report.backend.data.manifest.options.api_key,"[REDACTED]");
+  assert.equal(report.backend.data.entity_catalog.entities.length,1);
+  assert.equal(report.backend.data.entity_catalog.total_entities,2);
+  assert.equal(report.backend.data.entity_catalog.omitted_entities,1);
+  assert.equal(report.ui.state.weather_catalog_browser_cache.entities.length,1);
+  assert.equal(report.ui.state.weather_catalog_browser_cache.total_entities,2);
+  assert.equal(report.ui.state.weather_catalog_browser_cache.omitted_entities,1);
   const cleaned=f.window.DHClimateDiagnostics.sanitize({
     stack:"https://ha.example/api/hassio_ingress/private-route-token/app.js?api_key=secret",
   });
