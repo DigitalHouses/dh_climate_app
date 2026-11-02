@@ -187,7 +187,12 @@ test("sources page is separate from priority editing",async()=>{
   const cancel=find(main,x=>x.tagName==="button" &&
     x.textContent==="editor.cancel")[0];
   assert.ok(cancel);
-  cancel.onclick();
+  cancel.onclick(); // Back to provider editor after cancelling rename.
+  api.renderEditor(main);
+  const exitProviders=find(main,x=>x.tagName==="button" &&
+    x.textContent==="editor.cancel")[0];
+  assert.ok(exitProviders);
+  exitProviders.onclick(); // Back to browsing.
   assert.equal(api.isEditing(),false);
   assert.equal(api.enterWeatherSection("outdoor_physical"),true);
   api.renderEditor(main);
