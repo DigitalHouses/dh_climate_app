@@ -46,6 +46,10 @@
       for(const dev of room.devices||[])
         if(dev.entity_id===entityId)return dev.observed;
     }
+    for(const kind of ["separators","groups","circuits","pumps","actuators","valves","aggregators"])
+      for(const part of operationsState?.home?.hydraulics?.[kind]||[])
+        for(const signal of part.signals||[])
+          if(signal.entity_id===entityId)return signal;
     for(const resource of operationsState?.home?.resources||[]){
       for(const signal of resource.signals||[])
         if(signal.entity_id===entityId)return signal;
@@ -953,6 +957,336 @@
     }
     main.append(box);
   }
+
+  // Canonical hydraulic graph: configuration objects have exactly one owner;
+  // references from groups/contours point to those objects. Editing here
+  // changes only the validated manifest draft, never live equipment.
+  const hydraulicKinds=["separators","groups","circuits","pumps",
+    "actuators","valves","aggregators"];
+  const hydraulicTitle=kind => tr("hydraulic_"+kind);
+  const hydroConfig=()=>candidate?.hydraulics||{};
+  const hydroList=kind=>hydroConfig()[kind]||[];
+  const hydroLookup=(kind,id)=>hydroList(kind).find(item=>item.id===id);
+  const slugPattern=/^[a-z0-9][a-z0-9_]*$/;
+  const hydraulicRoles=[
+    "supply_temperature","return_temperature","temperature",
+    "supply_pressure","return_pressure","pressure",
+    "state","status","powered","power","rpm","position","flow",
+    "heat_request","pump_request","dhw","leak","fault",
+  ];
+  function hydraulicSignalKind(role) {
+    if(role.includes("temperature"))return "hydraulic-temperature";
+    if(role.includes("pressure"))return "hydraulic-pressure";
+    if(role==="rpm")return "hydraulic-rpm";
+    if(role==="power")return "hydraulic-power";
+    return "hydraulic-signal";
+  }
+  function beginHydraulic(type,id=null,preset={}) {
+    if(!mutable() || !navigateAway() || !hydraulicKinds.includes(type))return false;
+    candidate=clone(info.options);
+    if(!candidate.hydraulics)candidate.hydraulics={};
+    if(!Array.isArray(candidate.hydraulics[type]))candidate.hydraulics[type]=[];
+    const list=candidate.hydraulics[type];
+    let index=id ? list.findIndex(part=>part.id===id) : list.length;
+    if(index<0){discardLocal();return false;}
+    if(!id) {
+      const next={id:"",name:"",signals:{},...preset};
+      if(type==="groups"&&!next.temperature_class)next.temperature_class="high";
+      if(type==="aggregators"&&!next.device_type)next.device_type="hardware";
+      list.push(next);
+    }
+    edit={kind:"hydraulic",type,index,id,isNew:!id};
+    message="";repaint();return true;
+  }
+  function beginHydraulicCreator(type="separators"){
+    if(!mutable() || !navigateAway())return false;
+    candidate=clone(info.options);
+    edit={kind:"hydraulic_create",type};
+    message="";repaint();return true;
+  }
+  function createFromHydraulicCreator(type) {
+    if(!edit || edit.kind!=="hydraulic_create")return;
+    if(!candidate.hydraulics)candidate.hydraulics={};
+    if(!Array.isArray(candidate.hydraulics[type]))candidate.hydraulics[type]=[];
+    const list=candidate.hydraulics[type];
+    const item={id:"",name:"",signals:{}};
+    if(type==="groups")item.temperature_class="high";
+    if(type==="aggregators")item.device_type="hardware";
+    list.push(item);
+    edit={kind:"hydraulic",type,index:list.length-1,id:null,isNew:true};
+    message="";repaint();
+  }
+  function dependencyNames(type,id,hydraulics) {
+    const uses=[];
+    for(const [kind,field,target] of [
+      ["groups","separator_id","separators"],
+      ["groups","aggregator_id","aggregators"],
+      ["circuits","group_id","groups"],
+      ["groups","pump_ids","pumps"],["circuits","pump_ids","pumps"],
+      ["groups","actuator_ids","actuators"],["circuits","actuator_ids","actuators"],
+      ["groups","valve_ids","valves"],["circuits","valve_ids","valves"],
+    ]) {
+      if(target!==type)continue;
+      for(const part of hydraulics?.[kind]||[]) {
+        const ref=part[field];
+        if(Array.isArray(ref)?ref.includes(id):ref===id)
+          uses.push(kind+"/"+part.id);
+      }
+    }
+    return uses;
+  }
+  function deleteHydraulic(type,id) {
+    if(!mutable() || !navigateAway() || !hydraulicKinds.includes(type))return;
+    const dependencies=dependencyNames(type,id,info.options.hydraulics);
+    if(dependencies.length) {
+      show(localize("hydraulic_delete_blocked")+": "+dependencies.join(", "),true);
+      return;
+    }
+    confirmAction("hydraulic_delete_confirm",async()=>{
+      candidate=clone(info.options);
+      if(!candidate.hydraulics || !Array.isArray(candidate.hydraulics[type]))return;
+      candidate.hydraulics[type]=candidate.hydraulics[type].filter(item=>item.id!==id);
+      await persist();
+    });
+  }
+  function simpleSelect(parent,label,value,options,onChange) {
+    const choices=[["",localize("none")],
+      ...options.map(x=>[x.id,x.name||x.id])];
+    selectField(parent,label,value||"",choices,
+      v=>onChange(v||null));
+  }
+  function linkField(parent,label,part,key,type) {
+    const section=text("section","","editor-entity-field");
+    section.append(text("p",label,"editor-entity-title"));
+    const selected=new Set(part[key]||[]);
+    const choices=hydroList(type);
+    if(!choices.length)section.append(text("p",localize("hydraulic_no_equipment"),"subtle small"));
+    for(const target of choices) {
+      const line=text("label","","editor-hydraulic-link");
+      const input=document.createElement("input");
+      input.type="checkbox";input.checked=selected.has(target.id);
+      input.onchange=()=>{
+        if(input.checked)selected.add(target.id);else selected.delete(target.id);
+        const ids=choices.filter(item=>selected.has(item.id)).map(item=>item.id);
+        if(ids.length)part[key]=ids;else delete part[key];
+        validated=false;
+      };
+      line.append(input,text("span",target.name+" · "+target.id));section.append(line);
+    }
+    parent.append(section);
+  }
+  function hydroSignalAdd(parent,part) {
+    const section=text("section","","card");
+    section.append(text("h3",localize("hydraulic_signals"),"section-heading"),
+      text("p",localize("hydraulic_signals_help"),"subtle small"));
+    const signals=part.signals||{};
+    part.signals=signals;
+    for(const [role,id] of Object.entries(signals)){
+      entityField(section,tr(role)===role?role:tr(role),id,
+        hydraulicSignalKind(role),next=>{
+          if(next)signals[role]=next;else delete signals[role];
+        });
+    }
+    const roleRow=text("div","","editor-actions");
+    const roleInput=document.createElement("input");
+    roleInput.type="text";roleInput.className="editor-hydraulic-role";
+    roleInput.placeholder=localize("hydraulic_signal_role");
+    roleInput.setAttribute("list","hydraulic-role-suggestions");
+    const suggestions=document.createElement("datalist");
+    suggestions.id="hydraulic-role-suggestions";
+    for(const role of hydraulicRoles) {
+      const opt=document.createElement("option");opt.value=role;
+      suggestions.append(opt);
+    }
+    roleRow.append(roleInput,suggestions,
+      button(localize("hydraulic_add_signal"),()=>{
+        const role=roleInput.value.trim().toLowerCase();
+        if(!slugPattern.test(role)) {
+          show(localize("hydraulic_invalid_id"),true);return;
+        }
+        if(Object.prototype.hasOwnProperty.call(signals,role)) {
+          show(localize("hydraulic_duplicate_signal"),true);return;
+        }
+        window.DHClimateEntityPicker.open({
+          kind:hydraulicSignalKind(role),title:role,
+          multiple:false,values:[],usage:usages(),tr,
+          onConfirm:entity=>{
+            if(!entity)return;
+            signals[role]=entity;validated=false;repaint();
+          },
+        });
+      }));
+    section.append(roleRow);parent.append(section);
+  }
+  function hydraulicTerminalFields(parent,part) {
+    const section=text("section","","card");
+    section.append(text("h3",localize("hydraulic_terminals"),"section-heading"));
+    const terminals=part.terminals||[];
+    part.terminals=terminals;
+    for(const [i,terminal] of terminals.entries()) {
+      const panel=text("div","","editor-hydraulic-terminal");
+      field(panel,localize("hydraulic_id"),terminal.id,v=>terminal.id=v.trim().toLowerCase());
+      field(panel,localize("hydraulic_name"),terminal.name,v=>terminal.name=v);
+      simpleSelect(panel,localize("hydraulic_room"),terminal.room_id,
+        candidate.rooms||[],v=>{if(v)terminal.room_id=v;else delete terminal.room_id;});
+      entityField(panel,localize("hydraulic_terminal_entity"),terminal.entity_id,
+        "hydraulic-signal",v=>{
+          if(v)terminal.entity_id=v;else delete terminal.entity_id;
+        },{roomId:terminal.room_id||part.room_id||""});
+      panel.append(button(localize("hydraulic_remove_terminal"),()=>{
+        terminals.splice(i,1);validated=false;repaint();
+      }));
+      section.append(panel);
+    }
+    section.append(button(localize("hydraulic_add_terminal"),()=>{
+      terminals.push({id:"",name:""});validated=false;repaint();
+    }));
+    parent.append(section);
+  }
+  function hydraulicForm(main) {
+    const type=edit.type;
+    const part=hydroList(type)[edit.index];
+    if(!part)return;
+    main.append(text("h3",hydraulicTitle(type),"editor-section-title"),
+      text("p",localize("hydraulic_not_live"),"subtle small"));
+    const section=text("section","","card");
+    field(section,localize("hydraulic_id"),part.id,
+      v=>part.id=v.trim().toLowerCase(),false,!edit.isNew);
+    field(section,localize("hydraulic_name"),part.name,v=>part.name=v);
+    if(type==="aggregators")selectField(section,localize("hydraulic_controller_type"),
+      part.device_type||"hardware",[
+        ["hardware",tr("hardware")],["virtual",tr("virtual")],
+      ],v=>part.device_type=v);
+    if(type==="groups"){
+      selectField(section,localize("hydraulic_temperature_class"),
+        part.temperature_class||"high",[
+          ["high",tr("high")],["low",tr("low")],
+        ],v=>part.temperature_class=v);
+      simpleSelect(section,localize("hydraulic_parent_separator"),
+        part.separator_id,hydroList("separators"),
+        v=>{if(v)part.separator_id=v;else delete part.separator_id;});
+      simpleSelect(section,localize("hydraulic_parent_aggregator"),
+        part.aggregator_id,hydroList("aggregators"),
+        v=>{if(v)part.aggregator_id=v;else delete part.aggregator_id;});
+    }
+    if(type==="circuits"){
+      simpleSelect(section,localize("hydraulic_parent_group"),
+        part.group_id,hydroList("groups"),
+        v=>{if(v)part.group_id=v;else delete part.group_id;});
+      simpleSelect(section,localize("hydraulic_room"),
+        part.room_id,candidate.rooms||[],
+        v=>{if(v)part.room_id=v;else delete part.room_id;});
+    }
+    if(["groups","circuits"].includes(type))
+      for(const [key,target] of [["pump_ids","pumps"],
+        ["actuator_ids","actuators"],["valve_ids","valves"]])
+        linkField(section,localize("hydraulic_link_"+target),part,key,target);
+    main.append(section);
+    hydroSignalAdd(main,part);
+    if(type==="circuits")hydraulicTerminalFields(main,part);
+    const actions=text("div","","editor-actions");
+    actions.append(button(localize("save_draft"),persist),
+      button(localize("cancel"),()=>{discardLocal();repaint();}));
+    main.append(actions);
+  }
+  function hydraulicCreatorForm(main) {
+    main.append(text("h3",localize("hydraulic_new_object"),"editor-section-title"));
+    const box=text("section","","card");
+    selectField(box,localize("hydraulic_object_type"),edit.type,
+      hydraulicKinds.map(x=>[x,hydraulicTitle(x)]),
+      v=>edit.type=v);
+    const actions=text("div","","editor-actions");
+    actions.append(button(localize("hydraulic_continue"),
+        ()=>createFromHydraulicCreator(edit.type)),
+      button(localize("cancel"),()=>{discardLocal();repaint();}));
+    box.append(actions);main.append(box);
+  }
+  function hydraulicPageAction(item) {
+    if(item.kind==="hydraulics")
+      return {label:localize("hydraulic_new_object"),run:()=>beginHydraulicCreator()};
+    if(item.kind==="hydraulic_collection"){
+      if(["aggregators","separators"].includes(item.id))
+        return {label:localize("hydraulic_add_"+item.id),
+          run:()=>beginHydraulic(item.id)};
+      if(item.id==="direct_groups")
+        return {label:localize("hydraulic_add_groups"),
+          run:()=>beginHydraulic("groups")};
+      if(item.id==="direct_circuits")
+        return {label:localize("hydraulic_add_circuits"),
+          run:()=>beginHydraulic("circuits")};
+      return {label:localize("hydraulic_new_object"),run:()=>beginHydraulicCreator()};
+    }
+    if(item.kind==="hydraulic_temperature") {
+      const [separator,type]=String(item.id||"").split(":");
+      return {label:localize("hydraulic_add_groups"),
+        run:()=>beginHydraulic("groups",null,{
+          ...(separator!=="direct"?{separator_id:separator}:{}),
+          temperature_class:type==="low"?"low":"high",
+        })};
+    }
+    if(item.kind==="hydraulic_item") {
+      const [type,id]=String(item.id||"").split(":");
+      if(hydraulicKinds.includes(type) &&
+         (info.options.hydraulics?.[type]||[]).some(part=>part.id===id))
+        return {label:localize("edit"),run:()=>beginHydraulic(type,id)};
+    }
+    return null;
+  }
+  function hydraulicMenuActions(item) {
+    const actions=[];
+    const action=hydraulicPageAction(item);
+    if(action)actions.push(action);
+    if(item.kind==="hydraulics") {
+      // The creator handles all seven object types without pseudo-devices.
+      return actions;
+    }
+    if(item.kind==="hydraulic_item") {
+      const [type,id]=String(item.id||"").split(":");
+      if(type==="separators")
+        actions.unshift({label:localize("hydraulic_add_groups"),
+          run:()=>beginHydraulic("groups",null,{separator_id:id,temperature_class:"high"})});
+      if(type==="groups")
+        actions.unshift({label:localize("hydraulic_add_circuits"),
+          run:()=>beginHydraulic("circuits",null,{group_id:id})});
+      if(type==="circuits")
+        actions.unshift({label:localize("hydraulic_edit_terminals"),
+          run:()=>beginHydraulic("circuits",id)});
+      if((info.options.hydraulics?.[type]||[]).some(part=>part.id===id))
+        actions.push({label:localize("hydraulic_delete"),
+          run:()=>deleteHydraulic(type,id),destructive:true});
+    }
+    return actions;
+  }
+  function previewHydraulics(live) {
+    if(!info || (!info.dirty&&!info.pending_restart) || !info.options.hydraulics)
+      return live;
+    const projected={};
+    const connected=operationsState?.app?.ha_connected===true;
+    for(const type of hydraulicKinds) {
+      projected[type]=(info.options.hydraulics[type]||[]).map(part=>{
+        const previous=(live?.[type]||[]).find(old=>old.id===part.id);
+        const changed=!previous||previous.name!==part.name;
+        const signals=Object.entries(part.signals||{}).map(([role,id])=>{
+          const old=previous?.signals?.find(s=>s.role===role&&s.entity_id===id);
+          const obs=old||(connected?linkedObservation(id):null);
+          return {role,entity_id:id,friendly_name:obs?.friendly_name||obs?.name||null,
+            state:connected?obs?.state??null:null,
+            unit:connected?obs?.unit??null:null,
+            available:connected&&obs?.available===true,
+            last_updated:connected?obs?.last_updated||null:null,attributes:{}};
+        });
+        const terminals=(part.terminals||[]).map(t=>{
+          const old=previous?.terminals?.find(x=>x.id===t.id&&x.entity_id===t.entity_id);
+          const obs=old?.observed||(connected&&t.entity_id?linkedObservation(t.entity_id):null);
+          return {...t,observed:obs||null};
+        });
+        return {...part,name:changed?part.name+" ["+localize("draft_marker")+"]":part.name,
+          signals,terminals};
+      });
+    }
+    return projected;
+  }
+
   function renderEditor(main) {
     if (!edit) return false;
     main.replaceChildren();
@@ -966,6 +1300,8 @@
     if (edit.kind==="weather_priorities") weatherPriorityForm(main);
     if (edit.kind==="room") roomForm(main);
     if (edit.kind==="device") deviceForm(main);
+    if (edit.kind==="hydraulic_create") hydraulicCreatorForm(main);
+    if (edit.kind==="hydraulic") hydraulicForm(main);
     return true;
   }
   function controls(main) {
@@ -1053,6 +1389,8 @@
     // browses. The ordinary page heading owns entry to edit mode.
     if (!item || edit || !info) return null;
     if (mutable()) {
+      const hydraulic=hydraulicPageAction(item);
+      if(hydraulic)return hydraulic;
       if (item.kind==="weather_sources" || item.kind==="outdoor_physical" ||
           item.kind==="weather_priorities")
         return {label:localize("edit"),
@@ -1083,6 +1421,8 @@
          (info.options.rooms || []).some(room=>room.id===item.id)))
       actions.push({label:localize("rename"),run:()=>startLabel(item)});
     if (!mutable()) return actions;
+    if(["hydraulics","hydraulic_collection","hydraulic_temperature","hydraulic_item"].includes(item.kind))
+      return [...actions,...hydraulicMenuActions(item)];
     if (item.kind === "weather")
       actions.push({label:localize("weather_edit"),run:startWeather});
     if (item.kind === "rooms") {
@@ -1133,6 +1473,7 @@
   window.DHClimateEditor = {
     init, canEdit:online, canChange:mutable, menuActions,pageAction,
     startRoom,startDevice,startWeather,enterWeatherSection,setWeatherContext,
+    beginHydraulic,beginHydraulicCreator,previewHydraulics,
     refreshAfterReconnect,
     renderEditor, controls, onNavigate,
     isEditing:()=>!!edit, needsRestart:()=>!!info?.pending_restart,

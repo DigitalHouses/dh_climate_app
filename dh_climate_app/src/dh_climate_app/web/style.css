@@ -311,3 +311,31 @@ body.resizing-explorer { cursor:col-resize; user-select:none; }
 }
 .season-source-name { font-size:13px; font-weight:600; margin:0 0 3px; }
 .season-source-item .mono { font-size:11px; margin:2px 0; }
+
+/* Resource graph editing: compact association lists and explicit terminals. */
+.editor-hydraulic-link {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.editor-hydraulic-link input { width: 16px; height: 16px; accent-color: var(--accent); }
+.editor-hydraulic-terminal {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  border-radius: 6px;
+  padding: 12px;
+  margin: 9px 0;
+}
+.editor-hydraulic-terminal + .editor-hydraulic-terminal { margin-top: 14px; }
+.editor-hydraulic-role {
+  flex: 1 1 220px;
+  min-width: 130px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: 6px;
+}
