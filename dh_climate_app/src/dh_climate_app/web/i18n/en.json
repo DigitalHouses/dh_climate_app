@@ -182,7 +182,7 @@
   "editor.reference": "Reference",
   "editor.configuration_name": "Configuration name",
   "editor.technical_id": "Technical ID",
-  "editor.empty_default": "Leave blank to use the source name. The ID does not change.",
+  "editor.empty_default": "If the current language name is blank, use the other language; if both are blank, use the HA or configured name. The ID does not change.",
   "editor.save_name": "Save name",
   "editor.name_saved": "DH Climate label saved. Climate control unchanged.",
   "editor.add_binding": "Choose from Home Assistant",
