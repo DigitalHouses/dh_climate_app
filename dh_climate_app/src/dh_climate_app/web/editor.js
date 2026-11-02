@@ -107,7 +107,7 @@
     repaint();
   }
   function labelForm(main) {
-    main.append(text("h2",localize("rename"),"page-title"));
+    main.append(text("h3",localize("rename"),"editor-section-title"));
     const section=text("section","","card");
     const values=edit.names;
     field(section,localize("name_ru"),values.ru,v=>values.ru=v);
@@ -584,7 +584,7 @@
     parent.append(panel);
   }
   function weatherForm(main) {
-    main.append(text("h2",localize("weather_editor_title"),"page-title"));
+    main.append(text("h3",localize("weather_editor_title"),"editor-section-title"));
     const box=text("section","","card");
     if(!modelConfigured()){
       box.append(text("p",localize("weather_legacy_notice"),"warn"),
@@ -803,7 +803,7 @@
   function roomForm(main) {
     const room=rooms()[edit.index];
     if (!room) return;
-    main.append(text("h2", edit.id?localize("edit_room"):localize("new_room"),"page-title"));
+    main.append(text("h3", edit.id?localize("edit_room"):localize("new_room"),"editor-section-title"));
     const box=text("section","","card");
     field(box,localize("room_id"),room.id,v=>room.id=v.trim().toLowerCase(),false,!!edit.id);
     field(box,localize("room_name"),room.name,v=>room.name=v);
@@ -826,7 +826,7 @@
     const room=roomById(edit.roomId);
     const device=room?.devices?.[edit.index];
     if (!device) return;
-    main.append(text("h2",localize("edit_device"),"page-title"));
+    main.append(text("h3",localize("edit_device"),"editor-section-title"));
     const box=text("section","","card");
     entityField(box,localize("entity"),device.entity,
       device.device_type==="hardware"?"actuator-hardware":"actuator-virtual",
@@ -861,7 +861,7 @@
     main.append(box);
   }
   function weatherPriorityForm(main) {
-    main.append(text("h2",localize("weather_priorities_page"),"page-title"),
+    main.append(text("h3",localize("weather_priorities_page"),"editor-section-title"),
       text("p",localize("weather_priority_help"),"subtle small"));
     const box=text("section","","card");
     if (!modelConfigured()){
@@ -880,15 +880,15 @@
   function renderEditor(main) {
     if (!edit) return false;
     main.replaceChildren();
+    const heading=text("header","","editor-mode-heading");
+    heading.append(text("h2",localize("editing"),"page-title"),
+      text("p",localize("editing_navigation_hint"),"subtle small"));
+    main.append(heading);
     if (edit.kind==="label") labelForm(main);
     if (edit.kind==="weather" || edit.kind==="weather_sources") weatherForm(main);
     if (edit.kind==="weather_priorities") weatherPriorityForm(main);
     if (edit.kind==="room") roomForm(main);
     if (edit.kind==="device") deviceForm(main);
-    const heading=text("header","","editor-mode-heading");
-    heading.append(text("h2",localize("editing"),"page-title"),
-      text("p",localize("editing_navigation_hint"),"subtle small"));
-    main.prepend(heading);
     return true;
   }
   function controls(main) {
