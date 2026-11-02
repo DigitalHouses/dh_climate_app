@@ -29,6 +29,48 @@
     if (value === null || typeof value === "boolean") return value;
     return value === undefined ? null : safeText(value);
   }
+  const entityId=/^(?:sensor|binary_sensor|climate|humidifier|weather|number|switch|input_boolean|input_number|input_select|input_text|select|fan|cover|valve|water_heater)\.[a-z0-9_]+$/;
+  function referencedEntities(value,result,depth=0) {
+    if(depth>20)return;
+    if(typeof value==="string" && entityId.test(value))result.add(value);
+    else if(Array.isArray(value))
+      value.forEach(item=>referencedEntities(item,result,depth+1));
+    else if(value && typeof value==="object")
+      for(const [key,item] of Object.entries(value)){
+        if(entityId.test(key))result.add(key);
+        referencedEntities(item,result,depth+1);
+      }
+  }
+  function scopeCatalog(catalog,refs,labels) {
+    if(!catalog || !Array.isArray(catalog.entities))return catalog;
+    const domains={},integrations=[];
+    const entries=catalog.entities;
+    const selected=entries.filter(entry=>{
+      domains[entry.domain||"unknown"]=(domains[entry.domain||"unknown"]||0)+1;
+      integrations.push(entry.integration||"unknown");
+      return refs.has(entry.entity_id) || entry.climate_source_id ||
+        entry.climate_avg24_sensor===true ||
+        /^(?:sensor|binary_sensor|climate|number)\.dh_climate_app_/.test(entry.entity_id||"");
+    });
+    const countIntegrations={};
+    for(const name of integrations)countIntegrations[name]=(countIntegrations[name]||0)+1;
+    const areasUsed=new Set(selected.map(e=>e.area_id).filter(Boolean));
+    for(const id of Object.values(labels?.room_areas||{}))
+      if(typeof id==="string")areasUsed.add(id);
+    const allAreas=catalog.areas||[];
+    return {
+      ...Object.fromEntries(Object.entries(catalog).filter(([key])=>
+        !["entities","areas"].includes(key))),
+      areas:allAreas.filter(a=>areasUsed.has(a.id)),
+      entities:selected,
+      diagnostic_scope:"configured_or_app_owned",
+      total_entities:catalog.total_entities ?? entries.length,
+      omitted_entities:(catalog.omitted_entities||0)+(entries.length-selected.length),
+      total_areas:catalog.total_areas ?? allAreas.length,
+      counts_by_domain:catalog.counts_by_domain||domains,
+      counts_by_integration:catalog.counts_by_integration||countIntegrations,
+    };
+  }
   function rememberError(type, message, location="", line=null) {
     browserErrors.push({at:new Date().toISOString(),type,
       message:safeText(message).slice(0,2000),
@@ -185,6 +227,23 @@
     const status=document.getElementById("diagnostics-status");
     try {
       const backend=await loadBackend();
+      // The browser may hold the entire HA picker catalogue. Restrict both
+      // that cache and the server copy before serializing the support file.
+      const refs=new Set();
+      referencedEntities(ui.state?.snapshot_browser_cache,refs);
+      referencedEntities(ui.state?.editor?.manifest,refs);
+      referencedEntities(ui.state?.editor?.candidate,refs);
+      referencedEntities(ui.state?.selection,refs);
+      referencedEntities(backend.data?.snapshot,refs);
+      referencedEntities(backend.data?.manifest,refs);
+      referencedEntities(backend.data?.runtime,refs);
+      if(ui.state?.weather_catalog_browser_cache)
+        ui.state.weather_catalog_browser_cache=scopeCatalog(
+          ui.state.weather_catalog_browser_cache,refs,
+          ui.state?.editor?.labels);
+      if(backend.data?.entity_catalog)
+        backend.data.entity_catalog=scopeCatalog(
+          backend.data.entity_catalog,refs,backend.data?.labels);
       const report=sanitize({
         format:"dh_climate_app_support_diagnostics",
         schema_version:1,

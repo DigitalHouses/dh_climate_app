@@ -17,7 +17,7 @@ from typing import Any, Awaitable, Callable
 from .manifest import ManifestEditor, EditConflict, EditValidation
 from .ui_labels import UILabels
 from .entity_catalog import EntityCatalog
-from .diagnostics import sanitize_export
+from .diagnostics import sanitize_export, scope_entity_catalog
 
 
 LOGGER = logging.getLogger(__name__)
@@ -398,6 +398,14 @@ class OperationsWebServer:
             except Exception as exc:
                 report["runtime"] = None
                 report["errors"]["runtime"] = type(exc).__name__
+        if isinstance(report.get("entity_catalog"), dict):
+            report["entity_catalog"] = scope_entity_catalog(
+                report["entity_catalog"],
+                manifest=report.get("manifest"),
+                snapshot=report["snapshot"],
+                labels=report.get("labels"),
+                runtime=report.get("runtime"),
+            )
         await self._reply(writer, "200 OK",
                           self._json(sanitize_export(report)),
                           "application/json; charset=utf-8")
