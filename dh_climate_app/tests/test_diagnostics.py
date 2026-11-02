@@ -7,7 +7,7 @@ import logging
 import unittest
 
 from dh_climate_app.diagnostics import (
-    BoundedDiagnosticLogHandler, sanitize_export,
+    BoundedDiagnosticLogHandler, sanitize_export, scope_entity_catalog,
 )
 from dh_climate_app.ingress import OperationsWebServer
 
@@ -33,6 +33,39 @@ class DiagnosticPrivacyTests(unittest.TestCase):
         self.assertNotIn("private-user-id", serialized)
         self.assertNotIn("abcdef01", serialized)
         self.assertNotIn("abc123", serialized)
+
+    def test_catalog_keeps_only_relevant_entities_and_summary(self):
+        catalog = {
+            "areas": [{"id": "home", "name": "Home"},
+                      {"id": "other", "name": "Private area"}],
+            "entities": [
+                {"entity_id": "weather.asyl_mura", "domain": "weather",
+                 "integration": "met"},
+                {"entity_id": "sensor.dh_climate_app_outdoor_temperature_avg24",
+                 "domain": "sensor", "integration": "mqtt",
+                 "climate_avg24_sensor": True},
+                {"entity_id": "sensor.private_geocoded_location",
+                 "domain": "sensor", "integration": "mobile_app",
+                 "name": "Private location", "state": "private street",
+                 "area_id": "other"},
+            ],
+        }
+        filtered = scope_entity_catalog(
+            catalog,
+            manifest={"options": {"providers": [
+                {"entity_id": "weather.asyl_mura"}]}},
+            labels={"room_areas": {"livingroom": "home"}},
+        )
+        self.assertEqual(filtered["total_entities"], 3)
+        self.assertEqual(filtered["omitted_entities"], 1)
+        self.assertEqual(
+            {e["entity_id"] for e in filtered["entities"]},
+            {"weather.asyl_mura",
+             "sensor.dh_climate_app_outdoor_temperature_avg24"},
+        )
+        self.assertEqual(filtered["areas"], [{"id": "home", "name": "Home"}])
+        self.assertEqual(filtered["counts_by_integration"]["mobile_app"], 1)
+        self.assertNotIn("private street", json.dumps(filtered))
 
     def test_recent_log_is_bounded_and_redacts_credentials(self):
         collector = BoundedDiagnosticLogHandler(capacity=2)
@@ -74,7 +107,11 @@ class _Catalog:
     async def get(self):
         return {"entities": [
             {"entity_id": "sensor.weather_google",
-             "name": "Температура Google", "state": "7.2"}
+             "climate_source_id": "google.temperature",
+             "name": "Температура Google", "state": "7.2"},
+            {"entity_id": "sensor.private_geocoded_location",
+             "name": "Private street", "state": "Private location",
+             "domain": "sensor", "integration": "mobile_app"}
         ]}
 
 
@@ -124,6 +161,8 @@ class DiagnosticsHttpTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(b"never-display", body)
         self.assertNotIn(b"do-not-send", body)
         self.assertNotIn(b"private-user", body)
+        self.assertNotIn(b"Private street", body)
+        self.assertNotIn(b"Private location", body)
         report = json.loads(body)
         self.assertEqual(report["schema_version"], 1)
         self.assertEqual(report["snapshot"]["weather"]["season"], "heat")
@@ -131,6 +170,8 @@ class DiagnosticsHttpTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(report["manifest"]["options"]["password"], "[REDACTED]")
         self.assertTrue(report["manifest"]["dirty"])
         self.assertEqual(report["entity_catalog"]["entities"][0]["state"], "7.2")
+        self.assertEqual(report["entity_catalog"]["total_entities"], 2)
+        self.assertEqual(report["entity_catalog"]["omitted_entities"], 1)
         self.assertEqual(report["runtime"]["queued_commands"], 0)
         self.assertEqual(report["labels"]["labels"]["provider:google"]["ru"], "Google погода")
         self.assertEqual(report["errors"], {})
