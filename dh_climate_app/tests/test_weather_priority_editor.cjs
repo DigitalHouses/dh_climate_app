@@ -167,7 +167,7 @@ test("sources page is separate from priority editing",async()=>{
   api.renderEditor(main);
   const content=main.textContent;
   assert.match(content,/editor.weather_providers/);
-  assert.match(content,/editor.weather_physical/);
+  assert.doesNotMatch(content,/editor.weather_physical/);
   assert.doesNotMatch(content,/editor.weather_priorities_page/);
   assert.doesNotMatch(content,/editor.weather_drag_help/);
   // Naming panel must show HA original, not a dash.
@@ -183,4 +183,20 @@ test("sources page is separate from priority editing",async()=>{
   api.renderEditor(main);
   assert.match(main.textContent,/Almaty/);
   assert.match(main.textContent,/editor.ha_name/);
+  // Separate branch and editor owns existing HA sensor.* sources.
+  const cancel=find(main,x=>x.tagName==="button" &&
+    x.textContent==="editor.cancel")[0];
+  assert.ok(cancel);
+  cancel.onclick(); // Back to provider editor after cancelling rename.
+  api.renderEditor(main);
+  const exitProviders=find(main,x=>x.tagName==="button" &&
+    x.textContent==="editor.cancel")[0];
+  assert.ok(exitProviders);
+  exitProviders.onclick(); // Back to browsing.
+  assert.equal(api.isEditing(),false);
+  assert.equal(api.enterWeatherSection("outdoor_physical"),true);
+  api.renderEditor(main);
+  assert.match(main.textContent,/editor.weather_hardware_title/);
+  assert.match(main.textContent,/editor.weather_physical/);
+  assert.doesNotMatch(main.textContent,/editor.weather_providers/);
 });
