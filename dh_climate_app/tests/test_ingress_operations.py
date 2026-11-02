@@ -106,6 +106,19 @@ class OperationsProjectionTests(unittest.TestCase):
         self.assertEqual(entity["entity_id"], "sensor.bedroom")
         self.assertEqual(entity["friendly_name"], "Температура спальни")
         self.assertNotIn("secret", json.dumps(entity, ensure_ascii=False))
+        with_unit = _entity("sensor.bedroom", {
+            "sensor.bedroom": info("21.25", "Температура спальни")
+        })
+        self.assertIsNone(with_unit["unit"])
+        native = SimpleNamespace(
+            state="21.25", attributes={"unit_of_measurement": "°C",
+                "friendly_name": "Температура", "access_token": "do-not-export"},
+            last_updated=now,
+        )
+        native_value = _entity("sensor.bedroom", {"sensor.bedroom": native})
+        self.assertEqual(native_value["state"], "21.25")
+        self.assertEqual(native_value["unit"], "°C")
+        self.assertNotIn("do-not-export", json.dumps(native_value, ensure_ascii=False))
 
         empty = _entity("switch.relay", {"switch.relay": info("on", "  ")})
         self.assertIsNone(empty["friendly_name"])
@@ -116,6 +129,37 @@ class OperationsProjectionTests(unittest.TestCase):
         base = make_snapshot(True)
         self.assertEqual(base["rooms"][0]["id"], "bedroom")
         self.assertEqual(base["rooms"][0]["name"], "Bedroom")
+
+    def test_hardware_sensors_keep_native_ha_readings_even_without_priority(self):
+        s = lambda **kw: SimpleNamespace(**kw)
+        now = datetime.now(timezone.utc)
+        physical = s(sensor_id="t_livingroom", entity_id="sensor.livingroom_local_temperature",
+                     quantity="temperature")
+        config = s(
+            rooms=[], resources={},
+            outdoor=s(source_model="sensors", providers=(), physical_sensors=(physical,),
+                      temperature_sources=(), humidity_sources=()),
+            global_config=s(we_at_home="", night_mode=""),
+            heating_source=None, vrf_enabled=False,
+        )
+        observed = {
+            physical.entity_id: s(state="21.75",
+                attributes={"unit_of_measurement": "°C",
+                            "friendly_name": "Living room temperature"},
+                last_updated=now),
+        }
+        result = build_operations_snapshot(
+            config=config, outdoor=None, weather=None, room_states={},
+            health=None, problems=(), demands={}, states=observed,
+            source_readings={"t_livingroom": 21.75},
+            version="test", ha_connected=True,
+        )
+        sensor = result["weather"]["physical_sensors"][0]
+        self.assertEqual(sensor["value"], 21.75)
+        self.assertEqual(sensor["observed"]["state"], "21.75")
+        self.assertEqual(sensor["observed"]["unit"], "°C")
+        self.assertTrue(sensor["observed"]["available"])
+        json.dumps(result, allow_nan=False)
 
     def test_offline_does_not_expose_stale_live_facts(self):
         snap = make_snapshot(False)
