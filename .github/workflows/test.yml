@@ -46,6 +46,7 @@ jobs:
           node --check dh_climate_app/src/dh_climate_app/web/entity_picker.js
           node --test dh_climate_app/tests/test_entity_picker.cjs
           node --test dh_climate_app/tests/test_weather_priority_editor.cjs
+          node --test dh_climate_app/tests/test_sensor_values_everywhere.cjs
           node --test dh_climate_app/tests/test_explorer_explicit_edit.cjs
           node --test dh_climate_app/tests/test_diagnostics_export.cjs
       - name: Build HAOS image
