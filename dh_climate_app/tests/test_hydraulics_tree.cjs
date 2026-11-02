@@ -59,7 +59,12 @@ const fixture={
 test("tree is backward compatible when no hydraulic model is configured",()=>{
   const old={...fixture,home:{heating_source:"boiler",vrf_enabled:false,resources:[]}};
   const tree=view.buildTree(old);
-  assert.equal(walk(tree,n=>n.kind==="hydraulics"),null);
+  const branch=walk(tree,n=>n.kind==="hydraulics");
+  assert.ok(branch,"empty hydraulic configuration section should be visible");
+  assert.deepEqual(Array.from(branch.children).map(n=>n.id),
+    ["aggregators","separators"]);
+  assert.equal(walk(tree,n=>n.kind==="hydraulic_item"),null,
+    "an empty section cannot fabricate equipment");
   assert.equal(walk(tree,n=>n.kind==="resource").id,"boiler");
 });
 test("separator has exactly two temperature group categories",()=>{
