@@ -161,6 +161,7 @@ test("sources page is separate from priority editing",async()=>{
   vm.runInNewContext(source,context);
   const api=context.window.DHClimateEditor;
   await api.init(x=>x,()=>{},()=>{});
+  api.setWeatherContext(weather,catalog);
   assert.equal(api.enterWeatherSection("weather_sources"),true);
   const main=new Element("main");
   api.renderEditor(main);
