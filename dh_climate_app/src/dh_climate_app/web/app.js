@@ -157,7 +157,7 @@ function node(kind, label, icon, children = [], fields = {}) {
   return {kind, label, icon, children, ...fields};
 }
 
-const hydro = () => snapshot?.home?.hydraulics || {};
+const hydro = () => window.DHClimateEditor?.previewHydraulics?.(snapshot?.home?.hydraulics) || snapshot?.home?.hydraulics || {};
 const hydraulicItem = (type,id) => (hydro()[type] || []).find(p=>p.id===id);
 const hydraulicSelection = (id) => {
   const index=String(id||"").indexOf(":");
@@ -182,9 +182,8 @@ function hydraulicNode(type,item,children=[]) {
     {id:type+":"+item.id,technicalId:item.id,sourceName:item.name});
 }
 function hydraulicTree(data) {
-  const h=data?.home?.hydraulics || {};
+  const h=window.DHClimateEditor?.previewHydraulics?.(data?.home?.hydraulics) || data?.home?.hydraulics || {};
   const types=["separators","groups","circuits","pumps","actuators","valves","aggregators"];
-  if (!types.some(type=>(h[type]||[]).length)) return [];
   const find=(type,id)=>(h[type]||[]).find(x=>x.id===id);
   const equipment=(item)=>{
     const refs=[["pumps","pump_ids"],["actuators","actuator_ids"],["valves","valve_ids"]];
@@ -221,9 +220,9 @@ function hydraulicTree(data) {
       ({pumps:"pump_ids",actuators:"actuator_ids",valves:"valve_ids"})[type]+":"+item.id))
     .map(item=>hydraulicNode(type,item)));
   const children=[
-    ...(h.aggregators||[]).length?[node("hydraulic_collection",t("aggregators"),"⚙",
-      h.aggregators.map(item=>hydraulicNode("aggregators",item)),{id:"aggregators"})]:[],
-    ...separators,
+    node("hydraulic_collection",t("hydraulic_aggregators"),"⚙",
+      (h.aggregators||[]).map(item=>hydraulicNode("aggregators",item)),{id:"aggregators"}),
+    node("hydraulic_collection",t("hydraulic_separators"),"▤",separators,{id:"separators"}),
     ...(directGroups.length?[node("hydraulic_collection",t("groups_without_separator"),"▤",
       [branch(null,"high"),branch(null,"low")],{id:"direct_groups"})]:[]),
     ...(directCircuits.length?[node("hydraulic_collection",t("ungrouped_circuits"),"▤",
@@ -891,7 +890,9 @@ function showHome(main) {
     card(t("resources"), resourceLinks()), card(t("rooms"), roomLinks()));
 }
 function showResources(main) {
-  add(main, title(t("resources")), card(t("resources"), resourceLinks()));
+  add(main, title(t("resources")), card(t("resources"), resourceLinks()),
+    card(t("hydraulics"),clickable(t("hydraulics"),t("hydraulics_structure"),
+      ()=>navigate({kind:"hydraulics",id:"hydraulics"}))));
   const requests = (snapshot.demands || []).filter(d => ["boiler","central_heating","vrf"].includes(d.layer));
   if (requests.length) main.append(card(t("resource_requests"), demandRows(requests)));
 }
