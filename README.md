@@ -12,6 +12,7 @@ dh_climate_app/
 - [Пользовательская документация](dh_climate_app/DOCS.md)
 - [Архитектура](dh_climate_app/docs/ARCHITECTURE.md)
 - [Целевая архитектура System Tree, HARDWARE/VIRTUAL и ресурсов дома (2026-10-28)](dh_climate_app/docs/SYSTEM_TREE_AND_HEAT_RESOURCE_VISION_2026-10-28.md)
+- [Решение: контуры, сервоприводы и агрегатор отопления (2026-11-02)](dh_climate_app/docs/HEATING_ACTUATION_AND_AGGREGATOR_DECISION_2026-11-02.md)
 - [План приёмочного тестирования HAOS](dh_climate_app/HAOS_TEST_PLAN.md)
 
 URL репозитория для Store приложений Home Assistant:
