@@ -27,7 +27,7 @@ async function loadWeatherCatalog() {
       if (!Array.isArray(catalog.entities)) return null;
       weatherCatalog = catalog;
       weatherCatalogAt = Date.now();
-      if (["weather_priorities","weather_sources","season"].includes(selection.kind))
+      if (["weather_priorities","weather_sources","outdoor_physical","season"].includes(selection.kind))
         render();
       return catalog;
     } catch (_) { return null; }
@@ -180,8 +180,9 @@ function buildTree(data) {
   );
   const weatherChildren = [
     node("weather_sources",t("weather_sources_and_sensors"),"▤",
-      weather.source_model==="sensors"?
-        [...providerNodes,...physicalNodes]:[]),
+      weather.source_model==="sensors"?providerNodes:[]),
+    node("outdoor_physical",t("weather_physical"),"▤",
+      weather.source_model==="sensors"?physicalNodes:[]),
     node("weather_priorities",t("weather_sensor_priorities"),"≡"),
     node("season", t("season"), "◷"),
   ];
@@ -207,7 +208,7 @@ function navigate(item) {
   if (window.DHClimateEditor && !window.DHClimateEditor.onNavigate()) return;
   selection = {kind:item.kind, id:item.id || null, room:item.room || null,
     resource:item.resource || null, partType:item.partType || null};
-  if (["weather_sources","weather_priorities","season"].includes(item.kind)) {
+  if (["weather_sources","outdoor_physical","weather_priorities","season"].includes(item.kind)) {
     // Load only the catalogue used for read-only presentation. The editor
     // is entered exclusively through an explicit "Edit" button.
     void loadWeatherCatalog();
@@ -495,12 +496,8 @@ function showProviders(main) {
   const providers=(w.providers||[]).map(p=>
     clickable(namedProvider(p),p.entity_id,
       ()=>navigate({kind:"provider",id:p.id})));
-  const physical=(w.physical_sensors||[]).map(p=>
-    clickable(namedOutdoorSensor(p),p.entity_id,
-      ()=>navigate({kind:"outdoor_sensor",id:p.id})));
   add(main,title(t("weather_sources_and_sensors")),
-    card(t("weather_providers"),listOrEmpty(providers)),
-    card(t("weather_physical"),listOrEmpty(physical)));
+    card(t("weather_providers"),listOrEmpty(providers)));
 }
 function showProvider(main) {
   const provider=(snapshot.weather.providers||[]).find(p=>p.id===selection.id);
@@ -646,8 +643,11 @@ function showSeason(main) {
   const active = w.source
     ? seasonSourceNode(w.source)
     : paragraph(t("unknown"),"subtle");
+  const seasonName = w.season==="heat" ? t("season_heating") :
+    w.season==="cool" ? t("season_cooling") :
+    w.season==="off" ? t("season_transition") : unknown();
   add(main, title(t("season")),
-    stats(stat(t("season"),statusText(w.season)),
+    stats(stat(t("season"),seasonName),
       stat(t("avg24"),number(w.avg24," °C"))),
     card(t("season_avg_sensor"),...avgInfo),
     card(t("season_current_source"),active,
