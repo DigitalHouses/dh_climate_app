@@ -7,6 +7,8 @@ from __future__ import annotations
 import math
 from typing import Any, Mapping
 
+from .hydraulics import HydraulicsConfig, hydraulic_snapshot
+
 
 def _number(value: Any) -> float | None:
     if value is None or isinstance(value, bool):
@@ -259,6 +261,10 @@ def build_operations_snapshot(
             "presence": _entity(config.global_config.we_at_home, states),
             "night": _entity(config.global_config.night_mode, states),
             "resources": resources,
+            "hydraulics": hydraulic_snapshot(
+                getattr(config, "hydraulics", HydraulicsConfig()),
+                states if online else {}, _signals, _entity,
+            ),
         },
         "demands": [
             {"layer": layer, "direction": direction,
