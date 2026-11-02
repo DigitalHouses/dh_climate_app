@@ -244,8 +244,8 @@
     });
   }
   function enterWeatherSection(kind) {
-    // Called after tree navigation. No second source of truth:
-    // both pages edit the same two priority arrays and registry.
+    // Explicit admin action only, never implicit tree navigation.
+    // Both weather editors share the same canonical draft.
     if (!["weather_sources","weather_priorities"].includes(kind) ||
         !mutable() || edit) return false;
     candidate = clone(info.options);
@@ -885,6 +885,10 @@
     if (edit.kind==="weather_priorities") weatherPriorityForm(main);
     if (edit.kind==="room") roomForm(main);
     if (edit.kind==="device") deviceForm(main);
+    const heading=text("header","","editor-mode-heading");
+    heading.append(text("h2",localize("editing"),"page-title"),
+      text("p",localize("editing_navigation_hint"),"subtle small"));
+    main.prepend(heading);
     return true;
   }
   function controls(main) {
@@ -967,6 +971,32 @@
       })),
     };
   }
+  function pageAction(item) {
+    // Right-click actions remain available, but a click on the tree only
+    // browses. The ordinary page heading owns entry to edit mode.
+    if (!item || edit || !info) return null;
+    if (mutable()) {
+      if (item.kind==="weather_sources" || item.kind==="weather_priorities")
+        return {label:localize("edit"),
+          run:()=>enterWeatherSection(item.kind)};
+      if (item.kind==="room" &&
+          (info.options.rooms||[]).some(r=>r.id===item.id))
+        return {label:localize("edit"),
+          run:()=>startRoom(item.id)};
+      if (item.kind==="device" &&
+          (info.options.rooms||[]).find(r=>r.id===item.room)
+            ?.devices?.some(d=>d.entity===item.id))
+        return {label:localize("edit"),
+          run:()=>startDevice(item.room,item.id)};
+      if (item.kind==="rooms")
+        return {label:localize("new_room"),run:()=>startRoom()};
+    }
+    if (labelKey(item) && (item.kind!=="room" ||
+      (info.options.rooms||[]).some(r=>r.id===item.id)))
+      return {label:localize("rename"),run:()=>startLabel(item)};
+    return null;
+  }
+
   function menuActions(item) {
     if (!online()) return [];
     const actions=[];
@@ -1003,7 +1033,7 @@
     await Promise.all([refresh(),loadLabels()]);
   }
   function onNavigate(){ return navigateAway(); }
-  function viewMode(){ return !info?tr("read_only"):localize("administrator"); }
+  function viewMode(){ return edit?localize("editing"):localize("view"); }
   function diagnosticState() {
     // Local unsaved edits matter for reproducing UI bugs. Never export the
     // APPLY confirmation phrase, authentication headers or callbacks.
@@ -1023,7 +1053,7 @@
     };
   }
   window.DHClimateEditor = {
-    init, canEdit:online, canChange:mutable, menuActions,
+    init, canEdit:online, canChange:mutable, menuActions,pageAction,
     startRoom,startDevice,startWeather,enterWeatherSection,setWeatherContext,
     refreshAfterReconnect,
     renderEditor, controls, onNavigate,
