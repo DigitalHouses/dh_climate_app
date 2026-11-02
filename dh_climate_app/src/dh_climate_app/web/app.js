@@ -156,6 +156,84 @@ function listOrEmpty(children, emptyKey = "not_configured") {
 function node(kind, label, icon, children = [], fields = {}) {
   return {kind, label, icon, children, ...fields};
 }
+
+const hydro = () => snapshot?.home?.hydraulics || {};
+const hydraulicItem = (type,id) => (hydro()[type] || []).find(p=>p.id===id);
+const hydraulicSelection = (id) => {
+  const index=String(id||"").indexOf(":");
+  return index<0 ? null : {
+    type:String(id).slice(0,index),
+    item:hydraulicItem(String(id).slice(0,index),String(id).slice(index+1)),
+  };
+};
+// Equipment has one canonical manifest declaration; references can appear
+// beneath multiple groups but never create additional physical objects.
+function hydraulicSignals(type,item) {
+  return (item.signals || []).map(signal =>
+    node("hydraulic_signal",signal.friendly_name || t(signal.role), "◉", [], {
+      id:type+":"+item.id+":"+signal.role,technicalId:signal.entity_id,
+      sourceName:signal.entity_id,reading:entityReading(signal),
+    }));
+}
+function hydraulicNode(type,item,children=[]) {
+  return node("hydraulic_item",withOverride("hydraulic",type+":"+item.id,item.name),
+    type==="groups"?"▤":type==="circuits"?"▱":"◉",
+    [...hydraulicSignals(type,item),...children],
+    {id:type+":"+item.id,technicalId:item.id,sourceName:item.name});
+}
+function hydraulicTree(data) {
+  const h=data?.home?.hydraulics || {};
+  const types=["separators","groups","circuits","pumps","actuators","valves","aggregators"];
+  if (!types.some(type=>(h[type]||[]).length)) return [];
+  const find=(type,id)=>(h[type]||[]).find(x=>x.id===id);
+  const equipment=(item)=>{
+    const refs=[["pumps","pump_ids"],["actuators","actuator_ids"],["valves","valve_ids"]];
+    return refs.flatMap(([type,key])=>(item[key]||[]).map(id=>find(type,id))
+      .filter(Boolean).map(x=>hydraulicNode(type,x)));
+  };
+  const circuit=(item)=>{
+    const terminals=(item.terminals||[]).map(term=>
+      node("hydraulic_terminal",term.name,"⌂",[],{
+        id:item.id+":"+term.id,sourceName:term.entity_id||term.name,
+        reading:term.entity_id?entityReading(term.observed):undefined,
+      }));
+    return hydraulicNode("circuits",item,[
+      ...equipment(item),...terminals,
+    ]);
+  };
+  const group=(item)=>hydraulicNode("groups",item,[
+    ...equipment(item),
+    ...(h.circuits||[]).filter(c=>c.group_id===item.id).map(circuit),
+  ]);
+  const branch=(separator,type)=>node("hydraulic_temperature",
+    t(type==="high"?"high_temperature_groups":"low_temperature_groups"),
+    "▤",(h.groups||[]).filter(g=>g.separator_id===separator && g.temperature_class===type).map(group),
+    {id:(separator||"direct")+":"+type});
+  const separators=(h.separators||[]).map(sep=>hydraulicNode("separators",sep,[
+    branch(sep.id,"high"),branch(sep.id,"low"),
+  ]));
+  const directGroups=(h.groups||[]).filter(g=>!g.separator_id);
+  const directCircuits=(h.circuits||[]).filter(c=>!c.group_id);
+  const referenced=new Set([...(h.groups||[]),...(h.circuits||[])]
+    .flatMap(item=>["pump_ids","actuator_ids","valve_ids"].flatMap(k=>(item[k]||[]).map(id=>k+":"+id))));
+  const orphans=["pumps","actuators","valves"].flatMap(type=>(h[type]||[])
+    .filter(item=>!referenced.has(
+      ({pumps:"pump_ids",actuators:"actuator_ids",valves:"valve_ids"})[type]+":"+item.id))
+    .map(item=>hydraulicNode(type,item)));
+  const children=[
+    ...(h.aggregators||[]).length?[node("hydraulic_collection",t("aggregators"),"⚙",
+      h.aggregators.map(item=>hydraulicNode("aggregators",item)),{id:"aggregators"})]:[],
+    ...separators,
+    ...(directGroups.length?[node("hydraulic_collection",t("groups_without_separator"),"▤",
+      [branch(null,"high"),branch(null,"low")],{id:"direct_groups"})]:[]),
+    ...(directCircuits.length?[node("hydraulic_collection",t("ungrouped_circuits"),"▤",
+      directCircuits.map(circuit),{id:"direct_circuits"})]:[]),
+    ...(orphans.length?[node("hydraulic_collection",t("unassigned_equipment"),"▤",
+      orphans,{id:"equipment"})]:[]),
+  ];
+  return [node("hydraulics",t("hydraulics"),"▤",children,{id:"hydraulics"})];
+}
+
 function buildTree(data) {
   const rooms = window.DHClimateEditor?.previewRooms(data?.rooms || []) || data?.rooms || [];
   const resources = [...(data?.home.resources || [])];
@@ -227,7 +305,7 @@ function buildTree(data) {
   return [node("system", t("system"), "◈", [
     node("weather", t("weather"), "☁",weatherChildren),
     node("home", t("home"), "⌂", [
-      node("resources", t("resources"), "▤", resourceNodes),
+      node("resources", t("resources"), "▤", [...resourceNodes,...hydraulicTree(data)]),
       node("rooms", t("rooms"), "▤", roomNodes),
     ]),
   ])];
@@ -706,6 +784,104 @@ function showSeason(main) {
       row(t("season_hysteresis"),number(w.season_hysteresis," °C"))),
     paragraph(t("season_info"),"subtle small"));
 }
+
+function hydraulicItemLinks(mainItem) {
+  const links=[];
+  const navigateHydraulic=(kind,id)=>navigate({kind:"hydraulic_item",id:kind+":"+id});
+  if(mainItem.separator_id) {
+    const sep=hydraulicItem("separators",mainItem.separator_id);
+    if(sep) links.push(clickable(sep.name,t("hydraulic_separator"),
+      ()=>navigateHydraulic("separators",sep.id)));
+  }
+  if(mainItem.group_id) {
+    const group=hydraulicItem("groups",mainItem.group_id);
+    if(group) links.push(clickable(group.name,t("hydraulic_group"),
+      ()=>navigateHydraulic("groups",group.id)));
+  }
+  if(mainItem.aggregator_id) {
+    const agg=hydraulicItem("aggregators",mainItem.aggregator_id);
+    if(agg) links.push(clickable(agg.name,t("hydraulic_aggregator"),
+      ()=>navigateHydraulic("aggregators",agg.id)));
+  }
+  if(mainItem.room_id) {
+    const room=roomById(mainItem.room_id);
+    if(room) links.push(clickable(namedRoom(room),t("room"),
+      ()=>navigate({kind:"room",id:room.id})));
+  }
+  for(const [type,key] of [["pumps","pump_ids"],["actuators","actuator_ids"],["valves","valve_ids"]])
+    for(const id of (mainItem[key]||[])) {
+      const part=hydraulicItem(type,id);
+      if(part) links.push(clickable(part.name,t("hydraulic_"+type),
+        ()=>navigateHydraulic(type,id)));
+    }
+  return links;
+}
+function showHydraulics(main) {
+  add(main,title(t("hydraulics")),
+    card(t("hydraulics"),paragraph(t("hydraulics_readonly"),"subtle")));
+  const h=hydro();
+  const items=["separators","groups","circuits","pumps","actuators","valves","aggregators"]
+    .flatMap(type=>(h[type]||[]).map(item=>clickable(item.name,t("hydraulic_"+type),
+      ()=>navigate({kind:"hydraulic_item",id:type+":"+item.id}))));
+  main.append(card(t("hydraulic_objects"),listOrEmpty(items)));
+}
+function showHydraulicItem(main) {
+  const selected=hydraulicSelection(selection.id);
+  const part=selected?.item;
+  if(!part) return showHydraulics(main);
+  const type=selected.type;
+  add(main,title(part.name),paragraph(type+" · "+part.id,"mono subtle"));
+  if(type==="groups") main.append(card(t("hydraulic_group"),
+    row(t("temperature_class"),t(part.temperature_class)),...(part.signals.length?[]:[])));
+  if(type==="aggregators") main.append(card(t("hydraulic_aggregator"),
+    row(t("device_type"),t(part.device_type))));
+  const readings=(part.signals||[]).map(signal=>clickable(
+    (signal.friendly_name || t(signal.role))+" · "+entityReading(signal),
+    signal.entity_id,()=>navigate({
+      kind:"hydraulic_signal",id:type+":"+part.id+":"+signal.role,
+    })));
+  main.append(card(t("sensors"),listOrEmpty(readings)));
+  const links=hydraulicItemLinks(part);
+  if(type==="separators") links.push(...(hydro().groups||[])
+    .filter(g=>g.separator_id===part.id).map(g=>clickable(g.name,t("hydraulic_group"),
+      ()=>navigate({kind:"hydraulic_item",id:"groups:"+g.id}))));
+  if(type==="groups") links.push(...(hydro().circuits||[])
+    .filter(c=>c.group_id===part.id).map(c=>clickable(c.name,t("hydraulic_circuit"),
+      ()=>navigate({kind:"hydraulic_item",id:"circuits:"+c.id}))));
+  if(type==="circuits") links.push(...(part.terminals||[]).map(term=>
+    clickable(term.name,t("hydraulic_terminal"),()=>
+      navigate({kind:"hydraulic_terminal",id:part.id+":"+term.id}))));
+  if(links.length) main.append(card(t("hydraulic_links"),listOrEmpty(links)));
+  main.append(paragraph(t("no_physical_inference"),"notice"));
+}
+function showHydraulicSignal(main) {
+  const parts=String(selection.id||"").split(":");
+  if(parts.length!==3) return showHydraulics(main);
+  const part=hydraulicItem(parts[0],parts[1]);
+  const signal=part?.signals?.find(s=>s.role===parts[2]);
+  if(!signal) return showHydraulics(main);
+  add(main,title(signal.friendly_name||t(signal.role)),
+    paragraph(signal.entity_id,"mono subtle"),
+    card(t("sensor"),row(t("observed_state"),entityReading(signal)),
+      row(t("availability"),signal.available?t("available"):t("unavailable")),
+      row(t("last_updated"),display(signal.last_updated))),
+    paragraph(t("no_physical_inference"),"notice"));
+}
+function showHydraulicTerminal(main) {
+  const parts=String(selection.id||"").split(":");
+  const circuit=hydraulicItem("circuits",parts[0]);
+  const terminal=circuit?.terminals?.find(t=>t.id===parts[1]);
+  if(!terminal) return showHydraulics(main);
+  add(main,title(terminal.name));
+  if(terminal.entity_id) main.append(card(t("hydraulic_terminal"),
+    row(t("entity"),terminal.entity_id),
+    row(t("observed_state"),entityReading(terminal.observed))));
+  const roomId=terminal.room_id||circuit.room_id;
+  const room=roomById(roomId);
+  if(room)main.append(card(t("room"),clickable(namedRoom(room),t("room"),
+    ()=>navigate({kind:"room",id:room.id}))));
+}
+
 function showHome(main) {
   add(main, title(t("home")),
     card(t("home"), row(t("heating_source"), statusText(snapshot.home.heating_source)),
@@ -963,7 +1139,11 @@ function render() {
         outdoor_physical:showOutdoorPhysical, outdoor_sensor:showOutdoorSensor,
         weather_priorities:showWeatherPriorities, home:showHome,
         resources:showResources, resource:showResource, parts:showParts,
-        part:showPart, season:showSeason, rooms:showRooms, room:showRoom,
+        part:showPart, hydraulics:showHydraulics,
+        hydraulic_item:showHydraulicItem, hydraulic_signal:showHydraulicSignal,
+        hydraulic_terminal:showHydraulicTerminal,
+        hydraulic_collection:showHydraulics, hydraulic_temperature:showHydraulics,
+        season:showSeason, rooms:showRooms, room:showRoom,
         thermostat:showThermostat, sensors:showSensors, sensor:showSensor,
         devices:showDevices, device:showDevice};
       (views[selection.kind] || showSystem)(main);
