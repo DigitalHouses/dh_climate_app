@@ -107,7 +107,7 @@
     repaint();
   }
   function labelForm(main) {
-    main.append(text("h2",localize("rename"),"page-title"));
+    main.append(text("h3",localize("rename"),"editor-section-title"));
     const section=text("section","","card");
     const values=edit.names;
     field(section,localize("name_ru"),values.ru,v=>values.ru=v);
@@ -244,8 +244,8 @@
     });
   }
   function enterWeatherSection(kind) {
-    // Called after tree navigation. No second source of truth:
-    // both pages edit the same two priority arrays and registry.
+    // Explicit admin action only, never implicit tree navigation.
+    // Both weather editors share the same canonical draft.
     if (!["weather_sources","weather_priorities"].includes(kind) ||
         !mutable() || edit) return false;
     candidate = clone(info.options);
@@ -584,7 +584,7 @@
     parent.append(panel);
   }
   function weatherForm(main) {
-    main.append(text("h2",localize("weather_editor_title"),"page-title"));
+    main.append(text("h3",localize("weather_editor_title"),"editor-section-title"));
     const box=text("section","","card");
     if(!modelConfigured()){
       box.append(text("p",localize("weather_legacy_notice"),"warn"),
@@ -803,7 +803,7 @@
   function roomForm(main) {
     const room=rooms()[edit.index];
     if (!room) return;
-    main.append(text("h2", edit.id?localize("edit_room"):localize("new_room"),"page-title"));
+    main.append(text("h3", edit.id?localize("edit_room"):localize("new_room"),"editor-section-title"));
     const box=text("section","","card");
     field(box,localize("room_id"),room.id,v=>room.id=v.trim().toLowerCase(),false,!!edit.id);
     field(box,localize("room_name"),room.name,v=>room.name=v);
@@ -826,7 +826,7 @@
     const room=roomById(edit.roomId);
     const device=room?.devices?.[edit.index];
     if (!device) return;
-    main.append(text("h2",localize("edit_device"),"page-title"));
+    main.append(text("h3",localize("edit_device"),"editor-section-title"));
     const box=text("section","","card");
     entityField(box,localize("entity"),device.entity,
       device.device_type==="hardware"?"actuator-hardware":"actuator-virtual",
@@ -861,7 +861,7 @@
     main.append(box);
   }
   function weatherPriorityForm(main) {
-    main.append(text("h2",localize("weather_priorities_page"),"page-title"),
+    main.append(text("h3",localize("weather_priorities_page"),"editor-section-title"),
       text("p",localize("weather_priority_help"),"subtle small"));
     const box=text("section","","card");
     if (!modelConfigured()){
@@ -880,6 +880,10 @@
   function renderEditor(main) {
     if (!edit) return false;
     main.replaceChildren();
+    const heading=text("header","","editor-mode-heading");
+    heading.append(text("h2",localize("editing"),"page-title"),
+      text("p",localize("editing_navigation_hint"),"subtle small"));
+    main.append(heading);
     if (edit.kind==="label") labelForm(main);
     if (edit.kind==="weather" || edit.kind==="weather_sources") weatherForm(main);
     if (edit.kind==="weather_priorities") weatherPriorityForm(main);
@@ -967,6 +971,32 @@
       })),
     };
   }
+  function pageAction(item) {
+    // Right-click actions remain available, but a click on the tree only
+    // browses. The ordinary page heading owns entry to edit mode.
+    if (!item || edit || !info) return null;
+    if (mutable()) {
+      if (item.kind==="weather_sources" || item.kind==="weather_priorities")
+        return {label:localize("edit"),
+          run:()=>enterWeatherSection(item.kind)};
+      if (item.kind==="room" &&
+          (info.options.rooms||[]).some(r=>r.id===item.id))
+        return {label:localize("edit"),
+          run:()=>startRoom(item.id)};
+      if (item.kind==="device" &&
+          (info.options.rooms||[]).find(r=>r.id===item.room)
+            ?.devices?.some(d=>d.entity===item.id))
+        return {label:localize("edit"),
+          run:()=>startDevice(item.room,item.id)};
+      if (item.kind==="rooms")
+        return {label:localize("new_room"),run:()=>startRoom()};
+    }
+    if (labelKey(item) && (item.kind!=="room" ||
+      (info.options.rooms||[]).some(r=>r.id===item.id)))
+      return {label:localize("rename"),run:()=>startLabel(item)};
+    return null;
+  }
+
   function menuActions(item) {
     if (!online()) return [];
     const actions=[];
@@ -1003,7 +1033,7 @@
     await Promise.all([refresh(),loadLabels()]);
   }
   function onNavigate(){ return navigateAway(); }
-  function viewMode(){ return !info?tr("read_only"):localize("administrator"); }
+  function viewMode(){ return edit?localize("editing"):localize("view"); }
   function diagnosticState() {
     // Local unsaved edits matter for reproducing UI bugs. Never export the
     // APPLY confirmation phrase, authentication headers or callbacks.
@@ -1023,7 +1053,7 @@
     };
   }
   window.DHClimateEditor = {
-    init, canEdit:online, canChange:mutable, menuActions,
+    init, canEdit:online, canChange:mutable, menuActions,pageAction,
     startRoom,startDevice,startWeather,enterWeatherSection,setWeatherContext,
     refreshAfterReconnect,
     renderEditor, controls, onNavigate,

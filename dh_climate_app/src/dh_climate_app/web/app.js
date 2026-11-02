@@ -83,7 +83,19 @@ function dom(tag, cls, text) {
 }
 function add(parent, ...items) { items.forEach(x => { if (x) parent.append(x); }); return parent; }
 function paragraph(value, cls = "") { return dom("p", cls, value); }
-function title(value) { return dom("h2", "page-title", value); }
+function title(value) {
+  const header=add(dom("div","page-heading-row"),dom("h2","page-title",value));
+  // Navigation opens a read-only view. Each editable section explicitly
+  // exposes its own action; viewing never implicitly opens an editor.
+  const item=findPath(selection)?.at(-1) || selection;
+  const action=window.DHClimateEditor?.pageAction?.(item);
+  if(action){
+    const button=dom("button","secondary-button page-edit-button",action.label);
+    button.type="button"; button.onclick=action.run;
+    header.append(button);
+  }
+  return header;
+}
 function heading(value) { return dom("h3", "section-heading", value); }
 function row(label, value) { return add(dom("div", "kv"), dom("span", "label", label), dom("span", "kv-value", value)); }
 function stat(label, value, tone = "") {
@@ -196,8 +208,8 @@ function navigate(item) {
   selection = {kind:item.kind, id:item.id || null, room:item.room || null,
     resource:item.resource || null, partType:item.partType || null};
   if (["weather_sources","weather_priorities","season"].includes(item.kind)) {
-    if (item.kind !== "season")
-      window.DHClimateEditor?.enterWeatherSection?.(item.kind);
+    // Load only the catalogue used for read-only presentation. The editor
+    // is entered exclusively through an explicit "Edit" button.
     void loadWeatherCatalog();
   }
   const path = findPath(selection);
