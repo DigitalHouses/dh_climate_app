@@ -172,7 +172,9 @@ test("sources page is separate from priority editing",async()=>{
   assert.doesNotMatch(content,/editor.weather_drag_help/);
   // Naming panel must show HA original, not a dash.
   const providerRow=find(main,x=>x.className==="editor-bound-entity" &&
-    x.textContent.includes("weather.almaty"))[0];
+    x.textContent.includes("weather.almaty") &&
+    find(x,y=>y.tagName==="button" &&
+      y.textContent==="editor.rename").length>0)[0];
   assert.ok(providerRow);
   const rename=find(providerRow,x=>x.tagName==="button" &&
     x.textContent==="editor.rename")[0];
