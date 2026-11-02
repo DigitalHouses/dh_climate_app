@@ -3,6 +3,7 @@
    Selection edits the form in memory; it NEVER calls a climate service. */
 (() => {
   let dialog = null;
+  let lastCatalog = null;
   const el = (tag, cls="", label=null) => {
     const node=document.createElement(tag);
     if (cls) node.className=cls;
@@ -119,6 +120,7 @@
       return;
     }
     if(dialog!==backdrop)return;
+    lastCatalog=catalog; // Reuse the same bounded HA catalogue after selection.
     status.remove();
     const filters={kind,query:"",
       area:resolveArea(catalog.areas,areaId,areaHint,areaHints),
@@ -273,5 +275,5 @@
     search.focus();
   }
   window.DHClimateEntityPicker={open,close,match,domainsFor,classesFor,
-    appropriateClass,resolveArea};
+    appropriateClass,resolveArea,getCatalog:()=>lastCatalog};
 })();

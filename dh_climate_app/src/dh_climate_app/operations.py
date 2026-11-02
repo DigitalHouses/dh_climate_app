@@ -41,6 +41,15 @@ def _entity(entity_id: str | None, states: Mapping[str, Any]) -> dict[str, Any] 
         "entity_id": entity_id,
         "friendly_name": _friendly_name(entity_id, states),
         "state": observed.state if observed is not None else None,
+        # Strictly whitelist the native HA unit (do not guess Celsius for
+        # every sensor; RPM, pressure, percent, and device states differ).
+        "unit": (
+            observed.attributes.get("unit_of_measurement")[:24]
+            if observed is not None
+            and isinstance(observed.attributes, Mapping)
+            and isinstance(observed.attributes.get("unit_of_measurement"), str)
+            else None
+        ),
         "available": observed is not None and observed.state not in ("unknown", "unavailable", ""),
         "last_updated": (
             observed.last_updated.isoformat() if observed is not None else None
@@ -125,7 +134,11 @@ def build_operations_snapshot(
             "entity_id": p.entity_id,
             "quantity": p.quantity,
             "friendly_name": _friendly_name(p.entity_id, states),
+            # The engine-normalized reading is retained for °C/% presentation.
+            # The raw HA entity is included solely for showing its actual
+            # value and native unit even if the engine cannot accept it.
             "value": _number(source_readings.get(p.sensor_id)) if online else None,
+            "observed": _entity(p.entity_id, states if online else {}),
         } for p in physical_raw
     ] if source_model == "sensors" else []
     rooms: list[dict[str, Any]] = []
