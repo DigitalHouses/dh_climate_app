@@ -18,10 +18,58 @@
   let tr = key => key;
   let weatherState = null;
   let haWeatherCatalog = null;
+  let operationsState = null;
   // Presentation data: from live HA, never persisted as part of priorities.
-  function setWeatherContext(weather, catalog) {
+  function setWeatherContext(weather, catalog, operations=null) {
     weatherState = weather || null;
     haWeatherCatalog = catalog || null;
+    operationsState = operations;
+  }
+  function nativeReading(item) {
+    if(!item) return "—";
+    if(!item.available || item.state===null || item.state===undefined ||
+       ["","unknown","unavailable"].includes(String(item.state)))
+      return localize("weather_unavailable");
+    const unit=typeof item.unit==="string" && item.unit ? " "+item.unit : "";
+    return String(item.state)+unit;
+  }
+  function linkedObservation(entityId) {
+    const catalog=haWeatherCatalog?.entities ||
+      window.DHClimateEntityPicker?.getCatalog?.()?.entities || [];
+    const registered=catalog.find(item=>item.entity_id===entityId);
+    if(registered)return registered;
+    for(const room of operationsState?.rooms||[]){
+      for(const kind of ["temperature","humidity","window"]){
+        const sensor=(room.sensors?.[kind]||[]).find(e=>e.entity_id===entityId);
+        if(sensor)return sensor;
+      }
+      for(const dev of room.devices||[])
+        if(dev.entity_id===entityId)return dev.observed;
+    }
+    for(const resource of operationsState?.home?.resources||[]){
+      for(const signal of resource.signals||[])
+        if(signal.entity_id===entityId)return signal;
+      for(const part of [...(resource.pumps||[]),...(resource.circuits||[])])
+        for(const signal of part.signals||[])
+          if(signal.entity_id===entityId)return signal;
+    }
+    const physical=(weatherState?.physical_sensors||[])
+      .find(item=>item.entity_id===entityId);
+    return physical?.observed || null;
+  }
+  function configuredReading(entityId) {
+    return nativeReading(linkedObservation(entityId));
+  }
+  function weatherReading(id,quantity) {
+    const provider=weatherState?.providers?.find(p=>p.id===id);
+    const physical=weatherState?.physical_sensors?.find(p=>p.entity_id===id);
+    const value=provider ? provider[quantity] : physical?.value;
+    if(value===null || value===undefined || !Number.isFinite(Number(value)))
+      return physical ? configuredReading(id) : localize("weather_unavailable");
+    const locale=document.getElementById("language")?.value==="en"?"en":"ru";
+    return new Intl.NumberFormat(locale,{
+      minimumFractionDigits:1,maximumFractionDigits:1,
+    }).format(Number(value))+(quantity==="temperature"?" °C":" %");
   }
   const clone = value => JSON.parse(JSON.stringify(value));
   const text = (tag, value, cls = "") => {
