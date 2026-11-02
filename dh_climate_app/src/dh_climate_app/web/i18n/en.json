@@ -266,6 +266,7 @@
   "weather_sources_and_sensors": "Providers and sensors",
   "weather_sensor_priorities": "Sensor priorities",
   "weather_unavailable": "Unavailable",
+  "weather_active": "In use",
   "weather_priority_help": "The first available sensor has highest priority. Temperature and humidity are configured independently.",
   "weather_readonly_priority": "Only an administrator can edit priorities, once the app restart is complete.",
   "editor.weather_priorities_page": "Sensor priorities",
