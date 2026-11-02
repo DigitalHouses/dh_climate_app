@@ -186,7 +186,7 @@
   "editor.reference": "Для справки",
   "editor.configuration_name": "Имя из конфигурации",
   "editor.technical_id": "Технический ID",
-  "editor.empty_default": "Пустое поле означает: использовать имя по умолчанию. ID не изменяется.",
+  "editor.empty_default": "Если название на текущем языке не задано, используется название на другом языке; если оба пусты — имя из HA или конфигурации. ID не изменяется.",
   "editor.save_name": "Сохранить имя",
   "editor.name_saved": "Название сохранено в DH Climate. Управление климатом не затронуто.",
   "editor.add_binding": "Выбрать в Home Assistant",
