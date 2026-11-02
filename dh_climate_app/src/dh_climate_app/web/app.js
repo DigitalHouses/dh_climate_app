@@ -57,7 +57,8 @@ const observedText = (entity) => (!snapshot?.app.ha_connected || !entity?.availa
 // unavailable HA entities; preserve the original unit for native sensors.
 const missingReading = () => t("weather_unavailable");
 function measurementReading(value,quantity) {
-  if(value===null || value===undefined || value==="" ||
+  if(snapshot?.app?.ha_connected===false ||
+     value===null || value===undefined || value==="" ||
      !Number.isFinite(Number(value))) return missingReading();
   const unit=quantity==="temperature"?" °C":quantity==="humidity"?" %":"";
   return number(value,unit);
