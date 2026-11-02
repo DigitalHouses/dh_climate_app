@@ -19,6 +19,11 @@
     if (kind==="weather" || kind==="outdoor-temperature" ||
         kind==="outdoor-humidity") return ["weather","sensor"];
     if (kind==="binary" || kind==="window") return ["binary_sensor"];
+    if (kind==="hydraulic-signal") return [
+      "sensor","binary_sensor","switch","climate","number",
+      "input_boolean","input_number","valve","select",
+    ];
+    if (kind.startsWith("hydraulic-")) return ["sensor"];
     return ["sensor"];
   };
   const classesFor = kind => ({
@@ -31,6 +36,10 @@
     window:["window","door","opening","garage_door"],
     power:["power"],
     pressure:["pressure"],
+    "hydraulic-temperature":["temperature"],
+    "hydraulic-pressure":["pressure"],
+    "hydraulic-rpm":["frequency","speed"],
+    "hydraulic-power":["power"],
     rpm:["frequency","speed"],
   })[kind] || [];
   function appropriateClass(item,kind) {
@@ -45,7 +54,8 @@
     // An unclassified temperature sensor with an explicit degree unit
     // is a useful fallback. A percentage alone cannot identify humidity
     // (it could be a battery level), so other types require device_class.
-    if(["temperature","outdoor-temperature","physical-temperature"].includes(kind) &&
+    if(["temperature","outdoor-temperature","physical-temperature",
+        "hydraulic-temperature"].includes(kind) &&
        !item.device_class &&
        ["°C","°F","K"].includes(item.unit)) return true;
     return false;
