@@ -46,13 +46,13 @@ const walk = (ns, predicate) => {
   }
   return null;
 };
-test("weather has exactly three first-class branches; season is not duplicated under home",()=>{
+test("weather has four first-class branches; season is not duplicated under home",()=>{
   const tree=u.buildTree(fixture);
   assert.equal(tree.length,1);
   assert.equal(tree[0].kind,"system");
   assert.deepEqual(Array.from(tree[0].children).map(n=>n.kind),["weather","home"]);
   assert.deepEqual(Array.from(tree[0].children[0].children).map(n=>n.kind),
-    ["weather_sources","weather_priorities","season"]);
+    ["weather_sources","outdoor_physical","weather_priorities","season"]);
   assert.deepEqual(Array.from(tree[0].children[1].children).map(n=>n.kind),
     ["resources","rooms"]);
   assert.deepEqual(Array.from(u.findPath(walk(tree,n=>n.kind==="season"),tree))
@@ -101,6 +101,10 @@ test("one provider expands into two sensor nodes with stable IDs",()=>{
     ["google.temperature","google.humidity"]);
   const physical=walk(tree,n=>n.kind==="outdoor_sensor");
   assert.equal(physical.sourceName,"sensor.garden");
+  assert.deepEqual(Array.from(u.findPath(physical,tree)).map(n=>n.kind),
+    ["system","weather","outdoor_physical","outdoor_sensor"]);
+  assert.equal(walk(tree,n=>n.kind==="weather_sources").children.length,1);
+  assert.equal(walk(tree,n=>n.kind==="outdoor_physical").children.length,1);
   const priorities=walk(tree,n=>n.kind==="weather_priorities");
   assert.ok(priorities);
   assert.deepEqual(Array.from(u.findPath(provider.children[0],tree)).map(n=>n.kind),
@@ -165,6 +169,36 @@ test("season diagnostics render actual sensor and weather ancestry without contr
   assert.match(rendered,/10,5.*°C/);
   assert.equal((function visit(e){return (e.tagName==="input"||e.tagName==="button"?1:0)+
     e.children.reduce((n,x)=>n+visit(x),0);})(main),0);
+});
+
+test("season read-only labels map all three engine states without changing values",()=>{
+  class Element {
+    constructor(tag){this.tagName=tag;this.children=[];this.className="";this._text="";}
+    set textContent(v){this._text=String(v);this.children=[];}
+    get textContent(){return this._text+this.children.map(x=>x.textContent||"").join("");}
+    append(...items){this.children.push(...items);}
+  }
+  context.document.createElement=tag=>new Element(tag);
+  context.caseCatalog={entities:[]};
+  const dict=JSON.parse(fs.readFileSync(path.join(web,"i18n/ru.json"),"utf8"));
+  assert.equal(dict.season_heating,"Отопительный сезон");
+  assert.equal(dict.season_cooling,"Сезон охлаждения");
+  assert.equal(dict.season_transition,"Межсезонье");
+  context.ruSeasonDictionary=dict;
+  for(const [status,label] of [
+    ["heat","Отопительный сезон"],["cool","Сезон охлаждения"],
+    ["off","Межсезонье"]]){
+    context.caseSeason={app:{ha_connected:true},weather:{
+      season:status,avg24:15,stale:false,temperature_sources:[],
+      physical_sensors:[],providers:[],avg24_input_sources:[],
+    }};
+    vm.runInContext("snapshot=caseSeason;weatherCatalog=caseCatalog;dictionary=ruSeasonDictionary;",context);
+    const main=new Element("main");
+    context.unit.showSeason(main);
+    assert.match(main.textContent,new RegExp(label));
+    assert.equal(context.caseSeason.weather.season,status);
+  }
+  vm.runInContext("dictionary={};",context);
 });
 
 test("read-only priorities mark just Engine-selected temperature and humidity sources",()=>{
