@@ -53,6 +53,34 @@ const roomById = (id) => (snapshot?.rooms || []).find(r => r.id === id) ||
 const resourceById = (id) => (snapshot?.home.resources || []).find(r => r.id === id);
 const deviceById = (roomId, id) => roomById(roomId)?.devices.find(d => d.entity_id === id);
 const observedText = (entity) => (!snapshot?.app.ha_connected || !entity?.available) ? unknown() : display(entity.state);
+// Uniform presentation of observed readings. Never fabricate values from
+// unavailable HA entities; preserve the original unit for native sensors.
+const missingReading = () => t("weather_unavailable");
+function measurementReading(value,quantity) {
+  if(value===null || value===undefined || value==="" ||
+     !Number.isFinite(Number(value))) return missingReading();
+  const unit=quantity==="temperature"?" °C":quantity==="humidity"?" %":"";
+  return number(value,unit);
+}
+function entityReading(entity) {
+  if(snapshot?.app?.ha_connected===false || !entity?.available ||
+     entity.state===null || entity.state===undefined ||
+     ["","unknown","unavailable"].includes(String(entity.state)))
+    return missingReading();
+  const value=String(entity.state);
+  const unit=typeof entity.unit==="string" ? entity.unit.trim() : "";
+  return unit ? value+" "+unit : value;
+}
+function physicalReading(sensor) {
+  if(snapshot?.app?.ha_connected===false) return missingReading();
+  if(sensor?.value!==null && sensor?.value!==undefined)
+    return measurementReading(sensor.value,sensor.quantity);
+  return entityReading(sensor?.observed);
+}
+function providerReadings(provider) {
+  return t("temperature")+": "+measurementReading(provider.temperature,"temperature")+
+    " · "+t("humidity")+": "+measurementReading(provider.humidity,"humidity");
+}
 const demandValue = (item) => item?.active === true ? t("on") : item?.active === false ? t("off") : unknown();
 const withOverride = (kind, id, fallback) =>
   window.DHClimateEditor?.displayName(kind,id,locale,fallback) || fallback;
@@ -110,6 +138,13 @@ function card(label, ...items) {
 function clickable(label, meta, onClick) {
   const b = add(dom("button", "click-row"), dom("span", "row-main", label), dom("span", "row-meta", meta || ""));
   b.type = "button"; b.onclick = onClick; return b;
+}
+function sensorClickable(label,entityId,reading,onClick) {
+  const details=add(dom("span","sensor-row-details"),
+    dom("span","row-main",label),dom("span","sensor-row-id mono",entityId));
+  const b=add(dom("button","click-row sensor-click-row"),
+    details,dom("span","sensor-row-reading",reading));
+  b.type="button";b.onclick=onClick;return b;
 }
 function listOrEmpty(children, emptyKey = "not_configured") {
   const box = add(dom("div", "list"), ...children);
