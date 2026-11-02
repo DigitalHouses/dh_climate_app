@@ -41,7 +41,7 @@ function sample(){
     weather:{
       source_model:"sensors",providers:[
         {id:"met",entity_id:"weather.met",friendly_name:"Met.no",
-         temperature:9.45,humidity:45},
+         temperature:9.4,humidity:45},
       ],physical_sensors:[
         {id:"local",entity_id:"sensor.local_temperature",
          friendly_name:"Температура гостиной",quantity:"temperature",value:21.75,
@@ -73,7 +73,7 @@ function sample(){
 }
 function prepare(value){
   context.fixture=value;
-  vm.runInContext("snapshot=fixture;nodes=buildTree(snapshot);",context);
+  vm.runInContext("snapshot=fixture;nodes=buildTree(snapshot);globalThis.treeExport=nodes;",context);
 }
 function lookup(nodes,pred){
   for(const item of nodes){
@@ -94,9 +94,9 @@ test("all hardware sensors expose temperature/humidity, zero, unavailable and na
   assert.match(rendered,/Недоступно/);
   assert.match(rendered,/sensor.local_temperature/);
   assert.match(rendered,/sensor.local_humidity/);
-  assert.equal(lookup(context.nodes,n=>n.kind==="outdoor_sensor"&&n.id==="local").reading,"21,8 °C");
-  assert.equal(lookup(context.nodes,n=>n.kind==="outdoor_sensor"&&n.id==="humidity").reading,"0,0 %");
-  assert.equal(lookup(context.nodes,n=>n.kind==="outdoor_sensor"&&n.id==="native").reading,"68.2 °F");
+  assert.equal(lookup(context.treeExport,n=>n.kind==="outdoor_sensor"&&n.id==="local").reading,"21,8 °C");
+  assert.equal(lookup(context.treeExport,n=>n.kind==="outdoor_sensor"&&n.id==="humidity").reading,"0,0 %");
+  assert.equal(lookup(context.treeExport,n=>n.kind==="outdoor_sensor"&&n.id==="native").reading,"68.2 °F");
 });
 test("provider list and tree leaf sensors show current values",()=>{
   prepare(sample());
@@ -105,7 +105,7 @@ test("provider list and tree leaf sensors show current values",()=>{
   assert.match(main.textContent,/9,4 °C/);
   assert.match(main.textContent,/45,0 %/);
   assert.match(main.textContent,/weather.met/);
-  const tree=context.nodes;
+  const tree=context.treeExport;
   assert.equal(lookup(tree,n=>n.kind==="weather_sensor"&&n.id==="met.temperature").reading,"9,4 °C");
   assert.equal(lookup(tree,n=>n.kind==="weather_sensor"&&n.id==="met.humidity").reading,"45,0 %");
 });
@@ -117,7 +117,7 @@ test("room sensor and engineering signal lists preserve the HA unit and raw on/o
   assert.match(room.textContent,/on/);
   const resource=api.signalRows(data.home.resources[0].signals);
   assert.match(resource.textContent,/1.8 bar/);
-  assert.equal(lookup(context.nodes,n=>n.kind==="sensor"&&n.id==="sensor.room_temperature").reading,"23.1 °C");
+  assert.equal(lookup(context.treeExport,n=>n.kind==="sensor"&&n.id==="sensor.room_temperature").reading,"23.1 °C");
 });
 test("offline readings never pretend to be live and do not become zero",()=>{
   const data=sample();data.app.ha_connected=false;prepare(data);
@@ -125,6 +125,6 @@ test("offline readings never pretend to be live and do not become zero",()=>{
   api.showOutdoorPhysical(main);
   assert.doesNotMatch(main.textContent,/21,8 °C|68.2 °F/);
   assert.match(main.textContent,/Недоступно/);
-  assert.equal(lookup(context.nodes,n=>n.kind==="weather_sensor"&&n.id==="met.temperature").reading,"Недоступно");
-  assert.equal(lookup(context.nodes,n=>n.kind==="sensor"&&n.id==="sensor.room_temperature").reading,"Недоступно");
+  assert.equal(lookup(context.treeExport,n=>n.kind==="weather_sensor"&&n.id==="met.temperature").reading,"Недоступно");
+  assert.equal(lookup(context.treeExport,n=>n.kind==="sensor"&&n.id==="sensor.room_temperature").reading,"Недоступно");
 });
