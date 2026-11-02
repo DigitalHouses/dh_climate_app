@@ -246,7 +246,7 @@
   function enterWeatherSection(kind) {
     // Explicit admin action only, never implicit tree navigation.
     // Both weather editors share the same canonical draft.
-    if (!["weather_sources","weather_priorities"].includes(kind) ||
+    if (!["weather_sources","outdoor_physical","weather_priorities"].includes(kind) ||
         !mutable() || edit) return false;
     candidate = clone(info.options);
     edit = {kind};
@@ -595,15 +595,33 @@
       box.append(control);main.append(box);
       return;
     }
-    box.append(text("p",localize("weather_engine_note"),"subtle"));
+    box.append(text("p",localize("weather_providers_note"),"subtle"));
     weatherProviderEditor(box);
-    weatherPhysicalEditor(box,"temperature");
-    weatherPhysicalEditor(box,"humidity");
     const controls=text("div","","editor-actions");
     controls.append(button(localize("save_draft"),persist),
       button(localize("cancel"),()=>{discardLocal();repaint();}));
     box.append(controls);main.append(box);
   }
+  function hardwareWeatherForm(main) {
+    main.append(text("h3",localize("weather_hardware_title"),"editor-section-title"));
+    const box=text("section","","card");
+    if (!modelConfigured()) {
+      box.append(text("p",localize("weather_legacy_notice"),"warn"),
+        text("p",JSON.stringify(candidate.outdoor||{}),"mono small"));
+      const actions=text("div","","editor-actions");
+      actions.append(button(localize("weather_convert"),convertWeatherModel),
+        button(localize("cancel"),()=>{discardLocal();repaint();}));
+      box.append(actions);main.append(box);return;
+    }
+    box.append(text("p",localize("weather_hardware_note"),"subtle"));
+    weatherPhysicalEditor(box,"temperature");
+    weatherPhysicalEditor(box,"humidity");
+    const actions=text("div","","editor-actions");
+    actions.append(button(localize("save_draft"),persist),
+      button(localize("cancel"),()=>{discardLocal();repaint();}));
+    box.append(actions);main.append(box);
+  }
+
   function startRoom(id=null) {
     if (!mutable() || !navigateAway()) return;
     candidate = clone(info.options);
@@ -886,6 +904,7 @@
     main.append(heading);
     if (edit.kind==="label") labelForm(main);
     if (edit.kind==="weather" || edit.kind==="weather_sources") weatherForm(main);
+    if (edit.kind==="outdoor_physical") hardwareWeatherForm(main);
     if (edit.kind==="weather_priorities") weatherPriorityForm(main);
     if (edit.kind==="room") roomForm(main);
     if (edit.kind==="device") deviceForm(main);
@@ -976,7 +995,8 @@
     // browses. The ordinary page heading owns entry to edit mode.
     if (!item || edit || !info) return null;
     if (mutable()) {
-      if (item.kind==="weather_sources" || item.kind==="weather_priorities")
+      if (item.kind==="weather_sources" || item.kind==="outdoor_physical" ||
+          item.kind==="weather_priorities")
         return {label:localize("edit"),
           run:()=>enterWeatherSection(item.kind)};
       if (item.kind==="room" &&
